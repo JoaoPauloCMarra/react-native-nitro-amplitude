@@ -64,6 +64,26 @@ await experiment.start();
 const variant = experiment.variant("my-flag");
 ```
 
+## Compatibility imports
+
+The root entry exports both Analytics and Experiment APIs for new code:
+
+```ts
+import { init, track, Experiment } from "react-native-nitro-amplitude";
+```
+
+For migrations that need a clearer boundary between the two original packages,
+the package also exposes compatibility subpaths:
+
+```ts
+import { init, track } from "react-native-nitro-amplitude/analytics";
+import { Experiment } from "react-native-nitro-amplitude/experiment";
+```
+
+`react-native-nitro-amplitude/analytics` mirrors the public entrypoint shape of
+`amplitude-rn-analytics`. `react-native-nitro-amplitude/experiment` mirrors the
+public entrypoint shape of `amplitude-rn-experiment`.
+
 ## Native HybridObjects
 
 | Object             | Purpose                                         |
@@ -71,6 +91,23 @@ const variant = experiment.variant("my-flag");
 | `AmplitudeContext` | Device context + legacy SDK migration hooks     |
 | `AmplitudeStorage` | Memory + disk KV for analytics/experiment state |
 | `AmplitudeWorker`  | Background HTTP queue                           |
+
+## Upstream compatibility
+
+This package is a Nitro-first replacement, not a forked merge of the two source
+packages. The JavaScript API surface is intentionally aligned with:
+
+- `amplitude-rn-analytics` 1.6.0 for analytics client methods, storage provider
+  contracts, exported `Revenue`, `Identify`, and `Types`.
+- `amplitude-rn-experiment` 1.8.13 for `Experiment`, `ExperimentClient`,
+  config/user/variant/exposure/storage types, loggers, and memory storage.
+
+The default implementations differ where Nitro provides the native layer:
+
+- analytics storage uses Nitro-backed memory/disk storage by default;
+- experiment storage uses Nitro-backed storage by default;
+- analytics upload and experiment fetches use the native `AmplitudeWorker`;
+- native context is read through the `AmplitudeContext` HybridObject.
 
 ## Platform support
 

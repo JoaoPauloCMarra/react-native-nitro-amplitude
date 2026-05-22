@@ -16,6 +16,16 @@
       "browser": "./src/index.web.ts",
       "default": "./lib/commonjs/index.js"
     },
+    "./analytics": {
+      "types": "./lib/typescript/analytics/index.d.ts",
+      "react-native": "./src/analytics/index.ts",
+      "default": "./lib/commonjs/analytics/index.js"
+    },
+    "./experiment": {
+      "types": "./lib/typescript/experiment/index.d.ts",
+      "react-native": "./src/experiment/index.ts",
+      "default": "./lib/commonjs/experiment/index.js"
+    },
     "./app.plugin": "./app.plugin.js",
     "./app.plugin.js": "./app.plugin.js",
     "./package.json": "./package.json"

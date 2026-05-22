@@ -5,6 +5,11 @@ import {
   prefetchNativeContext,
   nitroHttpClient,
 } from "../src";
+import { init, track } from "../src/analytics";
+import {
+  Experiment as ExperimentSubpath,
+  type ExperimentConfig as ExperimentSubpathConfig,
+} from "../src/experiment";
 import type { ExperimentConfig } from "../src/experiment/types/config";
 import type { Variant } from "../src/experiment/types/variant";
 
@@ -36,3 +41,14 @@ void factoryInit;
 
 const httpRequest = nitroHttpClient.request.bind(nitroHttpClient);
 void httpRequest;
+
+const analyticsInit = init satisfies typeof import("../src").init;
+const analyticsTrack = track satisfies typeof import("../src").track;
+const experimentSubpathInit = ExperimentSubpath.initialize;
+const experimentSubpathConfig: ExperimentSubpathConfig = {
+  instanceName: "subpath-type-test",
+};
+void analyticsInit;
+void analyticsTrack;
+void experimentSubpathInit;
+void experimentSubpathConfig;

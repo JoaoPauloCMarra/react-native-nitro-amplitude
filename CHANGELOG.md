@@ -12,6 +12,7 @@ The format follows Keep a Changelog and the project adheres to SemVer.
 - C++ HybridObjects: `AmplitudeContext`, `AmplitudeStorage`, `AmplitudeWorker`.
 - Analytics API compatible with `amplitude-rn-analytics` (init, track, identify, flush, reset, shutdown, …).
 - Experiment API compatible with `amplitude-rn-experiment` (initialize, start, fetch, variant, exposure, …).
+- Compatibility import subpaths: `react-native-nitro-amplitude/analytics` and `react-native-nitro-amplitude/experiment`.
 - Native storage and HTTP transport defaults via Nitro JSI instead of JS fetch + in-memory maps.
 - Expo 56 example app with analytics + experiment demo screen.
 - Monorepo scripts aligned with other `react-native-nitro-*` packages (`check`, `release:preflight`, example gates).

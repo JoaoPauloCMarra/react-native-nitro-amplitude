@@ -48,6 +48,8 @@ jest.mock("react-native", () => ({
 }));
 
 import { VERSION, Experiment, prefetchNativeContext } from "../index";
+import * as AnalyticsCompat from "../analytics";
+import * as ExperimentCompat from "../experiment";
 import { getNativeApplicationContext } from "../native/context";
 import { NitroMemoryStorage } from "../native/storage";
 
@@ -59,6 +61,14 @@ describe("react-native-nitro-amplitude", () => {
   it("exports Experiment factory", () => {
     expect(typeof Experiment.initialize).toBe("function");
     expect(typeof Experiment.initializeWithAmplitudeAnalytics).toBe("function");
+  });
+
+  it("keeps analytics and experiment compatibility subpaths", () => {
+    expect(typeof AnalyticsCompat.init).toBe("function");
+    expect(typeof AnalyticsCompat.track).toBe("function");
+    expect(typeof AnalyticsCompat.createInstance).toBe("function");
+    expect(typeof ExperimentCompat.Experiment.initialize).toBe("function");
+    expect(typeof ExperimentCompat.ExperimentClient).toBe("function");
   });
 
   it("reads native application context via Nitro", () => {

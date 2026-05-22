@@ -16,9 +16,17 @@ const requiredFiles = [
   "nitrogen/generated/shared/c++/HybridAmplitudeWorkerSpec.hpp",
   "src/index.ts",
   "src/index.web.ts",
+  "src/analytics/index.ts",
+  "src/experiment/index.ts",
   "lib/commonjs/index.js",
+  "lib/commonjs/analytics/index.js",
+  "lib/commonjs/experiment/index.js",
   "lib/module/index.js",
+  "lib/module/analytics/index.js",
+  "lib/module/experiment/index.js",
   "lib/typescript/index.d.ts",
+  "lib/typescript/analytics/index.d.ts",
+  "lib/typescript/experiment/index.d.ts",
 ];
 
 const forbiddenPatterns = [

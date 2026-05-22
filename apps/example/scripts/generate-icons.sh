@@ -4,76 +4,79 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 ASSETS="$ROOT/assets"
 BG="#07131E"
-INK="#1B2742"
-CYAN="#0F8DB8"
-CYAN_DARK="#0B6B95"
-CYAN_LIGHT="#25B7D3"
-MAGENTA="#E03170"
-MAGENTA_DARK="#C91355"
+BG_ALT="#10243B"
+INK="#101827"
+CYAN="#20D1E8"
+CYAN_DARK="#0C7FA5"
+CYAN_SOFT="#8FF3FF"
+MAGENTA="#F23D84"
+MAGENTA_DARK="#A91958"
+VIOLET="#6D5DF2"
+AMBER="#FFB347"
 WHITE="#F8FAFC"
-PAPER="#E5E7EB"
+MIST="#D9F7FF"
 
 if ! command -v magick >/dev/null 2>&1; then
   echo "ImageMagick (magick) is required to generate app icons."
   exit 1
 fi
 
-draw_mark() {
+draw_signal_core() {
   magick "$1" \
-    -draw "fill '$INK' roundrectangle 372,138 652,292 38,38" \
-    -draw "fill '$PAPER' roundrectangle 404,174 620,264 18,18" \
-    -draw "fill '$INK' roundrectangle 178,218 420,326 34,34" \
-    -draw "fill '$PAPER' roundrectangle 232,252 382,292 14,14" \
-    -draw "fill '$INK' roundrectangle 604,218 846,326 34,34" \
-    -draw "fill '$PAPER' roundrectangle 642,252 792,292 14,14" \
-    -draw "fill '$CYAN_DARK' path 'M 274,408 L 394,288 L 630,288 L 750,408 L 750,782 Q 750,892 640,892 L 384,892 Q 274,892 274,782 Z'" \
-    -draw "fill '$CYAN' path 'M 354,428 L 430,352 L 594,352 L 670,428 L 670,782 Q 670,838 614,838 L 410,838 Q 354,838 354,782 Z'" \
-    -draw "fill none stroke '$INK' stroke-width 26 path 'M 274,408 L 394,288 L 630,288 L 750,408 L 750,782 Q 750,892 640,892 L 384,892 Q 274,892 274,782 Z'" \
-    -draw "fill '$MAGENTA_DARK' rectangle 274,520 750,704" \
-    -draw "fill '$MAGENTA' rectangle 354,520 670,704" \
-    -draw "fill none stroke '$INK' stroke-width 20 rectangle 274,520 750,704" \
-    -draw "fill '$WHITE' path 'M 394,650 L 394,574 L 436,574 L 510,654 L 510,574 L 554,574 L 554,650 L 514,650 L 438,568 L 438,650 Z'" \
-    -draw "fill '$WHITE' path 'M 582,650 L 582,574 L 674,574 L 674,610 L 626,610 L 626,620 L 668,620 L 668,650 Z'" \
-    -draw "fill '$WHITE' path 'M 670,552 L 730,612 L 670,672 L 670,638 L 634,638 L 634,586 L 670,586 Z'" \
-    -draw "fill '#111827' circle 650,422 650,270" \
-    -draw "fill '$PAPER' circle 650,422 650,316" \
-    -draw "fill '#111827' path 'M 650,314 L 728,466 L 682,466 L 650,392 L 618,466 L 572,466 Z'" \
-    -draw "fill '#111827' roundrectangle 622,426 678,448 11,11" \
-    -draw "fill '$CYAN_LIGHT' fill-opacity 0.55 roundrectangle 322,466 338,798 8,8" \
-    -draw "fill '$CYAN_LIGHT' fill-opacity 0.55 roundrectangle 690,466 706,798 8,8" \
-    -draw "fill '$WHITE' fill-opacity 0.20 path 'M 354,428 L 430,352 L 594,352 L 548,408 L 426,408 L 354,480 Z'" \
+    -draw "fill '$INK' fill-opacity 0.32 circle 512,512 512,136" \
+    -draw "fill '$VIOLET' fill-opacity 0.26 circle 350,300 350,134" \
+    -draw "fill '$CYAN_DARK' fill-opacity 0.30 circle 690,706 690,322" \
+    -draw "fill none stroke '$CYAN' stroke-opacity 0.88 stroke-width 30 ellipse 512,512 280,360 -28,238" \
+    -draw "fill none stroke '$MAGENTA' stroke-opacity 0.88 stroke-width 26 ellipse 512,512 360,250 126,396" \
+    -draw "fill none stroke '$AMBER' stroke-opacity 0.90 stroke-width 18 ellipse 512,512 326,326 228,326" \
+    -draw "fill '$INK' stroke '#24395C' stroke-width 20 circle 512,512 512,224" \
+    -draw "fill '#111A2F' circle 512,512 512,264" \
+    -draw "fill '#EAFBFF' circle 512,512 512,322" \
+    -draw "fill '$INK' path 'M 512,330 L 650,704 L 588,704 L 560,620 L 464,620 L 436,704 L 374,704 Z'" \
+    -draw "fill '$WHITE' path 'M 512,438 L 478,560 L 546,560 Z'" \
+    -draw "fill none stroke '$CYAN_DARK' stroke-width 22 stroke-linecap round stroke-linejoin round path 'M 372,618 C 414,548 448,548 480,618 S 550,688 604,548 S 690,432 728,500'" \
+    -draw "fill none stroke '$MAGENTA' stroke-width 16 stroke-linecap round stroke-linejoin round path 'M 344,726 L 444,726 L 512,648 L 592,726 L 702,726'" \
+    -draw "fill '$CYAN_SOFT' circle 285,330 285,296" \
+    -draw "fill '$MAGENTA' circle 755,308 755,266" \
+    -draw "fill '$AMBER' circle 804,640 804,602" \
+    -draw "fill '$WHITE' circle 260,682 260,648" \
+    -draw "fill '$INK' fill-opacity 0.28 circle 285,330 285,306" \
+    -draw "fill '$INK' fill-opacity 0.25 circle 755,308 755,281" \
+    -draw "fill '$INK' fill-opacity 0.22 circle 804,640 804,614" \
+    -draw "fill '$INK' fill-opacity 0.20 circle 260,682 260,660" \
+    -draw "fill '$WHITE' fill-opacity 0.32 path 'M 390,292 C 444,256 552,250 626,288 C 558,268 472,278 410,326 Z'" \
+    -draw "fill '$CYAN_SOFT' fill-opacity 0.24 roundrectangle 308,792 716,826 17,17" \
     "$2"
 }
 
-draw_monochrome_mark() {
+draw_monochrome_core() {
   magick "$1" \
-    -draw "fill '#FFFFFF' fill-opacity 0.28 roundrectangle 372,138 652,292 38,38" \
-    -draw "fill '#FFFFFF' roundrectangle 404,174 620,264 18,18" \
-    -draw "fill '#FFFFFF' fill-opacity 0.28 roundrectangle 178,218 420,326 34,34" \
-    -draw "fill '#FFFFFF' roundrectangle 232,252 382,292 14,14" \
-    -draw "fill '#FFFFFF' fill-opacity 0.28 roundrectangle 604,218 846,326 34,34" \
-    -draw "fill '#FFFFFF' roundrectangle 642,252 792,292 14,14" \
-    -draw "fill '#FFFFFF' fill-opacity 0.72 path 'M 274,408 L 394,288 L 630,288 L 750,408 L 750,782 Q 750,892 640,892 L 384,892 Q 274,892 274,782 Z'" \
-    -draw "fill '#FFFFFF' path 'M 354,428 L 430,352 L 594,352 L 670,428 L 670,782 Q 670,838 614,838 L 410,838 Q 354,838 354,782 Z'" \
-    -draw "fill none stroke '#FFFFFF' stroke-width 26 path 'M 274,408 L 394,288 L 630,288 L 750,408 L 750,782 Q 750,892 640,892 L 384,892 Q 274,892 274,782 Z'" \
-    -draw "fill '#FFFFFF' rectangle 274,520 750,704" \
-    -draw "fill '#000000' path 'M 394,650 L 394,574 L 436,574 L 510,654 L 510,574 L 554,574 L 554,650 L 514,650 L 438,568 L 438,650 Z'" \
-    -draw "fill '#000000' path 'M 582,650 L 582,574 L 674,574 L 674,610 L 626,610 L 626,620 L 668,620 L 668,650 Z'" \
-    -draw "fill '#000000' path 'M 670,552 L 730,612 L 670,672 L 670,638 L 634,638 L 634,586 L 670,586 Z'" \
-    -draw "fill '#FFFFFF' circle 650,422 650,270" \
-    -draw "fill '#000000' circle 650,422 650,316" \
-    -draw "fill '#FFFFFF' path 'M 650,314 L 728,466 L 682,466 L 650,392 L 618,466 L 572,466 Z'" \
-    -draw "fill '#FFFFFF' roundrectangle 622,426 678,448 11,11" \
+    -draw "fill '#FFFFFF' fill-opacity 0.20 circle 512,512 512,136" \
+    -draw "fill none stroke '#FFFFFF' stroke-opacity 0.78 stroke-width 30 ellipse 512,512 280,360 -28,238" \
+    -draw "fill none stroke '#FFFFFF' stroke-opacity 0.72 stroke-width 26 ellipse 512,512 360,250 126,396" \
+    -draw "fill none stroke '#FFFFFF' stroke-opacity 0.62 stroke-width 18 ellipse 512,512 326,326 228,326" \
+    -draw "fill '#FFFFFF' circle 512,512 512,224" \
+    -draw "fill '#000000' path 'M 512,330 L 650,704 L 588,704 L 560,620 L 464,620 L 436,704 L 374,704 Z'" \
+    -draw "fill '#FFFFFF' path 'M 512,438 L 478,560 L 546,560 Z'" \
+    -draw "fill none stroke '#FFFFFF' stroke-width 22 stroke-linecap round stroke-linejoin round path 'M 372,618 C 414,548 448,548 480,618 S 550,688 604,548 S 690,432 728,500'" \
+    -draw "fill none stroke '#FFFFFF' stroke-width 16 stroke-linecap round stroke-linejoin round path 'M 344,726 L 444,726 L 512,648 L 592,726 L 702,726'" \
+    -draw "fill '#FFFFFF' circle 285,330 285,296" \
+    -draw "fill '#FFFFFF' circle 755,308 755,266" \
+    -draw "fill '#FFFFFF' circle 804,640 804,602" \
+    -draw "fill '#FFFFFF' circle 260,682 260,648" \
+    -draw "fill '#FFFFFF' fill-opacity 0.34 roundrectangle 308,792 716,826 17,17" \
     "$2"
 }
 
-magick -size 1024x1024 "gradient:$BG-#101827" \
-  -draw "fill '#092036' circle 512,512 512,156" \
-  -draw "fill '#150F2A' fill-opacity 0.45 circle 696,676 696,250" \
-  miff:- | draw_mark - "$ASSETS/icon.png"
+magick -size 1024x1024 "gradient:$BG-$BG_ALT" \
+  -draw "fill '#163E60' fill-opacity 0.50 circle 252,278 252,58" \
+  -draw "fill '#190F35' fill-opacity 0.62 circle 812,218 812,72" \
+  -draw "fill '#073B4C' fill-opacity 0.42 circle 782,790 782,472" \
+  -draw "fill '#08111F' fill-opacity 0.28 circle 270,824 270,562" \
+  miff:- | draw_signal_core - "$ASSETS/icon.png"
 
-magick -size 1024x1024 xc:none miff:- | draw_mark - "$ASSETS/adaptive-icon.png"
-magick -size 1024x1024 xc:none miff:- | draw_monochrome_mark - "$ASSETS/adaptive-icon-monochrome.png"
+magick -size 1024x1024 xc:none miff:- | draw_signal_core - "$ASSETS/adaptive-icon.png"
+magick -size 1024x1024 xc:none miff:- | draw_monochrome_core - "$ASSETS/adaptive-icon-monochrome.png"
 magick "$ASSETS/icon.png" "$ASSETS/splash-icon.png"
 
 echo "Generated app icons in $ASSETS"

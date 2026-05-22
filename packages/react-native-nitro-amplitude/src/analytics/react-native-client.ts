@@ -48,7 +48,7 @@ export type AmplitudeReactNativeClient = ReactNativeClient & {
 };
 
 let nextConnectorOwnerId = 0;
-let activeConnectorOwnerId: number | undefined;
+const activeConnectorOwnerIds = new Map<string, number>();
 
 export class AmplitudeReactNative
   extends AmplitudeCore
@@ -62,7 +62,7 @@ export class AmplitudeReactNative
 
   // @ts-ignore
   config: ReactNativeConfig;
-  userProperties: { [key: string]: any } | undefined;
+  userProperties: Record<string, unknown> | undefined;
 
   init(apiKey = "", userId?: string, options?: ReactNativeOptions) {
     this.initPromise =
@@ -99,7 +99,8 @@ export class AmplitudeReactNative
       // Set up the analytics connector to integrate with the experiment SDK.
       // Send events from the experiment SDK and forward identifies to the
       // identity store.
-      const connector = getAnalyticsConnector();
+      const connectorInstanceName = this.getConnectorInstanceName();
+      const connector = getAnalyticsConnector(connectorInstanceName);
       connector.identityStore.setIdentity({
         userId: this.config.userId,
         deviceId: this.config.deviceId,
@@ -140,7 +141,7 @@ export class AmplitudeReactNative
           this.track(event.eventType, event.eventProperties).promise,
         );
       });
-      activeConnectorOwnerId = this.connectorOwnerId;
+      activeConnectorOwnerIds.set(connectorInstanceName, this.connectorOwnerId);
     } catch (error) {
       if (appStateHandlerInstalled) {
         this.appStateChangeHandler?.remove();
@@ -162,11 +163,18 @@ export class AmplitudeReactNative
     this.dispatchQ = [];
     this.isReady = false;
 
-    if (activeConnectorOwnerId === this.connectorOwnerId) {
-      const connector = getAnalyticsConnector();
+    const connectorInstanceName = this.config
+      ? this.getConnectorInstanceName()
+      : undefined;
+    if (
+      connectorInstanceName &&
+      activeConnectorOwnerIds.get(connectorInstanceName) ===
+        this.connectorOwnerId
+    ) {
+      const connector = getAnalyticsConnector(connectorInstanceName);
       connector.eventBridge.setEventReceiver(() => undefined);
       connector.identityStore.setIdentity({});
-      activeConnectorOwnerId = undefined;
+      activeConnectorOwnerIds.delete(connectorInstanceName);
     }
   }
 
@@ -176,6 +184,10 @@ export class AmplitudeReactNative
         `Internal track call failed: ${String(error)}`,
       );
     });
+  }
+
+  private getConnectorInstanceName() {
+    return this.config.instanceName ?? "$default_instance";
   }
 
   private cancelDestinationFlushes() {
@@ -232,7 +244,7 @@ export class AmplitudeReactNative
       return;
     }
     this.config.userId = userId;
-    setConnectorUserId(userId);
+    setConnectorUserId(userId, this.getConnectorInstanceName());
   }
 
   getDeviceId() {
@@ -245,7 +257,7 @@ export class AmplitudeReactNative
       return;
     }
     this.config.deviceId = deviceId;
-    setConnectorDeviceId(deviceId);
+    setConnectorDeviceId(deviceId, this.getConnectorInstanceName());
   }
 
   identify(identify: IIdentify, eventOptions?: EventOptions) {

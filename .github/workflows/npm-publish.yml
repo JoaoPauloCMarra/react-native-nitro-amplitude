@@ -3,6 +3,19 @@ name: Publish npm
 on:
   release:
     types: [published]
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Release tag to validate against package.json
+        required: true
+      npm_dist_tag:
+        description: npm dist-tag to publish with
+        required: false
+        default: latest
+      dry_run:
+        description: Run publish validation without publishing
+        required: false
+        default: "true"
 
 permissions:
   contents: read
@@ -13,13 +26,17 @@ env:
   NODE_VERSION: "24"
   PACKAGE_DIR: packages/react-native-nitro-amplitude
 
+concurrency:
+  group: npm-publish-${{ github.event.release.tag_name || inputs.release_tag }}
+  cancel-in-progress: false
+
 jobs:
   publish:
     name: Publish package
     runs-on: ubuntu-latest
     env:
-      DIST_TAG: ${{ github.event.release.prerelease && 'next' || 'latest' }}
-      RELEASE_TAG: ${{ github.event.release.tag_name }}
+      DIST_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.npm_dist_tag || github.event.release.prerelease && 'next' || 'latest' }}
+      RELEASE_TAG: ${{ github.event.release.tag_name || inputs.release_tag }}
 
     steps:
       - uses: actions/checkout@v6.0.2
@@ -53,6 +70,7 @@ jobs:
           fi
 
       - name: Check npm version availability
+        if: github.event_name == 'release' || inputs.dry_run == 'false'
         run: |
           package_name="$(node -p "require('./${PACKAGE_DIR}/package.json').name")"
           version="$(node -p "require('./${PACKAGE_DIR}/package.json').version")"
@@ -65,4 +83,9 @@ jobs:
         run: bun run release:preflight
 
       - name: Publish to npm
-        run: bun run publish-package -- --yes --with-coverage --tag="${DIST_TAG}"
+        run: |
+          args=(--yes --with-coverage --tag="${DIST_TAG}")
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.dry_run }}" != "false" ]; then
+            args+=(--dry-run)
+          fi
+          bun run publish-package -- "${args[@]}"

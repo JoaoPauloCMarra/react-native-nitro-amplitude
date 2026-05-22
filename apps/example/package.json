@@ -6,12 +6,11 @@
   "scripts": {
     "start": "env -u NO_COLOR expo start",
     "ios": "env -u NO_COLOR expo run:ios",
-    "android": "env -u NO_COLOR expo run:android",
+    "android": "ANDROID_HOME=${ANDROID_HOME:-$HOME/Library/Android/sdk} ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT:-${ANDROID_HOME:-$HOME/Library/Android/sdk}} env -u NO_COLOR expo run:android",
     "doctor": "env -u NO_COLOR bunx expo-doctor",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "prebuild": "env -u NO_COLOR expo prebuild",
     "prebuild:clean": "env -u NO_COLOR expo prebuild --clean",
-    "generate-icons": "bash scripts/generate-icons.sh",
     "lint": "bunx eslint app components --max-warnings=0",
     "lint:fix": "bunx eslint app components --max-warnings=0 --fix",
     "android:assemble": "cd android && NODE_ENV=development ANDROID_HOME=${ANDROID_HOME:-$HOME/Library/Android/sdk} ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT:-${ANDROID_HOME:-$HOME/Library/Android/sdk}} ./gradlew --no-daemon -PreactNativeArchitectures=arm64-v8a :app:assembleDebug",

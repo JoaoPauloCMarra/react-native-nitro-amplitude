@@ -63,4 +63,4 @@ export type { AmplitudeContext } from "./AmplitudeContext.nitro";
 export type { AmplitudeStorage } from "./AmplitudeStorage.nitro";
 export type { AmplitudeWorker } from "./AmplitudeWorker.nitro";
 
-export const VERSION = "0.1.0";
+export const VERSION = "0.2.0";

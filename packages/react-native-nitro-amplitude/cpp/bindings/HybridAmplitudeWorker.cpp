@@ -133,12 +133,28 @@ void HybridAmplitudeWorker::workerLoop() {
       continue;
     }
 
-    const auto result = adapter_->performHttpRequest(
-        request.url,
-        request.method,
-        request.headersJson,
-        request.body,
-        request.timeoutMillis);
+    const auto result = [&request, this]() {
+#ifndef NITRO_AMPLITUDE_DISABLE_PLATFORM_ADAPTER
+#if __ANDROID__
+      ::NitroAmplitude::HttpResult androidResult;
+      facebook::jni::ThreadScope::WithClassLoader([&request, this, &androidResult]() {
+        androidResult = adapter_->performHttpRequest(
+            request.url,
+            request.method,
+            request.headersJson,
+            request.body,
+            request.timeoutMillis);
+      });
+      return androidResult;
+#endif
+#endif
+      return adapter_->performHttpRequest(
+          request.url,
+          request.method,
+          request.headersJson,
+          request.body,
+          request.timeoutMillis);
+    }();
 
     notifyComplete(
         request.requestId,

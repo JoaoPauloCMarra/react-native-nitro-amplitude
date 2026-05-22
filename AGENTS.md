@@ -43,7 +43,6 @@ bun install
 bun run build
 bun run check
 bun run release:preflight
-bun run example:generate-icons   # after editing apps/example/scripts/generate-icons.sh
 bun run example:prebuild:clean
 bun run example:android
 bun run example:ios

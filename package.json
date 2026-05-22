@@ -38,7 +38,6 @@
     "example:check": "bun run example:doctor && bun run example:lint && bun run example:typecheck",
     "example:prebuild": "bun run --cwd apps/example prebuild",
     "example:prebuild:clean": "bun run --cwd apps/example prebuild:clean",
-    "example:generate-icons": "bun run --cwd apps/example generate-icons",
     "example:android:assemble": "bun run --cwd apps/example android:assemble",
     "example:ios:build": "bun run --cwd apps/example ios:build",
     "example:smoke": "bunx maestro test maestro/smoke-tests.yaml"

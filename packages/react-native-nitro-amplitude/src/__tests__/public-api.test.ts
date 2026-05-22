@@ -145,10 +145,28 @@ import {
   NitroExperimentStorage,
   NitroMemoryStorage,
 } from "../native/storage";
+import {
+  NitroAnalyticsStorage as WebAnalyticsStorage,
+  NitroExperimentStorage as WebExperimentStorage,
+  NitroMemoryStorage as WebMemoryStorage,
+} from "../native/storage.web";
+import {
+  getLegacyEvents as getWebLegacyEvents,
+  getLegacySessionData as getWebLegacySessionData,
+  getNativeApplicationContext as getWebApplicationContext,
+  prefetchNativeContext as prefetchWebNativeContext,
+  removeLegacyEvent as removeWebLegacyEvent,
+} from "../native/context.web";
+import { nitroHttpClient as webNitroHttpClient } from "../native/http.web";
+
+type ConnectorGlobal = typeof globalThis & {
+  analyticsConnectorInstances?: unknown;
+};
 
 describe("react-native-nitro-amplitude", () => {
   beforeEach(() => {
     jest.useRealTimers();
+    (globalThis as ConnectorGlobal).analyticsConnectorInstances = undefined;
     mockMemory.clear();
     mockDisk.clear();
     for (const key of Object.keys(mockHybridObjects)) {
@@ -158,13 +176,36 @@ describe("react-native-nitro-amplitude", () => {
   });
 
   it("exports VERSION", () => {
-    expect(VERSION).toBe("0.1.0");
+    expect(VERSION).toBe("0.2.0");
   });
 
   it("exports analytics and experiment factories", () => {
     expect(typeof createInstance).toBe("function");
     expect(typeof Experiment.initialize).toBe("function");
     expect(typeof Experiment.initializeWithAmplitudeAnalytics).toBe("function");
+  });
+
+  it("shares named analytics identity with named experiment clients", async () => {
+    const analytics = createInstance();
+    await analytics.init("analytics-key", "named-user", {
+      instanceName: "named",
+    }).promise;
+
+    const experiment = Experiment.initializeWithAmplitudeAnalytics(
+      "deployment-key",
+      {
+        instanceName: "named",
+      },
+    );
+
+    await expect(experiment.getUserProvider().getUser()).resolves.toMatchObject(
+      {
+        user_id: "named-user",
+        device_id: analytics.getDeviceId(),
+      },
+    );
+
+    analytics.shutdown();
   });
 
   it("keeps analytics and experiment compatibility subpaths", () => {
@@ -260,5 +301,98 @@ describe("react-native-nitro-amplitude", () => {
       '{"event":"demo"}',
       1000,
     );
+  });
+
+  it("provides web storage and context fallbacks without Nitro", async () => {
+    const analytics = new WebAnalyticsStorage<{ value: string }>("web");
+    const disk = new WebExperimentStorage("web-experiment");
+    const experiment = new WebMemoryStorage("web-experiment");
+
+    await analytics.set("event", { value: "queued" });
+    await disk.put("variant", "disk-on");
+    await experiment.put("variant", "on");
+
+    expect(await analytics.get("event")).toEqual({ value: "queued" });
+    expect(await disk.get("variant")).toBe("disk-on");
+    expect(await experiment.get("variant")).toBe("on");
+    expect(getWebApplicationContext({ platform: true }).platform).toBe("Web");
+    expect(getWebLegacySessionData("default")).toEqual({});
+    expect(getWebLegacyEvents("default", "events")).toEqual([]);
+    expect(prefetchWebNativeContext()).toBeUndefined();
+    expect(removeWebLegacyEvent("default", "events", 1)).toBeUndefined();
+
+    await analytics.reset();
+    await disk.reset();
+    await experiment.reset();
+
+    expect(await analytics.get("event")).toBeUndefined();
+    expect(await disk.get("variant")).toBeNull();
+    expect(await experiment.get("variant")).toBeNull();
+  });
+
+  it("uses browser storage and fetch for web fallbacks", async () => {
+    const values = new Map<string, string>();
+    const originalLocalStorage = globalThis.localStorage;
+    const originalFetch = globalThis.fetch;
+
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      value: {
+        get length() {
+          return values.size;
+        },
+        key: (index: number) => Array.from(values.keys())[index] ?? null,
+        getItem: (key: string) => values.get(key) ?? null,
+        setItem: (key: string, value: string) => {
+          values.set(key, value);
+        },
+        removeItem: (key: string) => {
+          values.delete(key);
+        },
+      },
+    });
+    globalThis.fetch = jest.fn(async () => ({
+      status: 202,
+      text: async () => "accepted",
+    })) as unknown as typeof fetch;
+
+    try {
+      const analytics = new WebAnalyticsStorage<{ value: string }>("persisted");
+      const experiment = new WebExperimentStorage("persisted");
+
+      await analytics.set("event", { value: "stored" });
+      await experiment.put("flag", "enabled");
+
+      expect(await analytics.get("event")).toEqual({ value: "stored" });
+      expect(await experiment.get("flag")).toBe("enabled");
+      await expect(
+        webNitroHttpClient.request(
+          "https://example.com/variants",
+          "POST",
+          { authorization: "redacted" },
+          null,
+          1000,
+        ),
+      ).resolves.toEqual({ status: 202, body: "accepted" });
+
+      expect(globalThis.fetch).toHaveBeenCalledWith(
+        "https://example.com/variants",
+        expect.objectContaining({
+          method: "POST",
+          headers: { authorization: "redacted" },
+          body: "",
+        }),
+      );
+
+      await analytics.reset();
+
+      expect(values.size).toBe(0);
+    } finally {
+      Object.defineProperty(globalThis, "localStorage", {
+        configurable: true,
+        value: originalLocalStorage,
+      });
+      globalThis.fetch = originalFetch;
+    }
   });
 });

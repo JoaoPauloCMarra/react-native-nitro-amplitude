@@ -59,7 +59,7 @@
     },
     "packages/react-native-nitro-amplitude": {
       "name": "react-native-nitro-amplitude",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "dependencies": {
         "@amplitude/analytics-connector": "^1.6.4",
         "@amplitude/analytics-core": "2.48.2",

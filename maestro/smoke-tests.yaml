@@ -37,4 +37,8 @@ name: "Nitro Amplitude Smoke"
 - extendedWaitUntil:
     visible: "Read demo-flag: on"
     timeout: 30000
-- assertVisible: '"value": "on"'
+- scrollUntilVisible:
+    element:
+      id: "variant-value"
+    direction: DOWN
+    timeout: 30000

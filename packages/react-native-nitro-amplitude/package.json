@@ -1,7 +1,7 @@
 {
   "name": "react-native-nitro-amplitude",
-  "version": "0.1.0",
-  "description": "High-performance Amplitude Analytics and Experiment SDK for React Native powered by Nitro Modules and C++: synchronous JSI storage, native device context, and background HTTP transport.",
+  "version": "0.2.0",
+  "description": "Amplitude Analytics and Experiment SDK for React Native powered by Nitro Modules and C++ on native platforms, with web-compatible fetch and storage fallbacks.",
   "main": "lib/commonjs/index.js",
   "module": "lib/module/index.js",
   "types": "lib/typescript/index.d.ts",
@@ -19,11 +19,13 @@
     "./analytics": {
       "types": "./lib/typescript/analytics/index.d.ts",
       "react-native": "./src/analytics/index.ts",
+      "browser": "./src/analytics/index.ts",
       "default": "./lib/commonjs/analytics/index.js"
     },
     "./experiment": {
       "types": "./lib/typescript/experiment/index.d.ts",
       "react-native": "./src/experiment/index.ts",
+      "browser": "./src/experiment/index.ts",
       "default": "./lib/commonjs/experiment/index.js"
     },
     "./app.plugin": "./app.plugin.js",

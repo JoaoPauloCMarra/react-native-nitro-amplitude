@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "outDir": "./lib/typescript",
+    "rootDir": "./src",
+    "lib": ["ES2020", "DOM"],
+    "types": ["react-native"],
+    "noUncheckedIndexedAccess": false,
+    "exactOptionalPropertyTypes": false,
+    "useUnknownInCatchVariables": true
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "lib", "nitrogen", "src/__tests__"]
+}

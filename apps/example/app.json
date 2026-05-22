@@ -1,0 +1,54 @@
+{
+  "expo": {
+    "name": "Nitro Amplitude",
+    "slug": "nitro-amplitude-example",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "nitroamplitude",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.nitroamplitude.example",
+      "icon": "./assets/icon.png"
+    },
+    "android": {
+      "package": "com.nitroamplitude.example",
+      "icon": "./assets/icon.png",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#07131E",
+        "monochromeImage": "./assets/adaptive-icon-monochrome.png"
+      }
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#07131E"
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "buildReactNativeFromSource": true
+          },
+          "android": {
+            "usePrecompiledHeaders": true
+          }
+        }
+      ],
+      "react-native-nitro-amplitude",
+      "expo-font",
+      "expo-asset",
+      "expo-status-bar"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

@@ -1,0 +1,13 @@
+appId: com.nitroamplitude.example
+name: "Nitro Amplitude Smoke"
+---
+- clearState
+- launchApp
+- extendedWaitUntil:
+    visible: "Smoke Test"
+    timeout: 120000
+- tapOn: "Run All"
+- extendedWaitUntil:
+    visible: "2/2 passed"
+    timeout: 30000
+- assertNotVisible: "FAILED"

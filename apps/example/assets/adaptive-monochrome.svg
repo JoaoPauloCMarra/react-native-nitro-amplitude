@@ -1,0 +1,13 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <g transform="translate(0 24)" fill="#FFFFFF">
+    <rect x="300" y="560" width="96" height="164" rx="28"/>
+    <rect x="464" y="448" width="96" height="276" rx="28"/>
+    <rect x="628" y="360" width="96" height="364" rx="28"/>
+    <path
+      d="M512 292L548 360H584L532 448L552 520H472L492 448L440 360H476L512 292Z"
+      stroke="#FFFFFF"
+      stroke-width="10"
+      stroke-linejoin="round"
+    />
+  </g>
+</svg>

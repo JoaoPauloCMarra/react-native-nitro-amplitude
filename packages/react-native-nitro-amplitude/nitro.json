@@ -1,0 +1,33 @@
+{
+  "$schema": "https://nitro.margelo.com/nitro.schema.json",
+  "cxxNamespace": ["NitroAmplitude"],
+  "ios": {
+    "iosModuleName": "NitroAmplitude"
+  },
+  "android": {
+    "androidNamespace": ["com", "nitroamplitude"],
+    "androidCxxLibName": "NitroAmplitude"
+  },
+  "autolinking": {
+    "AmplitudeContext": {
+      "all": {
+        "language": "c++",
+        "implementationClassName": "HybridAmplitudeContext"
+      }
+    },
+    "AmplitudeStorage": {
+      "all": {
+        "language": "c++",
+        "implementationClassName": "HybridAmplitudeStorage"
+      }
+    },
+    "AmplitudeWorker": {
+      "all": {
+        "language": "c++",
+        "implementationClassName": "HybridAmplitudeWorker"
+      }
+    }
+  },
+  "ignorePaths": ["**/node_modules"],
+  "gitAttributesGeneratedFlag": true
+}

@@ -142,9 +142,24 @@ export default function HomeScreen() {
             testID="fetch-variants"
             title="Fetch"
             onPress={() => {
-              void experimentClient.fetch({ user_id: userId }).then(() => {
-                setStatus("variants fetched");
-              });
+              setStatus(`fetching ${flagKey}`);
+              void experimentClient
+                .fetchOrThrow(
+                  { user_id: userId },
+                  { flagKeys: flagKey ? [flagKey] : undefined },
+                )
+                .then(() => {
+                  const resolved = experimentClient.variant(flagKey);
+                  setFlagValue(JSON.stringify(resolved ?? {}, null, 2));
+                  setStatus(
+                    resolved?.value
+                      ? `fetched ${flagKey}: ${String(resolved.value)}`
+                      : `fetched ${flagKey}: no variant`,
+                  );
+                })
+                .catch((error: unknown) => {
+                  setStatus(`fetch failed: ${String(error)}`);
+                });
             }}
             style={styles.flex1}
           />

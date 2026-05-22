@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { View } from "react-native";
+import Constants from "expo-constants";
 import {
   Experiment,
   init,
@@ -21,10 +22,14 @@ import {
 } from "../components/shared";
 import { SmokeTestRunner } from "../components/smoke-test";
 
+const extra = Constants.expoConfig?.extra ?? {};
 const ANALYTICS_API_KEY =
-  process.env.EXPO_PUBLIC_AMPLITUDE_API_KEY ?? "demo-api-key";
+  typeof extra.amplitudeApiKey === "string" ? extra.amplitudeApiKey : "";
 const EXPERIMENT_API_KEY =
-  process.env.EXPO_PUBLIC_AMPLITUDE_EXPERIMENT_KEY ?? ANALYTICS_API_KEY;
+  typeof extra.amplitudeExperimentKey === "string" &&
+  extra.amplitudeExperimentKey.length > 0
+    ? extra.amplitudeExperimentKey
+    : ANALYTICS_API_KEY;
 
 export default function HomeScreen() {
   const [status, setStatus] = useState("idle");
@@ -48,6 +53,11 @@ export default function HomeScreen() {
   useEffect(() => {
     prefetchNativeContext();
     void (async () => {
+      if (!ANALYTICS_API_KEY) {
+        setStatus("missing AMPLITUDE_API_KEY in apps/example/.env.local");
+        return;
+      }
+
       setStatus("initializing analytics");
       await init(ANALYTICS_API_KEY, userId, {
         instanceName: "example",

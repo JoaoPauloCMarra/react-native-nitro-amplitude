@@ -66,11 +66,19 @@ const _request = (
 ): Promise<SimpleResponse> => {
   const abortController = getAbortController();
   const call = async () => {
-    const response = await getFetch()(requestUrl, {
+    const upperMethod = method.toUpperCase();
+    const init: RequestInit = {
       method: method,
       headers: headers,
-      body: data,
       signal: abortController?.signal,
+    };
+
+    if (upperMethod !== "GET" && upperMethod !== "HEAD") {
+      init.body = data;
+    }
+
+    const response = await getFetch()(requestUrl, {
+      ...init,
     });
     const simpleResponse: SimpleResponse = {
       status: response.status,

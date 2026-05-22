@@ -383,6 +383,22 @@ describe("react-native-nitro-amplitude", () => {
           body: "",
         }),
       );
+      await expect(
+        webNitroHttpClient.request(
+          "https://example.com/variants",
+          "GET",
+          { authorization: "redacted" },
+          null,
+          1000,
+        ),
+      ).resolves.toEqual({ status: 202, body: "accepted" });
+
+      expect(globalThis.fetch).toHaveBeenLastCalledWith(
+        "https://example.com/variants",
+        expect.not.objectContaining({
+          body: expect.any(String),
+        }),
+      );
 
       await analytics.reset();
 

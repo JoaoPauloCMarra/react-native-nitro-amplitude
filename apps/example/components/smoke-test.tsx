@@ -1,6 +1,14 @@
 import { useCallback, useState } from "react";
 import { Text, View } from "react-native";
-import { prefetchNativeContext, VERSION } from "react-native-nitro-amplitude";
+import {
+  Experiment,
+  NitroAnalyticsStorage,
+  NitroMemoryStorage,
+  createInstance,
+  prefetchNativeContext,
+  track,
+  VERSION,
+} from "react-native-nitro-amplitude";
 import { Button, Card, Colors, StatusRow } from "./shared";
 
 type LogEntry = {
@@ -13,12 +21,13 @@ export function SmokeTestRunner() {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [summary, setSummary] = useState("Not run");
 
-  const runAll = useCallback(() => {
+  const runAll = useCallback(async () => {
     const next: LogEntry[] = [];
+    setSummary("Running");
 
-    const run = (label: string, fn: () => void) => {
+    const run = async (label: string, fn: () => void | Promise<void>) => {
       try {
-        fn();
+        await fn();
         next.push({ label, status: "pass" });
       } catch (error) {
         next.push({
@@ -29,14 +38,56 @@ export function SmokeTestRunner() {
       }
     };
 
-    run("VERSION export", () => {
+    await run("VERSION export", () => {
       if (!VERSION.startsWith("0.")) {
         throw new Error(`unexpected VERSION: ${VERSION}`);
       }
     });
 
-    run("prefetchNativeContext", () => {
+    await run("prefetchNativeContext", () => {
       prefetchNativeContext();
+    });
+
+    await run("create analytics instance", () => {
+      const client = createInstance();
+      if (typeof client.init !== "function") {
+        throw new Error("analytics client missing init");
+      }
+    });
+
+    await run("track event API", () => {
+      track("nitro_amplitude_smoke", { source: "smoke-test" });
+    });
+
+    await run("Nitro analytics storage", async () => {
+      const storage = new NitroAnalyticsStorage<{ ok: boolean }>("smoke");
+      await storage.set("analytics", { ok: true });
+      const value = await storage.get("analytics");
+      await storage.reset();
+      if (!value?.ok) {
+        throw new Error("analytics storage did not round-trip");
+      }
+    });
+
+    await run("Nitro experiment storage", async () => {
+      const storage = new NitroMemoryStorage("smoke");
+      await storage.put("variant", "on");
+      const value = await storage.get("variant");
+      await storage.reset();
+      if (value !== "on") {
+        throw new Error("experiment storage did not round-trip");
+      }
+    });
+
+    await run("Experiment factory", () => {
+      const client = Experiment.initialize("smoke-deployment-key", {
+        instanceName: "smoke",
+        fetchOnStart: false,
+        pollOnStart: false,
+      });
+      if (typeof client.variant !== "function") {
+        throw new Error("experiment client missing variant");
+      }
     });
 
     setLogs(next);
@@ -54,7 +105,13 @@ export function SmokeTestRunner() {
       indicatorColor={Colors.primary}
     >
       <StatusRow testID="smoke-summary" label="Summary" value={summary} />
-      <Button testID="smoke-run-all" title="Run All" onPress={runAll} />
+      <Button
+        testID="smoke-run-all"
+        title="Run All"
+        onPress={() => {
+          void runAll();
+        }}
+      />
       <View style={{ gap: 8, marginTop: 12 }}>
         {logs.map((entry) => (
           <View key={entry.label}>

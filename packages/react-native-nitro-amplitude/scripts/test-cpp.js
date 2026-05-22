@@ -85,8 +85,12 @@ const generatedDir = path.join(
 );
 
 const testFile = path.join(cppDir, "bindings", "HybridAmplitudeStorageTest.cpp");
+const contextSource = path.join(cppDir, "bindings", "HybridAmplitudeContext.cpp");
 const storageSource = path.join(cppDir, "bindings", "HybridAmplitudeStorage.cpp");
+const workerSource = path.join(cppDir, "bindings", "HybridAmplitudeWorker.cpp");
+const contextSpec = path.join(generatedDir, "HybridAmplitudeContextSpec.cpp");
 const storageSpec = path.join(generatedDir, "HybridAmplitudeStorageSpec.cpp");
+const workerSpec = path.join(generatedDir, "HybridAmplitudeWorkerSpec.cpp");
 const outputFile = path.join(buildDir, "hybrid_amplitude_storage_test");
 
 const compileCmd = [
@@ -100,8 +104,12 @@ const compileCmd = [
   `-I${path.join(cppDir, "bindings")}`,
   `-I${generatedDir}`,
   testFile,
+  contextSource,
   storageSource,
+  workerSource,
+  contextSpec,
   storageSpec,
+  workerSpec,
   `-o ${outputFile}`,
 ]
   .filter(Boolean)

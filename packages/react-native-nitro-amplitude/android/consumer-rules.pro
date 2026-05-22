@@ -1,26 +1,35 @@
-# NitroStorage - JNI-callable methods must survive R8/ProGuard shrinking
+# NitroAmplitude - JNI-callable methods must survive R8/ProGuard shrinking
 
--keep class com.nitrostorage.AndroidStorageAdapter {
-    public static *** set*(...);
-    public static *** get*(...);
-    public static *** delete*(...);
-    public static *** has*(...);
-    public static *** clear*(...);
-    public static *** size*(...);
-    public static *** flush*(...);
-    public static void init(android.content.Context);
-    public static void setSecureWritesAsync(boolean);
-    public static void setSecureAccessControl(int);
-    public static void removeByPrefix(java.lang.String, int);
+-keep class com.nitroamplitude.AndroidAmplitudeAdapter {
+    public static *** setContext(...);
+    public static *** getContext(...);
+    public static *** prefetchContext(...);
+    public static *** getApplicationContextJson(...);
+    public static *** getLegacySessionDataJson(...);
+    public static *** getLegacyEventsJson(...);
+    public static *** removeLegacyEvent(...);
+    public static *** setDisk(...);
+    public static *** getDisk(...);
+    public static *** deleteDisk(...);
+    public static *** hasDisk(...);
+    public static *** getAllDiskKeys(...);
+    public static *** performHttpRequest(...);
 }
--keep class com.nitrostorage.AndroidStorageAdapter$Companion {
+
+-keep class com.nitroamplitude.AndroidAmplitudeAdapter$Companion {
     public <methods>;
 }
--keep class com.nitrostorage.NitroStoragePackage {
+
+-keep class com.nitroamplitude.NitroAmplitudePackage {
     <init>();
     <clinit>();
     *;
 }
--keep class com.nitrostorage.NitroStoragePackage$Companion {
-    *;
+
+-keep class com.nitroamplitude.NitroAmplitudePackageKt {
+    public static *** initializeNitroAmplitude(...);
+}
+
+-keep class com.margelo.nitro.com.nitroamplitude.NitroAmplitudeOnLoad {
+    public static *** initializeNative(...);
 }

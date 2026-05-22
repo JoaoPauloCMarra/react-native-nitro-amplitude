@@ -1,13 +1,26 @@
 {
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
+    "paths": {
+      "react-native-nitro-amplitude": [
+        "../../packages/react-native-nitro-amplitude/src/index.ts"
+      ],
+      "react-native-nitro-amplitude/analytics": [
+        "../../packages/react-native-nitro-amplitude/src/analytics/index.ts"
+      ],
+      "react-native-nitro-amplitude/experiment": [
+        "../../packages/react-native-nitro-amplitude/src/experiment/index.ts"
+      ]
+    },
     "strict": true,
+    "useDefineForClassFields": false,
     "skipLibCheck": true
   },
   "include": [
     "**/*.ts",
     "**/*.tsx",
     ".expo/types/**/*.ts",
-    "expo-env.d.ts"
+    "expo-env.d.ts",
+    "../../packages/react-native-nitro-amplitude/src/**/*.d.ts"
   ]
 }

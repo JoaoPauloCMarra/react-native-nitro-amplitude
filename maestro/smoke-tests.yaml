@@ -8,6 +8,33 @@ name: "Nitro Amplitude Smoke"
     timeout: 120000
 - tapOn: "Run All"
 - extendedWaitUntil:
-    visible: "2/2 passed"
+    visible: "7/7 passed"
     timeout: 30000
 - assertNotVisible: "FAILED"
+- scrollUntilVisible:
+    element:
+      text: "Track Event"
+    direction: DOWN
+    timeout: 30000
+- tapOn: "Track Event"
+- extendedWaitUntil:
+    visible: "Tracked nitro_amplitude_demo"
+    timeout: 30000
+- tapOn: "Flush"
+- extendedWaitUntil:
+    visible: "Flush complete"
+    timeout: 30000
+- scrollUntilVisible:
+    element:
+      text: "Fetch"
+    direction: DOWN
+    timeout: 30000
+- tapOn: "Fetch"
+- extendedWaitUntil:
+    visible: "Fetched demo-flag: on"
+    timeout: 30000
+- tapOn: "Read Variant"
+- extendedWaitUntil:
+    visible: "Read demo-flag: on"
+    timeout: 30000
+- assertVisible: '"value": "on"'

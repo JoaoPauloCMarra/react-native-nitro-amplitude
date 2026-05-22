@@ -34,6 +34,8 @@ export default function HomeScreen() {
   const [flagKey, setFlagKey] = useState("demo-flag");
   const [flagValue, setFlagValue] = useState("(not fetched)");
   const [deviceId, setDeviceId] = useState("(unknown)");
+  const [analyticsResult, setAnalyticsResult] = useState("Not run");
+  const [experimentResult, setExperimentResult] = useState("Not run");
   const [userId] = useState("demo-user");
 
   const experimentClient = useMemo(
@@ -106,6 +108,7 @@ export default function HomeScreen() {
             title="Track Event"
             onPress={() => {
               track(eventName, { source: "example", platform: "native" });
+              setAnalyticsResult(`Tracked ${eventName}`);
               setStatus(`tracked ${eventName}`);
             }}
             style={styles.flex1}
@@ -116,12 +119,18 @@ export default function HomeScreen() {
             variant="secondary"
             onPress={() => {
               void flush().promise.then(() => {
+                setAnalyticsResult("Flush complete");
                 setStatus("flush complete");
               });
             }}
             style={styles.flex1}
           />
         </View>
+        <StatusRow
+          testID="analytics-result"
+          label="Result"
+          value={analyticsResult}
+        />
       </Card>
 
       <Card
@@ -142,6 +151,7 @@ export default function HomeScreen() {
             title="Fetch"
             onPress={() => {
               setStatus(`fetching ${flagKey}`);
+              setExperimentResult(`Fetching ${flagKey}`);
               void experimentClient
                 .fetchOrThrow(
                   { user_id: userId },
@@ -155,8 +165,14 @@ export default function HomeScreen() {
                       ? `fetched ${flagKey}: ${String(resolved.value)}`
                       : `fetched ${flagKey}: no variant`,
                   );
+                  setExperimentResult(
+                    resolved?.value
+                      ? `Fetched ${flagKey}: ${String(resolved.value)}`
+                      : `Fetched ${flagKey}: no variant`,
+                  );
                 })
                 .catch((error: unknown) => {
+                  setExperimentResult(`Fetch failed: ${String(error)}`);
                   setStatus(`fetch failed: ${String(error)}`);
                 });
             }}
@@ -169,10 +185,20 @@ export default function HomeScreen() {
             onPress={() => {
               const resolved = experimentClient.variant(flagKey);
               setFlagValue(JSON.stringify(resolved ?? {}, null, 2));
+              setExperimentResult(
+                resolved?.value
+                  ? `Read ${flagKey}: ${String(resolved.value)}`
+                  : `Read ${flagKey}: no variant`,
+              );
             }}
             style={styles.flex1}
           />
         </View>
+        <StatusRow
+          testID="experiment-result"
+          label="Result"
+          value={experimentResult}
+        />
         <Section title="Resolved variant">
           <CodeBlock testID="variant-value">{flagValue}</CodeBlock>
         </Section>

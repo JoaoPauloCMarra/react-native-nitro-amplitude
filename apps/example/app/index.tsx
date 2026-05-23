@@ -1,12 +1,20 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { View } from "react-native";
 import {
+  createNetworkTimingBuffer,
+  createTimedAnalyticsTransport,
+  createTimedHttpClient,
   Experiment,
+  Identify,
   init,
   prefetchNativeContext,
   track,
   getDeviceId,
-  flush,
+  flushWithResult,
+  getDiagnostics,
+  identify,
+  nitroHttpClient,
+  nitroTransport,
 } from "react-native-nitro-amplitude";
 import {
   Button,
@@ -20,6 +28,7 @@ import {
   styles,
 } from "../components/shared";
 import { SmokeTestRunner } from "../components/smoke-test";
+import type { AmplitudeNetworkTiming } from "react-native-nitro-amplitude";
 
 const ANALYTICS_API_KEY = process.env.EXPO_PUBLIC_AMPLITUDE_API_KEY ?? "";
 const EXPERIMENT_API_KEY =
@@ -27,6 +36,88 @@ const EXPERIMENT_API_KEY =
   process.env.EXPO_PUBLIC_AMPLITUDE_EXPERIMENT_KEY.length > 0
     ? process.env.EXPO_PUBLIC_AMPLITUDE_EXPERIMENT_KEY
     : ANALYTICS_API_KEY;
+
+type TimingSample = {
+  durationMillis: number;
+  status?: number | string;
+  error?: string;
+};
+
+type TimingKind = AmplitudeNetworkTiming["kind"];
+
+type TimingTracker = {
+  clearLatest: (kind: TimingKind) => void;
+  getHistory: () => string;
+  getLatest: (kind: TimingKind) => TimingSample | undefined;
+  record: (timing: AmplitudeNetworkTiming) => void;
+};
+
+function nowMillis(): number {
+  return typeof performance !== "undefined" && performance.now
+    ? performance.now()
+    : Date.now();
+}
+
+function elapsedSince(startedAt: number): number {
+  return Math.round((nowMillis() - startedAt) * 10) / 10;
+}
+
+function formatMillis(value?: number): string {
+  return typeof value === "number" ? `${value.toFixed(1)}ms` : "n/a";
+}
+
+function codeMillis(totalMillis: number, httpMillis?: number): number {
+  return Math.max(0, totalMillis - (httpMillis ?? 0));
+}
+
+function formatTiming(totalMillis: number, http?: TimingSample): string {
+  const httpMillis = http?.durationMillis;
+  const suffix = http?.error
+    ? ` error=${http.error}`
+    : http?.status
+      ? ` status=${String(http.status)}`
+      : "";
+  return `http=${formatMillis(httpMillis)} code=${formatMillis(
+    codeMillis(totalMillis, httpMillis),
+  )} total=${formatMillis(totalMillis)}${suffix}`;
+}
+
+function formatTimingHistory(timings: AmplitudeNetworkTiming[]): string {
+  if (timings.length === 0) {
+    return "No requests measured yet";
+  }
+  return timings
+    .slice()
+    .reverse()
+    .map((timing, index) => {
+      const suffix = timing.error
+        ? ` error=${timing.error}`
+        : timing.status
+          ? ` status=${String(timing.status)}`
+          : "";
+      return `${index + 1}. ${timing.kind} ${timing.method} ${formatMillis(
+        timing.durationMillis,
+      )}${suffix}`;
+    })
+    .join("\n");
+}
+
+function createTimingTracker(limit: number): TimingTracker {
+  const buffer = createNetworkTimingBuffer(limit);
+  const latest: Partial<Record<TimingKind, TimingSample>> = {};
+
+  return {
+    clearLatest: (kind) => {
+      latest[kind] = undefined;
+    },
+    getHistory: () => formatTimingHistory(buffer.getTimings()),
+    getLatest: (kind) => latest[kind],
+    record: (timing) => {
+      buffer.record(timing);
+      latest[timing.kind] = timing;
+    },
+  };
+}
 
 export default function HomeScreen() {
   const [status, setStatus] = useState("idle");
@@ -36,18 +127,29 @@ export default function HomeScreen() {
   const [deviceId, setDeviceId] = useState("(unknown)");
   const [analyticsResult, setAnalyticsResult] = useState("Not run");
   const [experimentResult, setExperimentResult] = useState("Not run");
-  const [userId] = useState("demo-user");
-
-  const experimentClient = useMemo(
-    () =>
-      Experiment.initializeWithAmplitudeAnalytics(EXPERIMENT_API_KEY, {
-        instanceName: "example",
-        automaticExposureTracking: true,
-        fetchOnStart: false,
-        pollOnStart: false,
-      }),
-    [],
+  const [timingHistory, setTimingHistory] = useState(
+    "No requests measured yet",
   );
+  const [userId] = useState("demo-user");
+  const [timingTracker] = useState(() => createTimingTracker(8));
+
+  const [experimentClient] = useState(() =>
+    Experiment.initializeWithAmplitudeAnalytics(EXPERIMENT_API_KEY, {
+      instanceName: "example",
+      automaticExposureTracking: true,
+      fetchOnStart: false,
+      pollOnStart: false,
+      httpClient: createTimedHttpClient(nitroHttpClient, timingTracker.record),
+    }),
+  );
+
+  const [analyticsTransport] = useState(() =>
+    createTimedAnalyticsTransport(nitroTransport, timingTracker.record),
+  );
+
+  const refreshTimingHistory = () => {
+    setTimingHistory(timingTracker.getHistory());
+  };
 
   useEffect(() => {
     prefetchNativeContext();
@@ -63,6 +165,7 @@ export default function HomeScreen() {
       await init(ANALYTICS_API_KEY, userId, {
         instanceName: "example",
         trackingSessionEvents: true,
+        transportProvider: analyticsTransport,
       }).promise;
       setDeviceId(String(getDeviceId() ?? "(none)"));
       setStatus("analytics ready");
@@ -75,7 +178,7 @@ export default function HomeScreen() {
     return () => {
       experimentClient.stop();
     };
-  }, [experimentClient, userId]);
+  }, [analyticsTransport, experimentClient, userId]);
 
   return (
     <Page
@@ -107,21 +210,84 @@ export default function HomeScreen() {
             testID="track-event"
             title="Track Event"
             onPress={() => {
+              const startedAt = nowMillis();
               track(eventName, { source: "example", platform: "native" });
-              setAnalyticsResult(`Tracked ${eventName}`);
+              const codeDuration = elapsedSince(startedAt);
+              setAnalyticsResult(
+                `Tracked ${eventName} code=${formatMillis(codeDuration)}`,
+              );
               setStatus(`tracked ${eventName}`);
             }}
             style={styles.flex1}
           />
           <Button
+            testID="identify-user"
+            title="Identify"
+            variant="secondary"
+            onPress={() => {
+              const startedAt = nowMillis();
+              const update = new Identify();
+              update.set("example_screen", "validation");
+              identify(update);
+              const codeDuration = elapsedSince(startedAt);
+              setAnalyticsResult(
+                `Identified ${userId} code=${formatMillis(codeDuration)}`,
+              );
+              setStatus(`identified ${userId}`);
+            }}
+            style={styles.flex1}
+          />
+        </View>
+        <View style={styles.row}>
+          <Button
             testID="flush-events"
             title="Flush"
             variant="secondary"
             onPress={() => {
-              void flush().promise.then(() => {
-                setAnalyticsResult("Flush complete");
-                setStatus("flush complete");
-              });
+              timingTracker.clearLatest("analytics");
+              const startedAt = nowMillis();
+              void flushWithResult()
+                .then((result) => {
+                  const totalDuration = elapsedSince(startedAt);
+                  setAnalyticsResult(
+                    `Flush ${
+                      result.ok ? "ok" : "failed"
+                    } sent=${result.sent} failed=${result.failed} ${formatTiming(
+                      totalDuration,
+                      timingTracker.getLatest("analytics"),
+                    )}`,
+                  );
+                  setStatus("flush complete");
+                  refreshTimingHistory();
+                })
+                .catch((error: unknown) => {
+                  const totalDuration = elapsedSince(startedAt);
+                  setAnalyticsResult(
+                    `Flush failed ${formatTiming(
+                      totalDuration,
+                      timingTracker.getLatest("analytics"),
+                    )}: ${String(error)}`,
+                  );
+                  setStatus(`flush failed: ${String(error)}`);
+                  refreshTimingHistory();
+                });
+            }}
+            style={styles.flex1}
+          />
+          <Button
+            testID="read-diagnostics"
+            title="Diagnostics"
+            variant="secondary"
+            onPress={() => {
+              const startedAt = nowMillis();
+              const diagnostics = getDiagnostics();
+              const codeDuration = elapsedSince(startedAt);
+              setAnalyticsResult(
+                `queue=${diagnostics.queueSize} initialized=${String(
+                  diagnostics.initialized,
+                )} code=${formatMillis(codeDuration)}`,
+              );
+              setStatus("diagnostics read");
             }}
             style={styles.flex1}
           />
@@ -150,30 +316,49 @@ export default function HomeScreen() {
             testID="fetch-variants"
             title="Fetch"
             onPress={() => {
+              timingTracker.clearLatest("experiment");
+              const startedAt = nowMillis();
               setStatus(`fetching ${flagKey}`);
               setExperimentResult(`Fetching ${flagKey}`);
               void experimentClient
-                .fetchOrThrow(
+                .fetchWithMetadata(
                   { user_id: userId },
                   { flagKeys: flagKey ? [flagKey] : undefined },
                 )
-                .then(() => {
-                  const resolved = experimentClient.variant(flagKey);
+                .then((metadata) => {
+                  const fetchDuration = elapsedSince(startedAt);
+                  const variantStartedAt = nowMillis();
+                  const resolved =
+                    experimentClient.variantWithMetadata(flagKey);
+                  const variantDuration = elapsedSince(variantStartedAt);
                   setFlagValue(JSON.stringify(resolved ?? {}, null, 2));
                   setStatus(
-                    resolved?.value
-                      ? `fetched ${flagKey}: ${String(resolved.value)}`
+                    resolved.variant?.value
+                      ? `fetched ${flagKey}: ${String(resolved.variant.value)}`
                       : `fetched ${flagKey}: no variant`,
                   );
                   setExperimentResult(
-                    resolved?.value
-                      ? `Fetched ${flagKey}: ${String(resolved.value)}`
-                      : `Fetched ${flagKey}: no variant`,
+                    `Fetched ${
+                      metadata.flagKeys.length
+                    } key(s) source=${metadata.source} sdk=${formatMillis(
+                      metadata.durationMillis,
+                    )} ${formatTiming(
+                      fetchDuration,
+                      timingTracker.getLatest("experiment"),
+                    )} variant=${formatMillis(variantDuration)}`,
                   );
+                  refreshTimingHistory();
                 })
                 .catch((error: unknown) => {
-                  setExperimentResult(`Fetch failed: ${String(error)}`);
+                  const fetchDuration = elapsedSince(startedAt);
+                  setExperimentResult(
+                    `Fetch failed ${formatTiming(
+                      fetchDuration,
+                      timingTracker.getLatest("experiment"),
+                    )}: ${String(error)}`,
+                  );
                   setStatus(`fetch failed: ${String(error)}`);
+                  refreshTimingHistory();
                 });
             }}
             style={styles.flex1}
@@ -183,13 +368,36 @@ export default function HomeScreen() {
             title="Read Variant"
             variant="secondary"
             onPress={() => {
-              const resolved = experimentClient.variant(flagKey);
+              const startedAt = nowMillis();
+              const resolved = experimentClient.variantWithMetadata(flagKey);
+              const codeDuration = elapsedSince(startedAt);
               setFlagValue(JSON.stringify(resolved ?? {}, null, 2));
               setExperimentResult(
-                resolved?.value
-                  ? `Read ${flagKey}: ${String(resolved.value)}`
-                  : `Read ${flagKey}: no variant`,
+                resolved.variant?.value
+                  ? `Read ${flagKey}: ${String(
+                      resolved.variant.value,
+                    )} code=${formatMillis(codeDuration)}`
+                  : `Read ${flagKey}: no variant code=${formatMillis(
+                      codeDuration,
+                    )}`,
               );
+            }}
+            style={styles.flex1}
+          />
+          <Button
+            testID="send-exposure"
+            title="Expose"
+            variant="secondary"
+            onPress={() => {
+              const startedAt = nowMillis();
+              experimentClient.exposure(flagKey);
+              const codeDuration = elapsedSince(startedAt);
+              setExperimentResult(
+                `Exposure queued for ${flagKey} code=${formatMillis(
+                  codeDuration,
+                )}`,
+              );
+              setStatus(`exposed ${flagKey}`);
             }}
             style={styles.flex1}
           />
@@ -201,6 +409,9 @@ export default function HomeScreen() {
         />
         <Section title="Resolved variant">
           <CodeBlock testID="variant-value">{flagValue}</CodeBlock>
+        </Section>
+        <Section title="Request timing history">
+          <CodeBlock testID="timing-history">{timingHistory}</CodeBlock>
         </Section>
       </Card>
     </Page>

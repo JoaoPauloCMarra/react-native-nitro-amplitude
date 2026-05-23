@@ -1,6 +1,7 @@
 import { BaseTransport } from "@amplitude/analytics-core";
 import type { Payload, Response, Transport } from "@amplitude/analytics-core";
 import { nitroHttpClient } from "../native/http";
+import { assertNetworkEnabled } from "../network";
 
 export class NitroTransport extends BaseTransport implements Transport {
   private readonly customHeaders: Record<string, string>;
@@ -11,6 +12,7 @@ export class NitroTransport extends BaseTransport implements Transport {
   }
 
   async send(serverUrl: string, payload: Payload): Promise<Response | null> {
+    assertNetworkEnabled();
     const response = await nitroHttpClient.request(
       serverUrl,
       "POST",

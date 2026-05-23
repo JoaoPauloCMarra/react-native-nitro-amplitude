@@ -1,5 +1,6 @@
 import { FetchHttpClient } from "../experiment/transport/http";
 import type { HttpClient, SimpleResponse } from "../experiment/types/transport";
+import { assertNetworkEnabled } from "../network";
 
 export class NitroHttpClient implements HttpClient {
   request(
@@ -9,6 +10,7 @@ export class NitroHttpClient implements HttpClient {
     data: string | null,
     timeoutMillis = 10000,
   ): Promise<SimpleResponse> {
+    assertNetworkEnabled();
     return FetchHttpClient.request(
       requestUrl,
       method,

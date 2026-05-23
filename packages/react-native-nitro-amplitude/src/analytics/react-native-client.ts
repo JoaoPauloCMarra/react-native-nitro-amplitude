@@ -27,6 +27,7 @@ import {
   SpecialEventType,
   AnalyticsClient,
 } from "@amplitude/analytics-core";
+import { healthCheck } from "../diagnostics";
 import { CampaignTracker } from "./campaign/campaign-tracker";
 import { Context } from "./plugins/context";
 import { useReactNativeConfig, createCookieStorage } from "./config";
@@ -41,14 +42,60 @@ type ScheduledDestination = {
   flushId?: ReturnType<typeof setTimeout> | null;
   queue?: unknown[];
   resetSchedule?: () => void;
+  fulfillRequest?: (list: unknown[], code: number, message: string) => unknown;
+};
+
+type FlushOutcome = {
+  code: number;
+  count: number;
+  message: string;
 };
 
 export type AmplitudeReactNativeClient = ReactNativeClient & {
   shutdown: () => void;
+  flushWithResult: () => Promise<AmplitudeFlushResult>;
+  getDiagnostics: () => AmplitudeAnalyticsDiagnostics;
+  healthCheck: () => Promise<AmplitudeHealthCheckResult>;
+};
+
+export type AmplitudeFlushResult = {
+  ok: boolean;
+  sent: number;
+  failed: number;
+  dropped: number;
+  retried: number;
+  reason?: string;
+  result?: Result;
+  finishedAt: number;
+};
+
+export type AmplitudeAnalyticsDiagnostics = {
+  initialized: boolean;
+  instanceName?: string;
+  userId?: string;
+  deviceId?: string;
+  sessionId?: number;
+  queueSize: number;
+  lastFlushTime?: number;
+  lastFlushDurationMillis?: number;
+  lastFlushError?: string;
+  activeInstanceNames: string[];
+};
+
+export type AmplitudeHealthCheckResult = {
+  ok: boolean;
+  analyticsInitialized: boolean;
+  nativeAvailable: boolean;
+  storageWritable: boolean;
+  errors: string[];
 };
 
 let nextConnectorOwnerId = 0;
 const activeConnectorOwnerIds = new Map<string, number>();
+
+export function getActiveAnalyticsInstanceNames(): string[] {
+  return Array.from(activeConnectorOwnerIds.keys()).sort();
+}
 
 export class AmplitudeReactNative
   extends AmplitudeCore
@@ -58,6 +105,9 @@ export class AmplitudeReactNative
   private appStateChangeHandler: NativeEventSubscription | undefined;
   private initPromise: Promise<void> | undefined;
   private readonly connectorOwnerId = ++nextConnectorOwnerId;
+  private lastFlushTime: number | undefined;
+  private lastFlushDurationMillis: number | undefined;
+  private lastFlushError: string | undefined;
   explicitSessionId: number | undefined;
 
   // @ts-ignore
@@ -279,6 +329,95 @@ export class AmplitudeReactNative
     return this.config?.sessionId;
   }
 
+  async flushWithResult(): Promise<AmplitudeFlushResult> {
+    const queueSize = this.getQueueSize();
+    const collector = this.collectFlushOutcomes();
+    const startedAt = Date.now();
+    try {
+      await this.flush().promise;
+      const outcomes = collector.finish();
+      this.lastFlushTime = Date.now();
+      this.lastFlushDurationMillis = this.lastFlushTime - startedAt;
+      const remainingQueueSize = this.getQueueSize();
+      const failedOutcomes = outcomes.filter(
+        (outcome) => !this.isSuccessStatusCode(outcome.code),
+      );
+      const dropped = failedOutcomes.reduce(
+        (total, outcome) => total + outcome.count,
+        0,
+      );
+      if (remainingQueueSize > 0) {
+        this.lastFlushError = `Flush completed with ${remainingQueueSize} queued event(s) remaining`;
+        return {
+          ok: false,
+          sent: this.countSuccessfulOutcomes(outcomes),
+          failed: remainingQueueSize,
+          dropped,
+          retried: remainingQueueSize,
+          reason: this.lastFlushError,
+          finishedAt: this.lastFlushTime,
+        };
+      }
+      if (dropped > 0) {
+        this.lastFlushError =
+          failedOutcomes[0]?.message ??
+          `Flush dropped ${dropped} event(s) without retry`;
+        return {
+          ok: false,
+          sent: this.countSuccessfulOutcomes(outcomes),
+          failed: dropped,
+          dropped,
+          retried: 0,
+          reason: this.lastFlushError,
+          finishedAt: this.lastFlushTime,
+        };
+      }
+      this.lastFlushError = undefined;
+      return {
+        ok: true,
+        sent: this.countSuccessfulOutcomes(outcomes) || queueSize,
+        failed: 0,
+        dropped: 0,
+        retried: 0,
+        finishedAt: this.lastFlushTime,
+      };
+    } catch (error) {
+      collector.finish();
+      this.lastFlushTime = Date.now();
+      this.lastFlushDurationMillis = this.lastFlushTime - startedAt;
+      this.lastFlushError =
+        error instanceof Error ? error.message : String(error);
+      return {
+        ok: false,
+        sent: 0,
+        failed: queueSize,
+        dropped: 0,
+        retried: 0,
+        reason: this.lastFlushError,
+        finishedAt: this.lastFlushTime,
+      };
+    }
+  }
+
+  getDiagnostics(): AmplitudeAnalyticsDiagnostics {
+    return {
+      initialized: Boolean(this.config && this.isReady),
+      instanceName: this.config?.instanceName,
+      userId: this.getUserId(),
+      deviceId: this.getDeviceId(),
+      sessionId: this.getSessionId(),
+      queueSize: this.getQueueSize(),
+      lastFlushTime: this.lastFlushTime,
+      lastFlushDurationMillis: this.lastFlushDurationMillis,
+      lastFlushError: this.lastFlushError,
+      activeInstanceNames: getActiveAnalyticsInstanceNames(),
+    };
+  }
+
+  async healthCheck(): Promise<AmplitudeHealthCheckResult> {
+    return healthCheck(this);
+  }
+
   getIdentity() {
     return {
       userId: this.getUserId(),
@@ -307,6 +446,66 @@ export class AmplitudeReactNative
       return;
     }
     this.config.lastEventTime = this.currentTimeMillis();
+  }
+
+  private getQueueSize(): number {
+    let queueSize =
+      this.q.length + this.dispatchQ.length + this.timeline.queue.length;
+    this.timeline.plugins.forEach((plugin) => {
+      if (plugin.type !== "destination") {
+        return;
+      }
+      const destination = plugin as ScheduledDestination;
+      queueSize += destination.queue?.length ?? 0;
+    });
+    return queueSize;
+  }
+
+  private collectFlushOutcomes(): { finish: () => FlushOutcome[] } {
+    const outcomes: FlushOutcome[] = [];
+    const restorers: (() => void)[] = [];
+
+    this.timeline.plugins.forEach((plugin) => {
+      if (plugin.type !== "destination") {
+        return;
+      }
+
+      const destination = plugin as ScheduledDestination;
+      if (!destination.fulfillRequest) {
+        return;
+      }
+
+      const original = destination.fulfillRequest;
+      destination.fulfillRequest = (list, code, message) => {
+        outcomes.push({ code, count: list.length, message });
+        return original.call(destination, list, code, message);
+      };
+      restorers.push(() => {
+        destination.fulfillRequest = original;
+      });
+    });
+
+    return {
+      finish: () => {
+        while (restorers.length > 0) {
+          restorers.pop()?.();
+        }
+        return outcomes;
+      },
+    };
+  }
+
+  private countSuccessfulOutcomes(outcomes: FlushOutcome[]): number {
+    return outcomes.reduce((total, outcome) => {
+      if (!this.isSuccessStatusCode(outcome.code)) {
+        return total;
+      }
+      return total + outcome.count;
+    }, 0);
+  }
+
+  private isSuccessStatusCode(code: number): boolean {
+    return code >= 200 && code < 300;
   }
 
   private setSessionIdInternal(sessionId: number, eventTime: number) {
@@ -519,6 +718,12 @@ export const createInstance = (): AmplitudeReactNativeClient => {
       getClientLogConfig(client),
       getClientStates(client, ["config.apiKey", "timeline.queue.length"]),
     ),
+    flushWithResult: debugWrapper(
+      client.flushWithResult.bind(client),
+      "flushWithResult",
+      getClientLogConfig(client),
+      getClientStates(client, ["config.apiKey", "timeline.queue.length"]),
+    ),
     getUserId: debugWrapper(
       client.getUserId.bind(client),
       "getUserId",
@@ -576,6 +781,18 @@ export const createInstance = (): AmplitudeReactNativeClient => {
     shutdown: debugWrapper(
       client.shutdown.bind(client),
       "shutdown",
+      getClientLogConfig(client),
+      getClientStates(client, ["config", "timeline.plugins"]),
+    ),
+    getDiagnostics: debugWrapper(
+      client.getDiagnostics.bind(client),
+      "getDiagnostics",
+      getClientLogConfig(client),
+      getClientStates(client, ["config", "timeline.plugins"]),
+    ),
+    healthCheck: debugWrapper(
+      client.healthCheck.bind(client),
+      "healthCheck",
       getClientLogConfig(client),
       getClientStates(client, ["config", "timeline.plugins"]),
     ),

@@ -1,6 +1,4 @@
-import { nitroHttpClient } from "../../native/http";
-import { NitroMemoryStorage } from "../../native/storage";
-
+import { isNative } from "../util/platform";
 import { ExposureTrackingProvider } from "./exposure";
 import { Logger, LogLevel } from "./logger";
 import { Source } from "./source";
@@ -8,6 +6,28 @@ import { Storage } from "./storage";
 import { HttpClient } from "./transport";
 import { ExperimentUserProvider } from "./user";
 import { Variant, Variants } from "./variant";
+
+function createDefaultHttpClient(): HttpClient {
+  if (isNative()) {
+    const { nitroHttpClient } =
+      require("../../native/http") as typeof import("../../native/http");
+    return nitroHttpClient;
+  }
+  const { nitroHttpClient } =
+    require("../../native/http.web") as typeof import("../../native/http");
+  return nitroHttpClient;
+}
+
+function createDefaultStorage(): Storage {
+  if (isNative()) {
+    const { NitroMemoryStorage } =
+      require("../../native/storage") as typeof import("../../native/storage");
+    return new NitroMemoryStorage("experiment");
+  }
+  const { NitroMemoryStorage } =
+    require("../../native/storage.web") as typeof import("../../native/storage");
+  return new NitroMemoryStorage("experiment");
+}
 
 /**
  * @category Configuration
@@ -205,6 +225,10 @@ export const Defaults: ExperimentConfig = {
   automaticFetchOnAmplitudeIdentityChange: false,
   userProvider: null,
   exposureTrackingProvider: null,
-  httpClient: nitroHttpClient,
-  storage: new NitroMemoryStorage("experiment"),
+  get httpClient() {
+    return createDefaultHttpClient();
+  },
+  get storage() {
+    return createDefaultStorage();
+  },
 };

@@ -25,6 +25,9 @@ export const {
   shutdown,
   track,
   extendSession,
+  flushWithResult,
+  getDiagnostics,
+  healthCheck,
 } = client;
 
 export { Revenue, Identify } from "@amplitude/analytics-core";

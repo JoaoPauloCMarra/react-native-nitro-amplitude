@@ -60,6 +60,8 @@ export class Context implements BeforePlugin {
   config: ReactNativeConfig;
   uaResult: UAParser.IResult;
   library = `amplitude-nitro-ts/${VERSION}`;
+  private nativeContext: NativeContext | undefined;
+  private nativeContextLoaded = false;
 
   constructor() {
     let agent: string | undefined;
@@ -77,8 +79,15 @@ export class Context implements BeforePlugin {
   }
 
   private getNativeContext(): NativeContext | undefined {
+    if (this.nativeContextLoaded) {
+      return this.nativeContext;
+    }
+    this.nativeContextLoaded = true;
     try {
-      return getNativeApplicationContext(this.config.trackingOptions);
+      this.nativeContext = getNativeApplicationContext(
+        this.config.trackingOptions,
+      );
+      return this.nativeContext;
     } catch (error) {
       this.config.loggerProvider?.error(
         `Failed to load native application context: ${String(error)}`,

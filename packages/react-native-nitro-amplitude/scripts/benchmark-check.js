@@ -62,7 +62,16 @@ try {
   Module._load = originalLoad;
 }
 
-const { VERSION, prefetchNativeContext, Experiment } = amplitudeModule;
+const {
+  VERSION,
+  prefetchNativeContext,
+  Experiment,
+  createNetworkTimingBuffer,
+  createTimedAnalyticsTransport,
+  createTimedHttpClient,
+  dryRunHttpClient,
+  dryRunTransport,
+} = amplitudeModule;
 
 if (typeof VERSION !== "string" || VERSION.length === 0) {
   console.error("Benchmark failed: VERSION export missing.");
@@ -79,6 +88,58 @@ if (!Experiment || typeof Experiment.initialize !== "function") {
   process.exit(1);
 }
 
+if (
+  typeof createNetworkTimingBuffer !== "function" ||
+  typeof createTimedAnalyticsTransport !== "function" ||
+  typeof createTimedHttpClient !== "function"
+) {
+  console.error("Benchmark failed: timing debug exports missing.");
+  process.exit(1);
+}
+
+async function runTimingBenchmark() {
+  const buffer = createNetworkTimingBuffer(25);
+  const analyticsTransport = createTimedAnalyticsTransport(
+    dryRunTransport,
+    buffer.record,
+  );
+  const experimentHttpClient = createTimedHttpClient(
+    dryRunHttpClient,
+    buffer.record,
+  );
+
+  const startedAt = performance.now();
+  for (let index = 0; index < 10; index += 1) {
+    await analyticsTransport.send("https://example.com/events", {
+      events: [{ event_type: "benchmark", event_properties: { index } }],
+    });
+    await experimentHttpClient.request(
+      `https://example.com/variants?index=${index}`,
+      "GET",
+      {},
+      null,
+      1000,
+    );
+  }
+
+  const elapsed = performance.now() - startedAt;
+  const timings = buffer.getTimings();
+  if (timings.length !== 20) {
+    throw new Error(`expected 20 timing samples, got ${timings.length}`);
+  }
+  if (elapsed > 1000) {
+    throw new Error(`dry-run benchmark exceeded 1000ms: ${elapsed.toFixed(1)}ms`);
+  }
+}
+
 prefetchNativeContext();
 
-console.log(`✅ Amplitude benchmark passed (version ${VERSION}).`);
+runTimingBenchmark()
+  .then(() => {
+    console.log(`✅ Amplitude benchmark passed (version ${VERSION}).`);
+  })
+  .catch((error) => {
+    console.error("Benchmark failed.");
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exit(1);
+  });

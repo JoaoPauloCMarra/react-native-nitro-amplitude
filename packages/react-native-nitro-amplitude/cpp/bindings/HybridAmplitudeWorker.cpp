@@ -16,6 +16,9 @@
 namespace margelo::nitro::NitroAmplitude {
 
 namespace {
+constexpr int kDefaultTimeoutMillis = 10000;
+constexpr int kMaxTimeoutMillis = 300000;
+
 std::shared_ptr<::NitroAmplitude::NativeAmplitudeAdapter> createPlatformAdapter() {
 #ifndef NITRO_AMPLITUDE_DISABLE_PLATFORM_ADAPTER
 #if __APPLE__
@@ -60,8 +63,9 @@ void HybridAmplitudeWorker::enqueue(
     throw std::runtime_error("NitroAmplitude: Invalid HTTP request");
   }
   if (std::isnan(timeoutMillis) || std::isinf(timeoutMillis) || timeoutMillis <= 0.0) {
-    timeoutMillis = 10000.0;
+    timeoutMillis = kDefaultTimeoutMillis;
   }
+  timeoutMillis = std::min(std::ceil(timeoutMillis), static_cast<double>(kMaxTimeoutMillis));
 
   WorkerRequest request{
       requestId,

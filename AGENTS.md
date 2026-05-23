@@ -11,11 +11,11 @@ Nitro-powered Amplitude Analytics + Experiment SDK for React Native (Expo 56 / R
 
 Three C++ HybridObjects (see `nitro.json`):
 
-| Key | C++ class | Role |
-|-----|-----------|------|
-| `AmplitudeContext` | `HybridAmplitudeContext` | Sync device context + legacy migration hooks |
+| Key                | C++ class                | Role                                           |
+| ------------------ | ------------------------ | ---------------------------------------------- |
+| `AmplitudeContext` | `HybridAmplitudeContext` | Sync device context + legacy migration hooks   |
 | `AmplitudeStorage` | `HybridAmplitudeStorage` | Sync memory/disk KV for analytics + experiment |
-| `AmplitudeWorker` | `HybridAmplitudeWorker` | Background HTTP queue |
+| `AmplitudeWorker`  | `HybridAmplitudeWorker`  | Background HTTP queue                          |
 
 Never hand-edit `nitrogen/generated/**`; run `bun run codegen` after spec changes.
 
@@ -61,4 +61,4 @@ bun run example:ios
 ## Known gaps
 
 - Legacy Amplitude SDK SQLite migration returns empty stubs on native (TODO).
-- Web entry explicitly unsupported (`src/index.web.ts`).
+- Web uses browser fetch and storage fallbacks without native Nitro bindings.

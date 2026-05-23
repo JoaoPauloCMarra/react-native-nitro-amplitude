@@ -30,7 +30,12 @@ import {
 } from "./storage/cache";
 import { MemoryStorage } from "./storage/local-storage";
 import { FetchHttpClient, WrapperClient } from "./transport/http";
-import { Client, FetchOptions } from "./types/client";
+import {
+  Client,
+  ExperimentFetchResult,
+  ExperimentVariantResult,
+  FetchOptions,
+} from "./types/client";
 import { ExperimentConfig, Defaults } from "./types/config";
 import { Exposure } from "./types/exposure";
 import { LogLevel } from "./types/logger";
@@ -119,6 +124,9 @@ export class ExperimentClient implements Client {
   private storedFetchSequenceNumber = 0;
   private readonly fetchVariantsOptions: SingleValueStoreCache<GetVariantsOptions>;
   private readonly stopCallbacks = new Set<() => void>();
+  private readonly inFlightFetches = new Map<string, Promise<Variants>>();
+  private lastFetchTime: number | undefined;
+  private lastFetchFailure: string | undefined;
 
   /**
    * Creates a new ExperimentClient instance.
@@ -341,6 +349,37 @@ export class ExperimentClient implements Client {
     return this;
   }
 
+  public async fetchWithMetadata(
+    user: ExperimentUser = this.user,
+    options?: FetchOptions,
+  ): Promise<ExperimentFetchResult> {
+    const startedAt = Date.now();
+    const fetchUser = user ?? this.user;
+    this.setUser(fetchUser);
+    try {
+      const variants = await this.fetchWithRetries(fetchUser, options);
+      const flagKeys = Object.keys(variants);
+      return {
+        fetched: true,
+        flagKeys,
+        cacheHit: false,
+        durationMillis: Date.now() - startedAt,
+        source: "network",
+      };
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      this.lastFetchFailure = reason;
+      return {
+        fetched: false,
+        flagKeys: options?.flagKeys ?? Object.keys(this.variants.getAll()),
+        cacheHit: Object.keys(this.variants.getAll()).length > 0,
+        durationMillis: Date.now() - startedAt,
+        source: "cache",
+        failureReason: reason,
+      };
+    }
+  }
+
   public async fetchOrThrow(
     user: ExperimentUser = this.user,
     options?: FetchOptions,
@@ -378,6 +417,45 @@ export class ExperimentClient implements Client {
       `[Experiment] variant for ${key} is ${sourceVariant.variant?.value}`,
     );
     return sourceVariant.variant || {};
+  }
+
+  public variantWithMetadata(
+    key: string,
+    fallback?: string | Variant,
+  ): ExperimentVariantResult {
+    if (!this.apiKey) {
+      return {
+        variant: { value: undefined },
+        fallback: true,
+        stale: false,
+        reason: "missing_flag",
+      };
+    }
+    const sourceVariant = this.variantAndSource(key, fallback);
+    if (this.config.automaticExposureTracking) {
+      this.exposureInternal(key, sourceVariant);
+    }
+    this.logger.debug(
+      `[Experiment] variant for ${key} is ${sourceVariant.variant?.value}`,
+    );
+    const variant = sourceVariant.variant || {};
+    const fallbackVariant = isFallback(sourceVariant.source);
+    const missingVariant = variant.value === undefined;
+    return {
+      variant,
+      source: sourceVariant.source,
+      fallback: fallbackVariant,
+      stale: false,
+      reason: missingVariant
+        ? this.lastFetchFailure
+          ? "fetch_failure"
+          : fallbackVariant
+            ? "fallback"
+            : "no_assignment"
+        : fallbackVariant
+          ? "fallback"
+          : undefined,
+    };
   }
 
   /**
@@ -429,6 +507,18 @@ export class ExperimentClient implements Client {
   public clear(): void {
     this.variants.clear();
     void this.variants.store().catch((e) => this.logger.warn(e));
+  }
+
+  public clearVariants(): void {
+    this.clear();
+  }
+
+  public hasCachedVariant(key: string): boolean {
+    return this.variants.get(key) !== undefined;
+  }
+
+  public getLastFetchTime(): number | undefined {
+    return this.lastFetchTime;
   }
 
   /**
@@ -788,12 +878,35 @@ export class ExperimentClient implements Client {
     user: ExperimentUser,
     options?: FetchOptions,
   ): Promise<Variants> {
-    return await this.fetchInternal(
+    const key = JSON.stringify({
+      user,
+      flagKeys: options?.flagKeys ?? null,
+    });
+    const inFlightFetch = this.inFlightFetches.get(key);
+    if (inFlightFetch) {
+      return await inFlightFetch;
+    }
+    const fetch = this.fetchInternal(
       user,
       this.config.fetchTimeoutMillis,
       this.config.retryFetchOnFailure,
       options,
-    );
+    )
+      .then((variants) => {
+        this.lastFetchTime = Date.now();
+        this.lastFetchFailure = undefined;
+        return variants;
+      })
+      .catch((error: unknown) => {
+        this.lastFetchFailure =
+          error instanceof Error ? error.message : String(error);
+        throw error;
+      })
+      .finally(() => {
+        this.inFlightFetches.delete(key);
+      });
+    this.inFlightFetches.set(key, fetch);
+    return await fetch;
   }
 
   private async doFetch(

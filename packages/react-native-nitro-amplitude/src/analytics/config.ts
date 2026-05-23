@@ -11,13 +11,33 @@ import {
   CookieStorage,
   getCookieName,
   getQueryParams,
-  FetchTransport,
 } from "@amplitude/analytics-core";
+import type { Transport } from "@amplitude/analytics-core";
 
 import { LocalStorage } from "./storage/local-storage";
 import RemnantDataMigration from "./migration/remnant-data-migration";
-import { NitroAnalyticsStorage } from "../native/storage";
-import { nitroTransport } from "./nitro-transport";
+import { isNative } from "./utils/platform";
+import { NetworkGuardedFetchTransport } from "./network-guarded-fetch-transport";
+
+function createDefaultStorage() {
+  if (isNative()) {
+    const { NitroAnalyticsStorage } =
+      require("../native/storage") as typeof import("../native/storage");
+    return new NitroAnalyticsStorage<Event[]>("analytics-events");
+  }
+  const { NitroAnalyticsStorage } =
+    require("../native/storage.web") as typeof import("../native/storage");
+  return new NitroAnalyticsStorage<Event[]>("analytics-events");
+}
+
+function getDefaultTransport(): Transport {
+  if (isNative()) {
+    const { nitroTransport } =
+      require("./nitro-transport") as typeof import("./nitro-transport");
+    return nitroTransport;
+  }
+  return new NetworkGuardedFetchTransport();
+}
 
 export const getDefaultConfig = () => {
   const cookieStorage = new MemoryStorage<UserSession>();
@@ -44,10 +64,10 @@ export const getDefaultConfig = () => {
     disableCookies: true,
     domain: "",
     sessionTimeout: 5 * 60 * 1000,
-    storageProvider: new NitroAnalyticsStorage<Event[]>("analytics-events"),
+    storageProvider: createDefaultStorage(),
     trackingSessionEvents: false,
     trackingOptions,
-    transportProvider: nitroTransport,
+    transportProvider: getDefaultTransport(),
   };
 };
 
@@ -79,9 +99,10 @@ export class ReactNativeConfig extends Config implements IReactNativeConfig {
       flushIntervalMillis: 1000,
       flushMaxRetries: 5,
       flushQueueSize: 30,
-      transportProvider: defaultConfig.transportProvider,
       ...options,
       apiKey,
+      transportProvider:
+        options?.transportProvider ?? defaultConfig.transportProvider,
     });
 
     // NOTE: Define `cookieStorage` first to persist user session
@@ -233,7 +254,8 @@ export const useReactNativeConfig = async (
   let lastEventId = previousCookies?.lastEventId;
 
   const storageProvider =
-    options?.storageProvider ?? (await createEventsStorage(options));
+    options?.storageProvider ??
+    (await createEventsStorage(options, defaultConfig));
 
   if (options?.migrateLegacyData !== false) {
     const legacySessionData = await new RemnantDataMigration(
@@ -263,7 +285,8 @@ export const useReactNativeConfig = async (
       ...defaultConfig.trackingOptions,
       ...options?.trackingOptions,
     },
-    transportProvider: options?.transportProvider ?? new FetchTransport(),
+    transportProvider:
+      options?.transportProvider ?? defaultConfig.transportProvider,
     userId,
   });
 
@@ -319,6 +342,7 @@ const createFlexibleStorage = async <T>(
 
 export const createEventsStorage = async (
   overrides?: ReactNativeOptions,
+  baseConfig = getDefaultConfig(),
 ): Promise<Storage<Event[]> | undefined> => {
   const hasStorageProviderProperty =
     overrides &&
@@ -331,6 +355,7 @@ export const createEventsStorage = async (
   if (!hasStorageProviderProperty || overrides.storageProvider) {
     for (const storage of [
       overrides?.storageProvider,
+      hasStorageProviderProperty ? undefined : baseConfig.storageProvider,
       new LocalStorage<Event[]>(),
     ]) {
       if (storage && (await storage.isEnabled())) {

@@ -12,3 +12,4 @@ export { LogLevel } from "./types/logger";
 export type { Logger } from "./types/logger";
 export { ConsoleLogger } from "./logger/consoleLogger";
 export { LocalStorage, MemoryStorage } from "./storage/local-storage";
+export * from "./typed-variants";

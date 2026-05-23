@@ -4,6 +4,59 @@ All notable changes to this project are documented in this file.
 
 The format follows Keep a Changelog and the project adheres to SemVer.
 
+## 0.5.0 - 2026-05-23
+
+### Added
+
+- Root exports for `NitroExperimentStorage`, durable analytics and experiment
+  storage presets, `createAmplitudeClient`, and `createPersistentAmplitudeConfig`.
+- First-class persistent session configuration through Nitro-backed Analytics
+  cookie storage plus Nitro-backed event and Experiment variant storage.
+- Diagnostics and health-check APIs for initialized state, identity, queue size,
+  active instance names, native module availability, storage writability, and
+  last native error.
+- Structured `AmplitudeErrorCode` values and `AmplitudeError` for stable
+  application-level failure handling.
+- Global network disable controls, dry-run Analytics transport, dry-run
+  Experiment HTTP client, and inspection helpers for captured dry-run requests.
+- Reusable request timing wrappers for Analytics transport and Experiment HTTP
+  clients, plus a bounded timing buffer for example apps and benchmarks.
+- Example app timing output that separates app/package code execution time from
+  HTTP request time for Analytics and Experiment validation flows.
+- Experiment fetch metadata, variant source metadata, per-flag cache inspection,
+  explicit variant cache clearing, fetch deduplication, and typed variant helper
+  functions.
+- Official typed test helpers for fake Analytics clients, fake Experiment
+  clients, and fake Experiment storage.
+- Stronger public TypeScript contracts for combined clients and reusable
+  network timing buffers.
+
+### Changed
+
+- Analytics native builds now use the Nitro transport default when no custom
+  transport provider is supplied.
+- Analytics context enrichment now caches native app context per client to avoid
+  repeated native crossings on every event.
+- Web root and compatibility entrypoints now use browser fetch and storage
+  fallbacks while preserving native-facing TypeScript compatibility.
+- README now documents default storage behavior, exposure tracking, import
+  paths, Expo config plugin behavior, native rebuild requirements, diagnostics,
+  privacy controls, benchmark-safe setup, troubleshooting, compatibility,
+  lifecycle recipes, and production verification.
+
+### Fixed
+
+- `createAmplitudeClient` now exposes a non-optional Experiment client in
+  TypeScript when an Experiment deployment key is configured.
+- Root `getDiagnostics()` now reports the combined analytics, native, and
+  network diagnostic state for both native and web entrypoints.
+- Web Experiment defaults no longer require native Nitro imports before browser
+  fallbacks are selected.
+- Native timeout normalization now rejects non-finite values before C++ integer
+  conversion.
+- Package docs sync and pack dry-runs restore README contents without leaving
+  transient backup artifacts.
+
 ## 0.2.0 - 2026-05-22
 
 ### Added

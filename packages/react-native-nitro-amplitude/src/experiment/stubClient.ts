@@ -1,4 +1,9 @@
-import { Client, FetchOptions } from "./types/client";
+import {
+  Client,
+  ExperimentFetchResult,
+  ExperimentVariantResult,
+  FetchOptions,
+} from "./types/client";
 import { Defaults } from "./types/config";
 import { ExperimentUser, ExperimentUserProvider } from "./types/user";
 import { Variant, Variants } from "./types/variant";
@@ -33,6 +38,20 @@ export class StubExperimentClient implements Client {
     return this;
   }
 
+  public async fetchWithMetadata(
+    _user?: ExperimentUser,
+    _options?: FetchOptions,
+  ): Promise<ExperimentFetchResult> {
+    return {
+      fetched: false,
+      flagKeys: [],
+      cacheHit: false,
+      durationMillis: 0,
+      source: "cache",
+      failureReason: "stub_client",
+    };
+  }
+
   public getUserProvider(): ExperimentUserProvider {
     return {
       async getUser(): Promise<ExperimentUser> {
@@ -51,11 +70,33 @@ export class StubExperimentClient implements Client {
     return Defaults.fallbackVariant ?? {};
   }
 
+  public variantWithMetadata(
+    _key: string,
+    _fallback?: string | Variant,
+  ): ExperimentVariantResult {
+    return {
+      variant: Defaults.fallbackVariant ?? {},
+      fallback: true,
+      stale: false,
+      reason: "fallback",
+    };
+  }
+
   public all(): Variants {
     return {};
   }
 
   public clear(): void {}
+
+  public clearVariants(): void {}
+
+  public hasCachedVariant(_key: string): boolean {
+    return false;
+  }
+
+  public getLastFetchTime(): number | undefined {
+    return undefined;
+  }
 
   public exposure(_key: string): void {}
 }

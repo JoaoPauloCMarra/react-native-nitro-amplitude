@@ -4,7 +4,7 @@
   "private": true,
   "main": "expo-router/entry",
   "scripts": {
-    "start": "env -u NO_COLOR expo start",
+    "start": "env -u NO_COLOR expo start -d",
     "ios": "env -u NO_COLOR expo run:ios",
     "android": "ANDROID_HOME=${ANDROID_HOME:-$HOME/Library/Android/sdk} ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT:-${ANDROID_HOME:-$HOME/Library/Android/sdk}} env -u NO_COLOR expo run:android",
     "doctor": "env -u NO_COLOR bunx expo-doctor",

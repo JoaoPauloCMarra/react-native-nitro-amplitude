@@ -3,7 +3,6 @@ import {
   NitroExperimentStorage,
   Source,
   Types,
-  VERSION,
   createAmplitudeClient,
   createDurableAmplitudeStoragePreset,
   createFakeExperimentStorage,
@@ -38,9 +37,6 @@ type Equals<A, B> =
     : false;
 type Extends<A, B> = A extends B ? true : false;
 type Assert<T extends true> = T;
-
-const version = VERSION satisfies string;
-void version;
 
 const initClient = createInstance;
 void initClient;

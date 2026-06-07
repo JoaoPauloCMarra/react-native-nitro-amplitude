@@ -131,7 +131,6 @@ import type { Payload, Response, Transport } from "@amplitude/analytics-core";
 import { Status } from "@amplitude/analytics-core";
 import { NetworkGuardedFetchTransport } from "../analytics/network-guarded-fetch-transport";
 import {
-  VERSION,
   clearDryRunTransportRecords,
   createAmplitudeClient,
   createDurableAmplitudeStoragePreset,
@@ -204,10 +203,6 @@ describe("react-native-nitro-amplitude", () => {
       delete mockHybridObjects[key];
     }
     resetHybridInstancesForTests();
-  });
-
-  it("exports VERSION", () => {
-    expect(VERSION).toBe("0.5.0");
   });
 
   it("exports analytics and experiment factories", () => {

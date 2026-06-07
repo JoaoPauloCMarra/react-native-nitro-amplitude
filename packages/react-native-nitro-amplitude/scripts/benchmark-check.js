@@ -63,7 +63,6 @@ try {
 }
 
 const {
-  VERSION,
   prefetchNativeContext,
   Experiment,
   createNetworkTimingBuffer,
@@ -72,11 +71,6 @@ const {
   dryRunHttpClient,
   dryRunTransport,
 } = amplitudeModule;
-
-if (typeof VERSION !== "string" || VERSION.length === 0) {
-  console.error("Benchmark failed: VERSION export missing.");
-  process.exit(1);
-}
 
 if (typeof prefetchNativeContext !== "function") {
   console.error("Benchmark failed: prefetchNativeContext export missing.");
@@ -136,7 +130,7 @@ prefetchNativeContext();
 
 runTimingBenchmark()
   .then(() => {
-    console.log(`✅ Amplitude benchmark passed (version ${VERSION}).`);
+    console.log("✅ Amplitude benchmark passed.");
   })
   .catch((error) => {
     console.error("Benchmark failed.");

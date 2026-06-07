@@ -89,4 +89,4 @@ export type { AmplitudeContext } from "./AmplitudeContext.nitro";
 export type { AmplitudeStorage } from "./AmplitudeStorage.nitro";
 export type { AmplitudeWorker } from "./AmplitudeWorker.nitro";
 
-export const VERSION = "0.5.0";
+export { PACKAGE_VERSION as VERSION } from "./package-version";

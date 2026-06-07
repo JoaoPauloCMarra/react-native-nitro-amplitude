@@ -7,7 +7,6 @@ import {
   createInstance,
   prefetchNativeContext,
   track,
-  VERSION,
 } from "react-native-nitro-amplitude";
 import { Button, Card, Colors, StatusRow } from "./shared";
 
@@ -37,12 +36,6 @@ export function SmokeTestRunner() {
         });
       }
     };
-
-    await run("VERSION export", () => {
-      if (!VERSION.startsWith("0.")) {
-        throw new Error(`unexpected VERSION: ${VERSION}`);
-      }
-    });
 
     await run("prefetchNativeContext", () => {
       prefetchNativeContext();

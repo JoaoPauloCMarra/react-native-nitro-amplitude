@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 
 The format follows Keep a Changelog and the project adheres to SemVer.
 
+## 0.5.1 - 2026-06-07
+
+### Changed
+
+- Updated the Expo example SDK 56 patch dependencies so Expo Doctor passes cleanly.
+
 ## 0.5.0 - 2026-05-23
 
 ### Added

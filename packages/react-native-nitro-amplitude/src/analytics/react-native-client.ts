@@ -28,6 +28,10 @@ import {
   AnalyticsClient,
 } from "@amplitude/analytics-core";
 import { healthCheck } from "../diagnostics";
+import {
+  classifyDiagnosticFailure,
+  recordDiagnosticFailure,
+} from "../diagnostic-failures";
 import { CampaignTracker } from "./campaign/campaign-tracker";
 import { Context } from "./plugins/context";
 import { useReactNativeConfig, createCookieStorage } from "./config";
@@ -342,6 +346,7 @@ export class AmplitudeReactNative
       const failedOutcomes = outcomes.filter(
         (outcome) => !this.isSuccessStatusCode(outcome.code),
       );
+      this.recordFlushOutcomeDiagnostics(failedOutcomes, remainingQueueSize);
       const dropped = failedOutcomes.reduce(
         (total, outcome) => total + outcome.count,
         0,
@@ -387,6 +392,11 @@ export class AmplitudeReactNative
       this.lastFlushDurationMillis = this.lastFlushTime - startedAt;
       this.lastFlushError =
         error instanceof Error ? error.message : String(error);
+      recordDiagnosticFailure({
+        operation: "analytics_upload",
+        kind: classifyDiagnosticFailure(error),
+        queuedEventCount: queueSize,
+      });
       return {
         ok: false,
         sent: 0,
@@ -506,6 +516,26 @@ export class AmplitudeReactNative
 
   private isSuccessStatusCode(code: number): boolean {
     return code >= 200 && code < 300;
+  }
+
+  private recordFlushOutcomeDiagnostics(
+    failedOutcomes: FlushOutcome[],
+    queuedEventCount: number,
+  ): void {
+    failedOutcomes.forEach((outcome) => {
+      const maxRetriesExceeded = /exceeded retry count/i.test(outcome.message);
+      recordDiagnosticFailure({
+        operation: "analytics_upload",
+        kind: classifyDiagnosticFailure(outcome.message, outcome.code),
+        httpStatus: outcome.code > 0 ? outcome.code : undefined,
+        batchSize: outcome.count,
+        queuedEventCount,
+        retryCount: maxRetriesExceeded
+          ? this.config.flushMaxRetries
+          : undefined,
+        maxRetriesExceeded,
+      });
+    });
   }
 
   private setSessionIdInternal(sessionId: number, eventTime: number) {

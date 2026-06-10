@@ -132,6 +132,7 @@ import { Status } from "@amplitude/analytics-core";
 import { NetworkGuardedFetchTransport } from "../analytics/network-guarded-fetch-transport";
 import {
   clearDryRunTransportRecords,
+  clearDiagnosticFailures,
   createAmplitudeClient,
   createDurableAmplitudeStoragePreset,
   createFakeExperimentStorage,
@@ -149,6 +150,7 @@ import {
   getLastNativeError,
   getNetworkEnabled,
   getNativeStartupDiagnostics,
+  getSafeAmplitudeDiagnostics,
   prefetchNativeContext,
   nitroHttpClient,
   setNetworkEnabled,
@@ -203,6 +205,7 @@ describe("react-native-nitro-amplitude", () => {
       delete mockHybridObjects[key];
     }
     resetHybridInstancesForTests();
+    clearDiagnosticFailures();
   });
 
   it("exports analytics and experiment factories", () => {
@@ -372,6 +375,30 @@ describe("react-native-nitro-amplitude", () => {
     });
     expect(diagnostics.networkEnabled).toBe(true);
     expect(diagnostics.activeInstanceNames).toEqual([]);
+  });
+
+  it("reports safe diagnostics without identity fields", async () => {
+    const analytics = createInstance();
+    try {
+      await analytics.init("safe-diagnostics-key", "safe-user", {
+        instanceName: "safe-diagnostics",
+        transportProvider: dryRunTransport,
+      }).promise;
+
+      const diagnostics = getSafeAmplitudeDiagnostics(analytics);
+
+      expect(diagnostics).toMatchObject({
+        initialized: true,
+        instanceName: "safe-diagnostics",
+        queueSize: 0,
+        networkEnabled: true,
+      });
+      expect(diagnostics).not.toHaveProperty("userId");
+      expect(diagnostics).not.toHaveProperty("deviceId");
+      expect(diagnostics).not.toHaveProperty("sessionId");
+    } finally {
+      analytics.shutdown();
+    }
   });
 
   it("stores analytics values in Nitro disk storage with namespace reset", async () => {
@@ -569,6 +596,12 @@ describe("react-native-nitro-amplitude", () => {
 
   it("reports failed flushes when events stay queued for retry", async () => {
     jest.useFakeTimers();
+    const consoleError = jest
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    const consoleWarn = jest
+      .spyOn(console, "warn")
+      .mockImplementation(() => undefined);
     const analytics = createInstance();
     const otherAnalytics = createInstance();
     try {
@@ -577,7 +610,9 @@ describe("react-native-nitro-amplitude", () => {
         flushIntervalMillis: 60000,
         transportProvider: {
           async send() {
-            throw new Error("offline");
+            throw new Error(
+              "A server with the specified hostname could not be found.",
+            );
           },
         },
       }).promise;
@@ -602,9 +637,27 @@ describe("react-native-nitro-amplitude", () => {
       );
       expect(otherAnalytics.getDiagnostics().lastFlushError).toBeUndefined();
       expect(otherAnalytics.getDiagnostics().lastFlushTime).toBeUndefined();
+      expect(consoleError).not.toHaveBeenCalled();
+      expect(consoleWarn).not.toHaveBeenCalled();
+      expect(getDiagnostics().diagnosticFailures).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            operation: "analytics_upload",
+            surface: "analytics_upload",
+            kind: "dns_or_hostname_resolution",
+            targetHost: "api2.amplitude.com",
+            batchSize: 1,
+            queuedEventCount: 1,
+            throttledCount: expect.any(Number),
+            packageVersion: expect.any(String),
+          }),
+        ]),
+      );
     } finally {
       analytics.shutdown();
       otherAnalytics.shutdown();
+      consoleError.mockRestore();
+      consoleWarn.mockRestore();
       jest.clearAllTimers();
       jest.useRealTimers();
     }
@@ -707,6 +760,138 @@ describe("react-native-nitro-amplitude", () => {
     expect(experiment.variantWithMetadata("missing-flag")).toMatchObject({
       reason: "fetch_failure",
     });
+    expect(getDiagnostics().diagnosticFailures).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          operation: "experiment_fetch",
+          surface: "experiment_variant_fetch",
+          kind: "network_error",
+          targetHost: "api.lab.amplitude.com",
+          packageVersion: expect.any(String),
+        }),
+      ]),
+    );
+  });
+
+  it("records flag config fetch failures separately from variant fetches", async () => {
+    const experiment = Experiment.initialize("flag-fetch-failure-key", {
+      instanceName: "flag-fetch-failure",
+      retryFetchOnFailure: false,
+      httpClient: {
+        async request(requestUrl) {
+          if (requestUrl.includes("/sdk/v2/flags")) {
+            throw new Error("Request timeout after 10000 milliseconds");
+          }
+          return {
+            status: 200,
+            body: "{}",
+          };
+        },
+      },
+    });
+
+    await expect(
+      experiment.start({ user_id: "flag-fetch-failure-user" }),
+    ).rejects.toThrow("Request timeout");
+
+    expect(getDiagnostics().diagnosticFailures).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          operation: "experiment_fetch",
+          surface: "experiment_flag_fetch",
+          kind: "timeout",
+          targetHost: "flag.lab.amplitude.com",
+          packageVersion: expect.any(String),
+        }),
+      ]),
+    );
+
+    experiment.stop();
+  });
+
+  it("uses durable experiment storage by default for cached feature availability", async () => {
+    let failFetch = false;
+    const httpClient = {
+      async request(requestUrl: string) {
+        if (failFetch) {
+          throw new Error(
+            "A server with the specified hostname could not be found.",
+          );
+        }
+        if (requestUrl.includes("/sdk/v2/flags")) {
+          return {
+            status: 200,
+            body: "[]",
+          };
+        }
+        return {
+          status: 200,
+          body: JSON.stringify({
+            "irl-mode": {
+              key: "on",
+              value: "on",
+            },
+          }),
+        };
+      },
+    };
+    const firstClient = new ExperimentCompat.ExperimentClient(
+      "durable-feature-key",
+      {
+        fetchOnStart: false,
+        pollOnStart: false,
+        retryFetchOnFailure: false,
+        httpClient,
+      },
+    );
+
+    await firstClient.fetchOrThrow(
+      { user_id: "goodword-user" },
+      { flagKeys: ["irl-mode"] },
+    );
+
+    expect(firstClient.variantWithMetadata("irl-mode")).toMatchObject({
+      variant: { value: "on" },
+      fallback: false,
+    });
+    expect(Array.from(mockDisk.keys())).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("experiment::amp-exp-$default_instance"),
+      ]),
+    );
+
+    failFetch = true;
+    const restartedClient = new ExperimentCompat.ExperimentClient(
+      "durable-feature-key",
+      {
+        fetchOnStart: false,
+        pollOnStart: false,
+        retryFetchOnFailure: false,
+        httpClient,
+      },
+    );
+    await restartedClient.cacheReady();
+
+    await expect(
+      restartedClient.fetchOrThrow(
+        { user_id: "goodword-user" },
+        { flagKeys: ["irl-mode"] },
+      ),
+    ).rejects.toThrow("hostname");
+
+    expect(restartedClient.variantWithMetadata("irl-mode")).toMatchObject({
+      variant: { value: "on" },
+      fallback: false,
+    });
+    expect(getDiagnostics().diagnosticFailures).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          operation: "experiment_fetch",
+          surface: "experiment_variant_fetch",
+          kind: "dns_or_hostname_resolution",
+        }),
+      ]),
+    );
   });
 
   it("wires combined dry-run clients across analytics and experiment", async () => {
@@ -925,7 +1110,18 @@ describe("react-native-nitro-amplitude", () => {
 
       await analytics.reset();
 
-      expect(values.size).toBe(0);
+      expect(
+        Array.from(values.keys()).filter((key) =>
+          key.includes("analytics-events"),
+        ),
+      ).toEqual([]);
+      expect(Array.from(values.keys())).toEqual(
+        expect.arrayContaining([
+          expect.stringContaining(
+            "experiment::amp-exp-web-experiment-defaults",
+          ),
+        ]),
+      );
     } finally {
       setNetworkEnabled(true);
       Object.defineProperty(globalThis, "localStorage", {

@@ -11,6 +11,7 @@ import {
   CookieStorage,
   getCookieName,
   getQueryParams,
+  LogLevel,
 } from "@amplitude/analytics-core";
 import type { Transport } from "@amplitude/analytics-core";
 
@@ -18,6 +19,7 @@ import { LocalStorage } from "./storage/local-storage";
 import RemnantDataMigration from "./migration/remnant-data-migration";
 import { isNative } from "./utils/platform";
 import { NetworkGuardedFetchTransport } from "./network-guarded-fetch-transport";
+import { createDiagnosticAnalyticsTransport } from "../diagnostic-failures";
 
 function createDefaultStorage() {
   if (isNative()) {
@@ -99,10 +101,15 @@ export class ReactNativeConfig extends Config implements IReactNativeConfig {
       flushIntervalMillis: 1000,
       flushMaxRetries: 5,
       flushQueueSize: 30,
+      logLevel:
+        options?.loggerProvider || options?.logLevel !== undefined
+          ? options?.logLevel
+          : LogLevel.None,
       ...options,
       apiKey,
-      transportProvider:
+      transportProvider: createDiagnosticAnalyticsTransport(
         options?.transportProvider ?? defaultConfig.transportProvider,
+      ),
     });
 
     // NOTE: Define `cookieStorage` first to persist user session
@@ -285,8 +292,9 @@ export const useReactNativeConfig = async (
       ...defaultConfig.trackingOptions,
       ...options?.trackingOptions,
     },
-    transportProvider:
+    transportProvider: createDiagnosticAnalyticsTransport(
       options?.transportProvider ?? defaultConfig.transportProvider,
+    ),
     userId,
   });
 

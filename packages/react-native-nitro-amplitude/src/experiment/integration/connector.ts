@@ -52,12 +52,9 @@ export class ConnectorUserProvider implements ExperimentUserProvider {
 
   getUserSync(): ExperimentUser {
     const identity = this.identityStore.getIdentity();
-    let userProperties: UserProperties | undefined;
-    try {
-      userProperties = identity.userProperties as UserProperties;
-    } catch {
-      console.warn("[Experiment] failed to cast user properties");
-    }
+    const userProperties = identity.userProperties as
+      | UserProperties
+      | undefined;
     return {
       user_id: identity.userId,
       device_id: identity.deviceId,

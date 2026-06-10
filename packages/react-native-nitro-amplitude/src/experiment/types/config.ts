@@ -20,13 +20,13 @@ function createDefaultHttpClient(): HttpClient {
 
 function createDefaultStorage(): Storage {
   if (isNative()) {
-    const { NitroMemoryStorage } =
+    const { NitroExperimentStorage } =
       require("../../native/storage") as typeof import("../../native/storage");
-    return new NitroMemoryStorage("experiment");
+    return new NitroExperimentStorage("experiment");
   }
-  const { NitroMemoryStorage } =
+  const { NitroExperimentStorage } =
     require("../../native/storage.web") as typeof import("../../native/storage");
-  return new NitroMemoryStorage("experiment");
+  return new NitroExperimentStorage("experiment");
 }
 
 /**
@@ -171,7 +171,7 @@ export interface ExperimentConfig {
 
   /**
    * (Advanced) Use your own storage implementation.
-   * If not provided, the client will use the built-in shared memory storage implementation.
+   * If not provided, the client will use the built-in durable Nitro storage implementation.
    */
   storage?: Storage | null;
 }

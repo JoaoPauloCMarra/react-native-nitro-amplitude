@@ -30,6 +30,7 @@ import {
 } from "./storage/cache";
 import { MemoryStorage } from "./storage/local-storage";
 import { FetchHttpClient, WrapperClient } from "./transport/http";
+import { createDiagnosticHttpClient } from "../diagnostic-failures";
 import {
   Client,
   ExperimentFetchResult,
@@ -183,7 +184,9 @@ export class ExperimentClient implements Client {
         config?.exposureTrackingProvider ??
         Defaults.exposureTrackingProvider ??
         null,
-      httpClient: config?.httpClient ?? Defaults.httpClient ?? FetchHttpClient,
+      httpClient: createDiagnosticHttpClient(
+        config?.httpClient ?? Defaults.httpClient ?? FetchHttpClient,
+      ),
       storage: config?.storage ?? Defaults.storage ?? null,
     };
     this.logger = new AmpLogger(

@@ -6,6 +6,8 @@ import type {
 import { isNative } from "./analytics/utils/platform";
 import { getAmplitudeErrorCode } from "./errors";
 import { getNetworkEnabled } from "./network";
+import type { AmplitudeDiagnosticFailure } from "./diagnostic-failures";
+import { getDiagnosticFailures } from "./diagnostic-failures";
 
 type HybridModule = typeof import("./native/hybrid");
 
@@ -24,7 +26,13 @@ export type NativeStartupDiagnostics = {
 export type AmplitudeDiagnostics = AmplitudeAnalyticsDiagnostics & {
   native: NativeStartupDiagnostics;
   networkEnabled: boolean;
+  diagnosticFailures: AmplitudeDiagnosticFailure[];
 };
+
+export type AmplitudeSafeDiagnostics = Omit<
+  AmplitudeDiagnostics,
+  "userId" | "deviceId" | "sessionId"
+>;
 
 let lastNativeError: NativeStartupDiagnostics["lastError"];
 
@@ -80,7 +88,19 @@ export function getAmplitudeDiagnostics(
     ...analytics.getDiagnostics(),
     native: getNativeStartupDiagnostics(),
     networkEnabled: getNetworkEnabled(),
+    diagnosticFailures: getDiagnosticFailures(),
   };
+}
+
+export function getSafeAmplitudeDiagnostics(
+  analytics: AmplitudeReactNativeClient,
+): AmplitudeSafeDiagnostics {
+  const { userId, deviceId, sessionId, ...safeDiagnostics } =
+    getAmplitudeDiagnostics(analytics);
+  void userId;
+  void deviceId;
+  void sessionId;
+  return safeDiagnostics;
 }
 
 export async function healthCheck(

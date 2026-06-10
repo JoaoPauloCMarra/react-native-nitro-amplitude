@@ -66,7 +66,7 @@ import {
 
 await init("AMPLITUDE_API_KEY", "user-id", {
   instanceName: "$default_instance",
-});
+}).promise;
 
 track("Checkout Started", {
   source: "cart",
@@ -76,7 +76,7 @@ const user = new Identify();
 user.set("plan", "pro");
 identify(user);
 
-await flush();
+await flush().promise;
 ```
 
 Compatibility import:
@@ -92,15 +92,17 @@ import {
   Experiment,
   Source,
   createPersistentAmplitudeConfig,
+  init,
 } from "react-native-nitro-amplitude";
 
-const analyticsConfig = createPersistentAmplitudeConfig("my-app");
+const storage = createPersistentAmplitudeConfig("my-app");
 
-await init("AMPLITUDE_API_KEY", "user-id", analyticsConfig);
+await init("AMPLITUDE_API_KEY", "user-id", storage.analytics).promise;
 
 const experiment = Experiment.initializeWithAmplitudeAnalytics(
   "EXPERIMENT_DEPLOYMENT_KEY",
   {
+    ...storage.experiment,
     source: Source.LocalStorage,
     automaticExposureTracking: true,
   },
@@ -121,13 +123,19 @@ import { Experiment } from "react-native-nitro-amplitude/experiment";
 ## Persistent Storage
 
 ```ts
-import { createPersistentAmplitudeConfig } from "react-native-nitro-amplitude";
+import {
+  createPersistentAmplitudeConfig,
+  init,
+} from "react-native-nitro-amplitude";
 
-const config = createPersistentAmplitudeConfig("production", {
-  sessionTimeout: 30 * 60 * 1000,
+const storage = createPersistentAmplitudeConfig({
+  namespace: "production",
 });
 
-await init("AMPLITUDE_API_KEY", undefined, config);
+await init("AMPLITUDE_API_KEY", undefined, {
+  ...storage.analytics,
+  sessionTimeout: 30 * 60 * 1000,
+}).promise;
 ```
 
 The preset stores analytics session state, device ID, user ID, and experiment
@@ -140,6 +148,7 @@ environment, or test suite.
 import {
   enableDryRunTransport,
   getDiagnostics,
+  getSafeDiagnostics,
   setNetworkEnabled,
 } from "react-native-nitro-amplitude";
 
@@ -147,6 +156,7 @@ setNetworkEnabled(false);
 enableDryRunTransport();
 
 const diagnostics = getDiagnostics();
+const sentrySafeDiagnostics = getSafeDiagnostics();
 ```
 
 Use dry-run transport in examples and tests when you need track/flush behavior
@@ -165,6 +175,22 @@ Main diagnostics fields include:
 These APIs are for app health checks, support tooling, and release validation.
 Do not send diagnostics that contain user identifiers to analytics or logs
 without your own privacy review.
+
+Analytics logging is disabled by default to keep transient retryable transport
+failures out of React Native console capture tools. Pass `logLevel` or
+`loggerProvider` to `init()` when an app needs Amplitude SDK logs.
+`getDiagnostics().diagnosticFailures` still exposes sanitized failure state for
+debugging, including operation, surface, failure kind, target host, HTTP status,
+batch or queue counts, retry exhaustion, timestamp, throttled repeat count, and
+package version. It never stores event payloads, API keys, user identifiers,
+request bodies, or full URLs. Use `getSafeDiagnostics()` for Sentry breadcrumbs
+or support snapshots that must omit user, device, and session identifiers.
+
+Experiment uses durable Nitro storage by default for cached variants and flag
+configuration. This keeps feature availability resilient when a later app launch
+hits a transient DNS, timeout, or offline fetch failure. Pass a custom
+`storage`, such as `NitroMemoryStorage`, only when process-local experiment
+state is intentional.
 
 ## API
 

@@ -1,8 +1,14 @@
 import analyticsClient, {
   createInstance,
 } from "./analytics/react-native-client";
-import type { AmplitudeDiagnostics } from "./diagnostics";
-import { getAmplitudeDiagnostics } from "./diagnostics";
+import type {
+  AmplitudeDiagnostics,
+  AmplitudeSafeDiagnostics,
+} from "./diagnostics";
+import {
+  getAmplitudeDiagnostics,
+  getSafeAmplitudeDiagnostics,
+} from "./diagnostics";
 import { prefetchNativeContext } from "./native/context";
 
 import * as AnalyticsTypes from "./analytics/types";
@@ -37,6 +43,10 @@ export function getDiagnostics(): AmplitudeDiagnostics {
   return getAmplitudeDiagnostics(analyticsClient);
 }
 
+export function getSafeDiagnostics(): AmplitudeSafeDiagnostics {
+  return getSafeAmplitudeDiagnostics(analyticsClient);
+}
+
 export { Revenue, Identify } from "@amplitude/analytics-core";
 export {
   InMemoryStorage,
@@ -56,9 +66,18 @@ export {
   getAmplitudeDiagnostics,
   getLastNativeError,
   getNativeStartupDiagnostics,
+  getSafeAmplitudeDiagnostics,
 } from "./diagnostics";
+export { clearDiagnosticFailures } from "./diagnostic-failures";
+export type {
+  AmplitudeDiagnosticFailure,
+  AmplitudeDiagnosticFailureKind,
+  AmplitudeDiagnosticOperation,
+  AmplitudeDiagnosticSurface,
+} from "./diagnostic-failures";
 export type {
   AmplitudeDiagnostics,
+  AmplitudeSafeDiagnostics,
   NativeStartupDiagnostics,
 } from "./diagnostics";
 export * from "./errors";

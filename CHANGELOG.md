@@ -4,6 +4,20 @@ All notable changes to this project are documented in this file.
 
 The format follows Keep a Changelog and the project adheres to SemVer.
 
+## 0.5.2 - 2026-06-10
+
+### Fixed
+
+- Disabled Amplitude Analytics console logging by default so transient transport
+  failures do not flood React Native console capture tools such as Sentry.
+- Added sanitized transport failure diagnostics to `getDiagnostics()` for
+  Analytics uploads and Experiment fetches without logging payloads or API keys.
+- Added safe diagnostics snapshots and surface-specific failure data so apps can
+  distinguish Analytics uploads, Experiment variant fetches, and Experiment flag
+  config fetches without logging identifiers.
+- Changed the default Experiment cache to durable Nitro storage so cached
+  feature assignments survive transient fetch failures and app restarts.
+
 ## 0.5.1 - 2026-06-07
 
 ### Changed

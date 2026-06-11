@@ -1,10 +1,13 @@
 # react-native-nitro-amplitude
 
 [![npm version](https://img.shields.io/npm/v/react-native-nitro-amplitude?color=f97316&label=npm)](https://www.npmjs.com/package/react-native-nitro-amplitude)
+[![npm downloads](https://img.shields.io/npm/dm/react-native-nitro-amplitude?color=22c55e&label=downloads)](https://www.npmjs.com/package/react-native-nitro-amplitude)
+[![CI](https://github.com/JoaoPauloCMarra/react-native-nitro-amplitude/actions/workflows/ci.yml/badge.svg)](https://github.com/JoaoPauloCMarra/react-native-nitro-amplitude/actions/workflows/ci.yml)
 [![license](https://img.shields.io/npm/l/react-native-nitro-amplitude?color=007ec6)](https://github.com/JoaoPauloCMarra/react-native-nitro-amplitude/blob/main/LICENSE)
 [![React Native](https://img.shields.io/badge/react--native-%3E%3D0.75-61dafb)](https://reactnative.dev/)
-[![Expo](https://img.shields.io/badge/expo-SDK%2056-000020)](https://expo.dev/)
+[![Expo](https://img.shields.io/badge/expo-SDK%2056-000020)](https://docs.expo.dev/)
 [![Nitro Modules](https://img.shields.io/badge/nitro--modules-%3E%3D0.35.7-black)](https://nitro.margelo.com/)
+[![TypeScript](https://img.shields.io/badge/typescript-6.0-3178c6)](https://www.typescriptlang.org/)
 
 Amplitude Analytics and Amplitude Experiment for React Native and Expo in one
 Nitro package.
@@ -162,6 +165,11 @@ const sentrySafeDiagnostics = getSafeDiagnostics();
 Use dry-run transport in examples and tests when you need track/flush behavior
 without sending events to Amplitude.
 
+For offline-aware apps, pair `setNetworkEnabled` with a connectivity listener
+(for example `@react-native-community/netinfo`): disable the network while
+offline and re-enable it on reconnect, then call `flush()`. Events queue in
+durable Nitro storage while the network is disabled.
+
 ## Diagnostics
 
 Main diagnostics fields include:
@@ -222,6 +230,22 @@ Native HybridObject types:
 | Android  | Native Nitro context, storage, and HTTP worker. |
 | Web      | Browser fetch and storage fallbacks.            |
 | Expo     | Development builds with the config plugin.      |
+
+Architecture notes:
+
+- The native layer is a shared C++ core (Nitro HybridObjects) with thin
+  platform adapters: Objective-C++ on iOS and Kotlin over JNI on Android.
+  There is no Swift layer by design — the C++ core talks to platform APIs
+  directly, avoiding extra interop hops.
+- Privacy stance: Android `adid` and `appSetId` context fields are returned
+  empty even when requested via context options. Wire your own values through
+  event enrichment if your app has consent to collect them.
+- Legacy Amplitude SDK SQLite migration is not implemented yet:
+  `migrateLegacyData` restores no legacy data, and
+  `getNativeStartupDiagnostics().legacyMigrationSupported` reports `false`.
+- For typed Experiment variant payloads, prefer the typed variant helpers
+  exported from the package (`react-native-nitro-amplitude/experiment`) over
+  reading the untyped `variant.payload` directly.
 
 ## Troubleshooting
 

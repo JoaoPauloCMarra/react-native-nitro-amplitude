@@ -68,6 +68,7 @@
     "benchmark": "node scripts/benchmark-check.js",
     "test:cpp": "node scripts/test-cpp.js",
     "test:cpp:sanitize": "NITRO_CPP_SANITIZE=address,undefined node scripts/test-cpp.js",
+    "test:cpp:coverage": "node scripts/test-cpp.js --coverage",
     "check:pack": "node scripts/check-pack-contents.js",
     "prepack": "node scripts/sync-package-docs.js prepare",
     "postpack": "node scripts/sync-package-docs.js cleanup",

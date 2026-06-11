@@ -19,8 +19,9 @@ void IOSAmplitudeAdapterCpp::prefetchContext() {
 
 std::string IOSAmplitudeAdapterCpp::getApplicationContextJson(const std::string& optionsJson) {
   NSData* data = [NSData dataWithBytes:optionsJson.data() length:optionsJson.size()];
-  NSDictionary* options = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
-  if (![options isKindOfClass:[NSDictionary class]]) {
+  NSError* optionsError = nil;
+  NSDictionary* options = [NSJSONSerialization JSONObjectWithData:data options:0 error:&optionsError];
+  if (optionsError != nil || ![options isKindOfClass:[NSDictionary class]]) {
     options = @{};
   }
 
@@ -106,7 +107,7 @@ std::vector<std::string> IOSAmplitudeAdapterCpp::getAllDiskKeys() {
 HttpResult IOSAmplitudeAdapterCpp::performHttpRequest(
     const std::string& url,
     const std::string& method,
-    const std::string& headersJson,
+    const std::unordered_map<std::string, std::string>& headers,
     const std::string& body,
     int timeoutMillis) {
   NSURL* nsUrl = [NSURL URLWithString:[NSString stringWithUTF8String:url.c_str()]];
@@ -114,25 +115,28 @@ HttpResult IOSAmplitudeAdapterCpp::performHttpRequest(
     return HttpResult{.error = "Invalid URL"};
   }
 
+  NSTimeInterval timeoutSeconds = timeoutMillis / 1000.0;
+  NSURLSessionConfiguration* configuration = [NSURLSessionConfiguration ephemeralSessionConfiguration];
+  configuration.timeoutIntervalForRequest = timeoutSeconds;
+  configuration.timeoutIntervalForResource = timeoutSeconds;
+  NSURLSession* session = [NSURLSession sessionWithConfiguration:configuration];
+
   NSMutableURLRequest* request = [NSMutableURLRequest requestWithURL:nsUrl];
   request.HTTPMethod = [NSString stringWithUTF8String:method.c_str()];
-  request.timeoutInterval = timeoutMillis / 1000.0;
+  request.timeoutInterval = timeoutSeconds;
   request.HTTPBody = body.empty() ? nil : [NSData dataWithBytes:body.data() length:body.size()];
 
-  NSData* headerData = [NSData dataWithBytes:headersJson.data() length:headersJson.size()];
-  NSDictionary* headers = [NSJSONSerialization JSONObjectWithData:headerData options:0 error:nil];
-  if ([headers isKindOfClass:[NSDictionary class]]) {
-    for (NSString* key in headers) {
-      id value = headers[key];
-      if ([value isKindOfClass:[NSString class]]) {
-        [request setValue:(NSString*)value forHTTPHeaderField:key];
-      }
+  for (const auto& header : headers) {
+    NSString* headerName = [NSString stringWithUTF8String:header.first.c_str()];
+    NSString* headerValue = [NSString stringWithUTF8String:header.second.c_str()];
+    if (headerName && headerValue) {
+      [request setValue:headerValue forHTTPHeaderField:headerName];
     }
   }
 
   dispatch_semaphore_t semaphore = dispatch_semaphore_create(0);
   __block HttpResult completedResult;
-  NSURLSessionDataTask* task = [[NSURLSession sharedSession]
+  NSURLSessionDataTask* task = [session
       dataTaskWithRequest:request
         completionHandler:^(NSData* data, NSURLResponse* response, NSError* error) {
           if (error) {
@@ -148,7 +152,16 @@ HttpResult IOSAmplitudeAdapterCpp::performHttpRequest(
           dispatch_semaphore_signal(semaphore);
         }];
   [task resume];
-  dispatch_semaphore_wait(semaphore, DISPATCH_TIME_FOREVER);
+
+  const int64_t waitMarginMillis = 5000;
+  dispatch_time_t deadline =
+      dispatch_time(DISPATCH_TIME_NOW, (static_cast<int64_t>(timeoutMillis) + waitMarginMillis) * NSEC_PER_MSEC);
+  if (dispatch_semaphore_wait(semaphore, deadline) != 0) {
+    [task cancel];
+    [session invalidateAndCancel];
+    return HttpResult{.error = "Request timed out"};
+  }
+  [session finishTasksAndInvalidate];
   return completedResult;
 }
 

@@ -9,6 +9,7 @@
 #include <mutex>
 #include <queue>
 #include <string>
+#include <unordered_map>
 #include <thread>
 #include <unordered_set>
 #include <vector>
@@ -19,7 +20,7 @@ struct WorkerRequest {
   std::string requestId;
   std::string url;
   std::string method;
-  std::string headersJson;
+  std::unordered_map<std::string, std::string> headers;
   std::string body;
   int timeoutMillis = 10000;
 };
@@ -33,7 +34,7 @@ public:
       const std::string& requestId,
       const std::string& url,
       const std::string& method,
-      const std::string& headersJson,
+      const std::unordered_map<std::string, std::string>& headers,
       const std::string& body,
       double timeoutMillis) override;
   void cancel(const std::string& requestId) override;
@@ -44,6 +45,7 @@ public:
           const std::string&,
           const std::string&)>& callback) override;
   double queueSize() override;
+  size_t getExternalMemorySize() noexcept override;
 
 private:
   void workerLoop();
@@ -61,6 +63,7 @@ private:
   std::unordered_set<std::string> cancelledRequests_;
   std::atomic<bool> running_{true};
   std::atomic<size_t> queueSize_{0};
+  std::atomic<size_t> pendingBodyBytes_{0};
 
   std::mutex listenersMutex_;
   struct Listener {

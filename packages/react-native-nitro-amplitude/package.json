@@ -1,6 +1,6 @@
 {
   "name": "react-native-nitro-amplitude",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "description": "Amplitude Analytics and Experiment SDK for React Native powered by Nitro Modules and C++ on native platforms, with web-compatible fetch and storage fallbacks.",
   "main": "lib/commonjs/index.js",
   "module": "lib/module/index.js",
@@ -67,6 +67,7 @@
     "test:coverage": "jest --coverage",
     "benchmark": "node scripts/benchmark-check.js",
     "test:cpp": "node scripts/test-cpp.js",
+    "test:cpp:sanitize": "NITRO_CPP_SANITIZE=address,undefined node scripts/test-cpp.js",
     "check:pack": "node scripts/check-pack-contents.js",
     "prepack": "node scripts/sync-package-docs.js prepare",
     "postpack": "node scripts/sync-package-docs.js cleanup",
@@ -100,7 +101,7 @@
   },
   "dependencies": {
     "@amplitude/analytics-connector": "^1.6.4",
-    "@amplitude/analytics-core": "2.48.2",
+    "@amplitude/analytics-core": "2.49.0",
     "@amplitude/experiment-core": "^0.13.1",
     "@amplitude/ua-parser-js": "^0.7.33",
     "tslib": "^2.8.1",

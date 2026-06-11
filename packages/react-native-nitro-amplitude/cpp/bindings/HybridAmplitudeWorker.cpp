@@ -1,13 +1,6 @@
 #include "HybridAmplitudeWorker.hpp"
 
-#ifndef NITRO_AMPLITUDE_DISABLE_PLATFORM_ADAPTER
-#if __APPLE__
-#include "../../ios/IOSAmplitudeAdapterCpp.hpp"
-#elif __ANDROID__
-#include "../../android/src/main/cpp/AndroidAmplitudeAdapterCpp.hpp"
-#include <fbjni/fbjni.h>
-#endif
-#endif
+#include "../core/PlatformAdapterFactory.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -18,26 +11,11 @@ namespace margelo::nitro::NitroAmplitude {
 namespace {
 constexpr int kDefaultTimeoutMillis = 10000;
 constexpr int kMaxTimeoutMillis = 300000;
-
-std::shared_ptr<::NitroAmplitude::NativeAmplitudeAdapter> createPlatformAdapter() {
-#ifndef NITRO_AMPLITUDE_DISABLE_PLATFORM_ADAPTER
-#if __APPLE__
-  return std::make_shared<::NitroAmplitude::IOSAmplitudeAdapterCpp>();
-#elif __ANDROID__
-  auto context = ::NitroAmplitude::AndroidAmplitudeAdapterJava::getContext();
-  return std::make_shared<::NitroAmplitude::AndroidAmplitudeAdapterCpp>(context);
-#else
-  return nullptr;
-#endif
-#else
-  return nullptr;
-#endif
-}
 } // namespace
 
 HybridAmplitudeWorker::HybridAmplitudeWorker()
     : HybridObject(TAG), HybridAmplitudeWorkerSpec() {
-  adapter_ = createPlatformAdapter();
+  adapter_ = ::NitroAmplitude::getSharedPlatformAdapter();
   workerThread_ = std::thread([this]() { workerLoop(); });
 }
 
@@ -56,7 +34,7 @@ void HybridAmplitudeWorker::enqueue(
     const std::string& requestId,
     const std::string& url,
     const std::string& method,
-    const std::string& headersJson,
+    const std::unordered_map<std::string, std::string>& headers,
     const std::string& body,
     double timeoutMillis) {
   if (requestId.empty() || url.empty()) {
@@ -71,16 +49,22 @@ void HybridAmplitudeWorker::enqueue(
       requestId,
       url,
       method,
-      headersJson,
+      headers,
       body,
       static_cast<int>(timeoutMillis),
   };
 
+  size_t headerBytes = 0;
+  for (const auto& header : request.headers) {
+    headerBytes += header.first.size() + header.second.size();
+  }
+  const size_t bodyBytes = request.body.size() + headerBytes;
   {
     std::lock_guard<std::mutex> lock(queueMutex_);
     cancelledRequests_.erase(requestId);
     queue_.push(std::move(request));
     queueSize_ = queue_.size();
+    pendingBodyBytes_ += bodyBytes;
   }
   queueCv_.notify_one();
 }
@@ -114,6 +98,10 @@ double HybridAmplitudeWorker::queueSize() {
   return static_cast<double>(queueSize_.load());
 }
 
+size_t HybridAmplitudeWorker::getExternalMemorySize() noexcept {
+  return pendingBodyBytes_.load();
+}
+
 void HybridAmplitudeWorker::workerLoop() {
   while (true) {
     WorkerRequest request;
@@ -126,6 +114,12 @@ void HybridAmplitudeWorker::workerLoop() {
       request = std::move(queue_.front());
       queue_.pop();
       queueSize_ = queue_.size();
+      size_t headerBytes = 0;
+  for (const auto& header : request.headers) {
+    headerBytes += header.first.size() + header.second.size();
+  }
+  const size_t bodyBytes = request.body.size() + headerBytes;
+      pendingBodyBytes_ -= std::min(pendingBodyBytes_.load(), bodyBytes);
       if (cancelledRequests_.erase(request.requestId) > 0) {
         notifyComplete(request.requestId, 0, "", "cancelled");
         continue;
@@ -145,7 +139,7 @@ void HybridAmplitudeWorker::workerLoop() {
         androidResult = adapter_->performHttpRequest(
             request.url,
             request.method,
-            request.headersJson,
+            request.headers,
             request.body,
             request.timeoutMillis);
       });
@@ -155,7 +149,7 @@ void HybridAmplitudeWorker::workerLoop() {
       return adapter_->performHttpRequest(
           request.url,
           request.method,
-          request.headersJson,
+          request.headers,
           request.body,
           request.timeoutMillis);
     }();

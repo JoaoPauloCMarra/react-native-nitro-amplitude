@@ -85,7 +85,7 @@ export class NitroHttpClient implements HttpClient {
           requestId,
           requestUrl,
           method,
-          JSON.stringify(headers),
+          headers,
           data ?? "",
           normalizedTimeoutMillis,
         );

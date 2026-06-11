@@ -64,6 +64,7 @@ public:
   explicit HybridObject(const char* = "") {}
   virtual ~HybridObject() = default;
   virtual void loadHybridMethods() {}
+  virtual size_t getExternalMemorySize() noexcept { return 0; }
 protected:
   template <typename Fn>
   void registerHybrids(HybridObject*, Fn&& fn) {
@@ -93,10 +94,13 @@ const storageSpec = path.join(generatedDir, "HybridAmplitudeStorageSpec.cpp");
 const workerSpec = path.join(generatedDir, "HybridAmplitudeWorkerSpec.cpp");
 const outputFile = path.join(buildDir, "hybrid_amplitude_storage_test");
 
+const sanitizers = process.env.NITRO_CPP_SANITIZE;
+
 const compileCmd = [
   "clang++",
   "-std=c++20",
   "-g",
+  sanitizers ? `-fsanitize=${sanitizers} -fno-omit-frame-pointer -O1` : "",
   "-DNITRO_AMPLITUDE_DISABLE_PLATFORM_ADAPTER",
   process.platform === "darwin" ? "-stdlib=libc++" : "",
   `-I${includeRoot}`,

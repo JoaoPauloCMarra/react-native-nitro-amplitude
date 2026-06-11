@@ -16,6 +16,7 @@
 
 
 #include <string>
+#include <unordered_map>
 #include <functional>
 
 namespace margelo::nitro::NitroAmplitude {
@@ -49,7 +50,7 @@ namespace margelo::nitro::NitroAmplitude {
 
     public:
       // Methods
-      virtual void enqueue(const std::string& requestId, const std::string& url, const std::string& method, const std::string& headersJson, const std::string& body, double timeoutMillis) = 0;
+      virtual void enqueue(const std::string& requestId, const std::string& url, const std::string& method, const std::unordered_map<std::string, std::string>& headers, const std::string& body, double timeoutMillis) = 0;
       virtual void cancel(const std::string& requestId) = 0;
       virtual std::function<void()> addOnComplete(const std::function<void(const std::string& /* requestId */, double /* statusCode */, const std::string& /* body */, const std::string& /* error */)>& callback) = 0;
       virtual double queueSize() = 0;

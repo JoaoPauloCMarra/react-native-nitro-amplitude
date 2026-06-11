@@ -632,9 +632,9 @@ export class ExperimentClient implements Client {
     const evaluationVariants = this.engine.evaluate(context, flags);
     const variants: Variants = {};
     for (const flagKey of Object.keys(evaluationVariants)) {
-      variants[flagKey] = convertEvaluationVariantToVariant(
-        evaluationVariants[flagKey],
-      );
+      const evaluationVariant = evaluationVariants[flagKey];
+      if (evaluationVariant === undefined) continue;
+      variants[flagKey] = convertEvaluationVariantToVariant(evaluationVariant);
     }
     return variants;
   }
@@ -926,7 +926,9 @@ export class ExperimentClient implements Client {
     });
     const variants: Variants = {};
     for (const key of Object.keys(results)) {
-      variants[key] = convertEvaluationVariantToVariant(results[key]);
+      const result = results[key];
+      if (result === undefined) continue;
+      variants[key] = convertEvaluationVariantToVariant(result);
     }
     this.logger.debug("[Experiment] Received variants: ", variants);
     return variants;
@@ -934,7 +936,7 @@ export class ExperimentClient implements Client {
 
   private async doFlags(): Promise<void> {
     const flags = await this.flagApi.getFlags({
-      libraryName: "experiment-js-client",
+      libraryName: "experiment-nitro-ts",
       libraryVersion: PACKAGE_VERSION,
       timeoutMillis: this.config.fetchTimeoutMillis,
     });
@@ -969,8 +971,10 @@ export class ExperimentClient implements Client {
       this.variants.clear();
     }
     for (const key in variants) {
+      const variant = variants[key];
+      if (variant === undefined) continue;
       failedFlagKeys = failedFlagKeys.filter((flagKey) => flagKey !== key);
-      this.variants.put(key, variants[key]);
+      this.variants.put(key, variant);
     }
 
     for (const key in failedFlagKeys) {
@@ -1030,7 +1034,7 @@ export class ExperimentClient implements Client {
       ...providedUser?.user_properties,
     };
     return {
-      library: `experiment-react-native-client/${PACKAGE_VERSION}`,
+      library: `experiment-nitro-ts/${PACKAGE_VERSION}`,
       ...providedUser,
       ...user,
       user_properties: mergedUserProperties,

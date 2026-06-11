@@ -91,7 +91,7 @@ export class ReactNativeConfig extends Config implements IReactNativeConfig {
   protected _deviceId?: string;
   protected _lastEventId?: number;
   protected _lastEventTime?: number;
-  protected _optOut = false;
+  protected override _optOut = false;
   protected _sessionId?: number;
   protected _userId?: string;
 
@@ -173,11 +173,11 @@ export class ReactNativeConfig extends Config implements IReactNativeConfig {
     }
   }
 
-  get optOut() {
+  override get optOut() {
     return this._optOut;
   }
 
-  set optOut(optOut: boolean) {
+  override set optOut(optOut: boolean) {
     if (this._optOut !== optOut) {
       this._optOut = optOut;
       this.updateStorage();
@@ -265,6 +265,9 @@ export const useReactNativeConfig = async (
     (await createEventsStorage(options, defaultConfig));
 
   if (options?.migrateLegacyData !== false) {
+    options?.loggerProvider?.debug(
+      "NitroAmplitude: legacy SQLite data migration is not yet supported on native; migrateLegacyData currently restores no legacy Amplitude SDK data.",
+    );
     const legacySessionData = await new RemnantDataMigration(
       apiKey,
       options?.instanceName,

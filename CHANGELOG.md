@@ -4,6 +4,41 @@ All notable changes to this project are documented in this file.
 
 The format follows Keep a Changelog and the project adheres to SemVer.
 
+## 0.5.3 - 2026-06-11
+
+### Fixed
+
+- iOS HTTP worker waits are now bounded: requests that never complete are
+  cancelled and reported as timeouts instead of permanently stalling the upload
+  queue, and the URL session enforces a total resource timeout in addition to
+  the idle timeout.
+- Android HTTP connection setup failures (invalid URL, connect errors during
+  body write) are returned as structured results instead of escaping as
+  exceptions across the JNI boundary.
+- Events now report this package's own SDK identity and version
+  (`amplitude-nitro-ts/<version>`, `experiment-nitro-ts/<version>`) instead of
+  stale upstream Amplitude SDK version strings.
+
+### Changed
+
+- Updated `@amplitude/analytics-core` to `2.49.0`, picking up the React Native
+  `btoa` fix.
+- HTTP request headers now cross the JS/native boundary as a typed
+  `Record<string, string>` instead of a JSON string (native rebuild required).
+- The native context, storage, and HTTP worker now share a single platform
+  adapter instance, and storage/worker report external memory usage to the JS
+  garbage collector.
+- Android serves the default application context from the prefetched cache.
+
+### Added
+
+- `getNativeStartupDiagnostics().legacyMigrationSupported` reports whether
+  legacy Amplitude SDK SQLite migration is available (currently `false`;
+  `migrateLegacyData` logs a debug notice and restores no legacy data).
+- README documentation for the native architecture, the Android
+  `adid`/`appSetId` privacy stance, offline usage with a connectivity listener,
+  and typed Experiment variant payload access.
+
 ## 0.5.2 - 2026-06-10
 
 ### Fixed
@@ -20,9 +55,7 @@ The format follows Keep a Changelog and the project adheres to SemVer.
 
 ## 0.5.1 - 2026-06-07
 
-### Changed
-
-- Updated the Expo example SDK 56 patch dependencies so Expo Doctor passes cleanly.
+- No package changes; repository/example-only release.
 
 ## 0.5.0 - 2026-05-23
 
@@ -40,9 +73,7 @@ The format follows Keep a Changelog and the project adheres to SemVer.
 - Global network disable controls, dry-run Analytics transport, dry-run
   Experiment HTTP client, and inspection helpers for captured dry-run requests.
 - Reusable request timing wrappers for Analytics transport and Experiment HTTP
-  clients, plus a bounded timing buffer for example apps and benchmarks.
-- Example app timing output that separates app/package code execution time from
-  HTTP request time for Analytics and Experiment validation flows.
+  clients, with a bounded network timing buffer.
 - Experiment fetch metadata, variant source metadata, per-flag cache inspection,
   explicit variant cache clearing, fetch deduplication, and typed variant helper
   functions.
@@ -74,8 +105,6 @@ The format follows Keep a Changelog and the project adheres to SemVer.
   fallbacks are selected.
 - Native timeout normalization now rejects non-finite values before C++ integer
   conversion.
-- Package docs sync and pack dry-runs restore README contents without leaving
-  transient backup artifacts.
 
 ## 0.2.0 - 2026-05-22
 
@@ -92,19 +121,11 @@ The format follows Keep a Changelog and the project adheres to SemVer.
   context.
 - Named Analytics instances now share identity with matching named Experiment
   clients.
-- Example Android launch script now defaults to the standard local Android SDK
-  path when SDK environment variables are missing.
-- Example smoke test now asserts resolved variants through stable accessibility
-  identifiers.
 
 ### Changed
 
 - README, package metadata, and platform support documentation now reflect
   native Nitro support on iOS and Android plus web-compatible fallbacks.
-- GitHub release publishing workflow now supports release-triggered publishing
-  and manual dry-run recovery.
-- Removed the generated app-icon script; committed iOS and Android app icon
-  assets remain the source of truth.
 
 ## 0.1.0 - 2026-05-22
 
@@ -116,8 +137,6 @@ The format follows Keep a Changelog and the project adheres to SemVer.
 - Experiment API compatible with `amplitude-rn-experiment` (initialize, start, fetch, variant, exposure, …).
 - Compatibility import subpaths: `react-native-nitro-amplitude/analytics` and `react-native-nitro-amplitude/experiment`.
 - Native storage and HTTP transport defaults via Nitro JSI instead of JS fetch + in-memory maps.
-- Expo 56 example app with analytics + experiment demo screen.
-- Monorepo scripts aligned with other `react-native-nitro-*` packages (`check`, `release:preflight`, example gates).
 
 ### Notes
 

@@ -74,7 +74,7 @@ function createWorkerHybrid() {
         requestId: string,
         url: string,
         _method: string,
-        _headersJson: string,
+        _headers: Record<string, string>,
         body: string,
       ) => {
         setTimeout(() => {
@@ -454,7 +454,7 @@ describe("react-native-nitro-amplitude", () => {
       expect.stringMatching(/^req_/),
       "https://example.com",
       "POST",
-      '{"authorization":"redacted"}',
+      { authorization: "redacted" },
       '{"event":"demo"}',
       1000,
     );

@@ -12,9 +12,11 @@ import java.util.Locale
 import java.util.concurrent.Executors
 
 object AndroidAmplitudeAdapter {
+  private const val DEFAULT_OPTIONS_JSON = "{}"
+
   private var appContext: Context? = null
   private val executor = Executors.newSingleThreadExecutor()
-  private var cachedContextJson: String = "{}"
+  @Volatile private var cachedDefaultContextJson: String? = null
 
   @JvmStatic
   fun setContext(context: Context) {
@@ -32,11 +34,16 @@ object AndroidAmplitudeAdapter {
 
   @JvmStatic
   fun prefetchContext() {
-    executor.execute { cachedContextJson = buildApplicationContextJson("{}") }
+    executor.execute {
+      cachedDefaultContextJson = buildApplicationContextJson(DEFAULT_OPTIONS_JSON)
+    }
   }
 
   @JvmStatic
   fun getApplicationContextJson(optionsJson: String): String {
+    if (optionsJson == DEFAULT_OPTIONS_JSON) {
+      cachedDefaultContextJson?.let { return it }
+    }
     return buildApplicationContextJson(optionsJson)
   }
 
@@ -110,28 +117,34 @@ object AndroidAmplitudeAdapter {
     body: String,
     timeoutMillis: Int,
   ): Array<String> {
-    val connection = (URL(url).openConnection() as HttpURLConnection).apply {
-      requestMethod = method
-      connectTimeout = timeoutMillis
-      readTimeout = timeoutMillis
-      doInput = true
-      val headers = try {
-        JSONObject(headersJson)
-      } catch (_: Exception) {
-        JSONObject()
+    val connection = try {
+      (URL(url).openConnection() as HttpURLConnection).apply {
+        requestMethod = method
+        connectTimeout = timeoutMillis
+        readTimeout = timeoutMillis
+        doInput = true
+        val headers = try {
+          JSONObject(headersJson)
+        } catch (_: Exception) {
+          JSONObject()
+        }
+        val keys = headers.keys()
+        while (keys.hasNext()) {
+          val key = keys.next()
+          setRequestProperty(key, headers.optString(key))
+        }
+        if (body.isNotEmpty()) {
+          doOutput = true
+        }
       }
-      val keys = headers.keys()
-      while (keys.hasNext()) {
-        val key = keys.next()
-        setRequestProperty(key, headers.optString(key))
-      }
-      if (body.isNotEmpty()) {
-        doOutput = true
-        outputStream.use { stream -> stream.write(body.toByteArray()) }
-      }
+    } catch (error: Exception) {
+      return arrayOf("0", "", error.message ?: "HTTP connection setup failed")
     }
 
     return try {
+      if (body.isNotEmpty()) {
+        connection.outputStream.use { stream -> stream.write(body.toByteArray()) }
+      }
       val status = connection.responseCode
       val stream = if (status >= 400) connection.errorStream else connection.inputStream
       val responseBody = stream?.let {

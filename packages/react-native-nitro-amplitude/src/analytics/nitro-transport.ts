@@ -11,7 +11,10 @@ export class NitroTransport extends BaseTransport implements Transport {
     this.customHeaders = customHeaders;
   }
 
-  async send(serverUrl: string, payload: Payload): Promise<Response | null> {
+  override async send(
+    serverUrl: string,
+    payload: Payload,
+  ): Promise<Response | null> {
     assertNetworkEnabled();
     const response = await nitroHttpClient.request(
       serverUrl,

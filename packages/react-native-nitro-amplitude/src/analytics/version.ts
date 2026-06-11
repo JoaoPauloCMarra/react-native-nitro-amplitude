@@ -1,1 +1,3 @@
-export const VERSION = "1.6.0";
+import { PACKAGE_VERSION } from "../package-version";
+
+export const VERSION = PACKAGE_VERSION;

@@ -158,7 +158,9 @@ export class LoadStoreCache<V> {
 
   public putAll(values: Record<string, V>): void {
     for (const key of Object.keys(values)) {
-      this.cache[key] = values[key];
+      const value = values[key];
+      if (value === undefined) continue;
+      this.cache[key] = value;
     }
   }
 

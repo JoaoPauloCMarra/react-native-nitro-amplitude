@@ -8,10 +8,15 @@ export interface AmplitudeWorker extends HybridObject<{
     requestId: string,
     url: string,
     method: string,
-    headersJson: string,
+    headers: Record<string, string>,
     body: string,
     timeoutMillis: number,
   ): void;
+  /**
+   * Cancels a request that is still queued. Requests already handed to the
+   * platform HTTP layer are not interrupted; they settle within their timeout
+   * and their completion callback still fires.
+   */
   cancel(requestId: string): void;
   addOnComplete(
     callback: (

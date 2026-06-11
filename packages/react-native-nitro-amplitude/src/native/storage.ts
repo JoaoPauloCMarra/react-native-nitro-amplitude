@@ -2,6 +2,18 @@ import type { Storage as AnalyticsStorage } from "@amplitude/analytics-core";
 import type { Storage as ExperimentStorage } from "../experiment/types/storage";
 import { getAmplitudeStorage } from "./hybrid";
 
+export const BATCH_MISSING_SENTINEL = "__nitro_amplitude_batch_missing__::v1";
+
+export function getBatchValues(
+  keys: string[],
+  persist: boolean,
+): (string | undefined)[] {
+  const storage = getAmplitudeStorage();
+  return storage
+    .getBatch(keys, persist)
+    .map((value) => (value === BATCH_MISSING_SENTINEL ? undefined : value));
+}
+
 function namespaceKey(namespace: string, key: string): string {
   return `${namespace}::${key}`;
 }

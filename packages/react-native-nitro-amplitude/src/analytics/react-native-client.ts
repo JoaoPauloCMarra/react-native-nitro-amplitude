@@ -116,7 +116,7 @@ export class AmplitudeReactNative
 
   // @ts-ignore
   config: ReactNativeConfig;
-  userProperties: Record<string, unknown> | undefined;
+  override userProperties: Record<string, unknown> | undefined;
 
   init(apiKey = "", userId?: string, options?: ReactNativeOptions) {
     this.initPromise =
@@ -126,7 +126,9 @@ export class AmplitudeReactNative
       });
     return returnWrapper(this.initPromise);
   }
-  protected async _init(options: ReactNativeOptions & { apiKey: string }) {
+  protected override async _init(
+    options: ReactNativeOptions & { apiKey: string },
+  ) {
     // Step 0: Block concurrent initialization
     if (this.initializing) {
       return;
@@ -314,7 +316,7 @@ export class AmplitudeReactNative
     setConnectorDeviceId(deviceId, this.getConnectorInstanceName());
   }
 
-  identify(identify: IIdentify, eventOptions?: EventOptions) {
+  override identify(identify: IIdentify, eventOptions?: EventOptions) {
     if (eventOptions?.user_id) {
       this.setUserId(eventOptions.user_id);
     }
@@ -577,7 +579,7 @@ export class AmplitudeReactNative
     this.config.lastEventTime = eventTime;
   }
 
-  async process(event: Event): Promise<Result> {
+  override async process(event: Event): Promise<Result> {
     if (!this.config.optOut) {
       const eventTime = event.time ?? this.currentTimeMillis();
       if (event.time === undefined) {

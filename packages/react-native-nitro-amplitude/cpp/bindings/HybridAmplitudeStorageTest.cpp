@@ -91,13 +91,13 @@ void testWorkerFallbacks() {
 
   bool invalidRequestThrown = false;
   try {
-    worker->enqueue("", "https://example.com", "GET", "{}", "", 1000);
+    worker->enqueue("", "https://example.com", "GET", {}, "", 1000);
   } catch (const std::runtime_error&) {
     invalidRequestThrown = true;
   }
   assert(invalidRequestThrown);
 
-  worker->enqueue("req-1", "https://example.com", "GET", "{}", "", std::numeric_limits<double>::infinity());
+  worker->enqueue("req-1", "https://example.com", "GET", {{"content-type", "application/json"}}, "", std::numeric_limits<double>::infinity());
 
   for (int i = 0; i < 50 && !receivedUnavailable; ++i) {
     std::this_thread::sleep_for(std::chrono::milliseconds(10));

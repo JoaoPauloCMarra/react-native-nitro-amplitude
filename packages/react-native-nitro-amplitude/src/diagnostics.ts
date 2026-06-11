@@ -17,6 +17,7 @@ export type NativeStartupDiagnostics = {
   storageAvailable: boolean;
   workerAvailable: boolean;
   nativeAvailable: boolean;
+  legacyMigrationSupported: boolean;
   lastError?: {
     code: string;
     message: string;
@@ -54,6 +55,7 @@ export function getNativeStartupDiagnostics(): NativeStartupDiagnostics {
     storageAvailable: false,
     workerAvailable: false,
     nativeAvailable: false,
+    legacyMigrationSupported: false,
     lastError: lastNativeError,
   };
 

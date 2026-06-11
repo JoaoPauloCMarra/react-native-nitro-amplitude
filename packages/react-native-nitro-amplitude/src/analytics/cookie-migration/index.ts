@@ -39,8 +39,8 @@ export const parseOldCookies = async (
   return {
     deviceId,
     userId: decode(userId ?? ""),
-    sessionId: parseTime(sessionId),
-    lastEventTime: parseTime(lastEventTime),
+    sessionId: parseTime(sessionId ?? ""),
+    lastEventTime: parseTime(lastEventTime ?? ""),
     optOut: parseOptOut(optOut),
   };
 };

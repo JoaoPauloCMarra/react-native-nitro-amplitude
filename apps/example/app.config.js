@@ -1,4 +1,4 @@
-{
+module.exports = {
   "expo": {
     "name": "Nitro Amplitude",
     "slug": "nitro-amplitude-example",
@@ -52,4 +52,4 @@
       "typedRoutes": true
     }
   }
-}
+};

@@ -244,7 +244,10 @@ export class DryRunHttpClient implements HttpClient {
 }
 
 export class DryRunTransport extends BaseTransport implements Transport {
-  async send(serverUrl: string, payload: Payload): Promise<Response | null> {
+  override async send(
+    serverUrl: string,
+    payload: Payload,
+  ): Promise<Response | null> {
     dryRunEvents.push({
       serverUrl,
       payload: { ...payload },

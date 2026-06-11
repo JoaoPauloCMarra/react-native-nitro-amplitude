@@ -1,11 +1,38 @@
 #include "AndroidAmplitudeAdapterCpp.hpp"
 
+#include <cstdio>
+
 namespace NitroAmplitude {
 
 using namespace facebook::jni;
 using JavaStringArray = JArrayClass<jstring>;
 
 namespace {
+
+std::string escapeJsonString(const std::string& value) {
+  std::string escaped = "\"";
+  for (const char character : value) {
+    switch (character) {
+      case '"': escaped += "\\\""; break;
+      case '\\': escaped += "\\\\"; break;
+      case '\b': escaped += "\\b"; break;
+      case '\f': escaped += "\\f"; break;
+      case '\n': escaped += "\\n"; break;
+      case '\r': escaped += "\\r"; break;
+      case '\t': escaped += "\\t"; break;
+      default:
+        if (static_cast<unsigned char>(character) < 0x20) {
+          char buffer[8];
+          std::snprintf(buffer, sizeof(buffer), "\\u%04x", character);
+          escaped += buffer;
+        } else {
+          escaped += character;
+        }
+    }
+  }
+  escaped += "\"";
+  return escaped;
+}
 
 std::vector<std::string> fromJavaStringArray(alias_ref<JavaStringArray> values) {
   if (!values) {
@@ -19,6 +46,22 @@ std::vector<std::string> fromJavaStringArray(alias_ref<JavaStringArray> values) 
     result.push_back(current ? current->toStdString() : std::string());
   }
   return result;
+}
+
+std::string toJsonObject(const std::unordered_map<std::string, std::string>& entries) {
+  std::string json = "{";
+  bool first = true;
+  for (const auto& entry : entries) {
+    if (!first) {
+      json += ",";
+    }
+    first = false;
+    json += escapeJsonString(entry.first);
+    json += ":";
+    json += escapeJsonString(entry.second);
+  }
+  json += "}";
+  return json;
 }
 
 } // namespace
@@ -98,7 +141,7 @@ std::vector<std::string> AndroidAmplitudeAdapterCpp::getAllDiskKeys() {
 HttpResult AndroidAmplitudeAdapterCpp::performHttpRequest(
     const std::string& url,
     const std::string& method,
-    const std::string& headersJson,
+    const std::unordered_map<std::string, std::string>& headers,
     const std::string& body,
     int timeoutMillis) {
   static auto requestMethod = AndroidAmplitudeAdapterJava::javaClassStatic()->getStaticMethod<JavaStringArray(
@@ -109,14 +152,21 @@ HttpResult AndroidAmplitudeAdapterCpp::performHttpRequest(
       AndroidAmplitudeAdapterJava::javaClassStatic(),
       url,
       method,
-      headersJson,
+      toJsonObject(headers),
       body,
       timeoutMillis));
   HttpResult httpResult;
   if (result.size() >= 3) {
-    httpResult.statusCode = std::stoi(result[0]);
+    const std::string& status = result[0];
+    const bool numeric = !status.empty() &&
+        status.find_first_not_of("0123456789") == std::string::npos &&
+        status.size() <= 9;
+    httpResult.statusCode = numeric ? std::stoi(status) : 0;
     httpResult.body = result[1];
     httpResult.error = result[2];
+    if (!numeric && httpResult.error.empty()) {
+      httpResult.error = "Invalid HTTP status from Android adapter";
+    }
   } else {
     httpResult.error = "Invalid HTTP response from Android adapter";
   }

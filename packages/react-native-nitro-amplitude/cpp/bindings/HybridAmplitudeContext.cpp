@@ -1,39 +1,15 @@
 #include "HybridAmplitudeContext.hpp"
 
-#ifndef NITRO_AMPLITUDE_DISABLE_PLATFORM_ADAPTER
-#if __APPLE__
-#include "../../ios/IOSAmplitudeAdapterCpp.hpp"
-#elif __ANDROID__
-#include "../../android/src/main/cpp/AndroidAmplitudeAdapterCpp.hpp"
-#include <fbjni/fbjni.h>
-#endif
-#endif
+#include "../core/PlatformAdapterFactory.hpp"
 
 #include <cmath>
 #include <stdexcept>
 
 namespace margelo::nitro::NitroAmplitude {
 
-namespace {
-std::shared_ptr<::NitroAmplitude::NativeAmplitudeAdapter> createPlatformAdapter() {
-#ifndef NITRO_AMPLITUDE_DISABLE_PLATFORM_ADAPTER
-#if __APPLE__
-  return std::make_shared<::NitroAmplitude::IOSAmplitudeAdapterCpp>();
-#elif __ANDROID__
-  auto context = ::NitroAmplitude::AndroidAmplitudeAdapterJava::getContext();
-  return std::make_shared<::NitroAmplitude::AndroidAmplitudeAdapterCpp>(context);
-#else
-  return nullptr;
-#endif
-#else
-  return nullptr;
-#endif
-}
-} // namespace
-
 HybridAmplitudeContext::HybridAmplitudeContext()
     : HybridObject(TAG), HybridAmplitudeContextSpec() {
-  adapter_ = createPlatformAdapter();
+  adapter_ = ::NitroAmplitude::getSharedPlatformAdapter();
 }
 
 void HybridAmplitudeContext::prefetch() {

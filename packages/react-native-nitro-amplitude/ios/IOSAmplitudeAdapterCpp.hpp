@@ -29,7 +29,7 @@ public:
   HttpResult performHttpRequest(
       const std::string& url,
       const std::string& method,
-      const std::string& headersJson,
+      const std::unordered_map<std::string, std::string>& headers,
       const std::string& body,
       int timeoutMillis) override;
 };

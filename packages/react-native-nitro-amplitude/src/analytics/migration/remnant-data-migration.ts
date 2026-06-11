@@ -127,7 +127,21 @@ export default class RemnantDataMigration {
     try {
       const event = JSON.parse(legacyJsonEvent) as Event;
 
-      const { library, timestamp, uuid, api_properties } = event as any;
+      const { library, timestamp, uuid, api_properties } = event as Event & {
+        library?: { name: string; version: string };
+        timestamp?: number;
+        uuid?: string;
+        api_properties?: {
+          androidADID?: string;
+          android_app_set_id?: string;
+          ios_idfa?: string;
+          ios_idfv?: string;
+          productId?: string;
+          quantity?: number;
+          price?: number;
+          location?: { lat?: number; lng?: number } | null;
+        };
+      };
       if (library !== undefined) {
         event.library = `${library.name}/${library.version}`;
       }
@@ -170,7 +184,7 @@ export default class RemnantDataMigration {
         if (price !== undefined) {
           event.price = price;
         }
-        if (location !== undefined) {
+        if (location !== undefined && location !== null) {
           const { lat, lng } = location;
           event.location_lat = lat;
           event.location_lng = lng;
@@ -182,7 +196,12 @@ export default class RemnantDataMigration {
         $quantity: quantity,
         $price: price,
         $revenueType: revenueType,
-      } = event as any;
+      } = event as Event & {
+        $productId?: string;
+        $quantity?: number;
+        $price?: number;
+        $revenueType?: string;
+      };
       if (productId !== undefined) {
         event.productId = productId;
       }

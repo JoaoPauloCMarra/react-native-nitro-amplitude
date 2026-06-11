@@ -1,13 +1,6 @@
 #include "HybridAmplitudeStorage.hpp"
 
-#ifndef NITRO_AMPLITUDE_DISABLE_PLATFORM_ADAPTER
-#if __APPLE__
-#include "../../ios/IOSAmplitudeAdapterCpp.hpp"
-#elif __ANDROID__
-#include "../../android/src/main/cpp/AndroidAmplitudeAdapterCpp.hpp"
-#include <fbjni/fbjni.h>
-#endif
-#endif
+#include "../core/PlatformAdapterFactory.hpp"
 
 #include <stdexcept>
 
@@ -15,26 +8,11 @@ namespace margelo::nitro::NitroAmplitude {
 
 namespace {
 constexpr auto kBatchMissingSentinel = "__nitro_amplitude_batch_missing__::v1";
-
-std::shared_ptr<::NitroAmplitude::NativeAmplitudeAdapter> createPlatformAdapter() {
-#ifndef NITRO_AMPLITUDE_DISABLE_PLATFORM_ADAPTER
-#if __APPLE__
-  return std::make_shared<::NitroAmplitude::IOSAmplitudeAdapterCpp>();
-#elif __ANDROID__
-  auto context = ::NitroAmplitude::AndroidAmplitudeAdapterJava::getContext();
-  return std::make_shared<::NitroAmplitude::AndroidAmplitudeAdapterCpp>(context);
-#else
-  return nullptr;
-#endif
-#else
-  return nullptr;
-#endif
-}
 } // namespace
 
 HybridAmplitudeStorage::HybridAmplitudeStorage()
     : HybridObject(TAG), HybridAmplitudeStorageSpec() {
-  adapter_ = createPlatformAdapter();
+  adapter_ = ::NitroAmplitude::getSharedPlatformAdapter();
 }
 
 void HybridAmplitudeStorage::set(
@@ -150,6 +128,15 @@ std::vector<std::string> HybridAmplitudeStorage::getBatch(
     values.push_back(value.value_or(kBatchMissingSentinel));
   }
   return values;
+}
+
+size_t HybridAmplitudeStorage::getExternalMemorySize() noexcept {
+  std::lock_guard<std::mutex> lock(memoryMutex_);
+  size_t total = 0;
+  for (const auto& entry : memoryStore_) {
+    total += entry.first.size() + entry.second.size();
+  }
+  return total;
 }
 
 void HybridAmplitudeStorage::removeBatch(

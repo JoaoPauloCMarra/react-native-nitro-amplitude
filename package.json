@@ -22,7 +22,7 @@
     "test:types": "bun run --cwd packages/react-native-nitro-amplitude test:types",
     "test": "bun run --cwd packages/react-native-nitro-amplitude test",
     "test:coverage": "bun run --cwd packages/react-native-nitro-amplitude test:coverage",
-    "benchmark": "bun run --cwd packages/react-native-nitro-amplitude benchmark",
+    "benchmark": "bun run build && bun run --cwd packages/react-native-nitro-amplitude benchmark",
     "test:cpp": "bun run --cwd packages/react-native-nitro-amplitude test:cpp",
     "test:cpp:sanitize": "bun run --cwd packages/react-native-nitro-amplitude test:cpp:sanitize",
     "test:cpp:coverage": "bun run --cwd packages/react-native-nitro-amplitude test:cpp:coverage",

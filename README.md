@@ -52,9 +52,10 @@ Add the plugin before prebuilding native iOS and Android apps:
 }
 ```
 
-The plugin injects Android application context setup for the native
-`AmplitudeContext`, `AmplitudeStorage`, and `AmplitudeWorker` HybridObjects.
-Web-only apps do not need the plugin.
+Android context setup is owned by the package. Native apps receive an Android
+manifest initializer, and the Expo plugin is kept as the package registration
+point for CNG projects. Apps should not edit `MainApplication` to call
+`AndroidAmplitudeAdapter.setContext(this)`.
 
 ## Analytics
 
@@ -254,8 +255,8 @@ Architecture notes:
   `flush()` result metadata.
 - **Experiment variant missing:** call `start()` or `fetch()` before `variant()`
   unless you intentionally rely on fallback variants.
-- **Android context errors:** ensure the Expo plugin is configured and native
-  code was rebuilt after adding it.
+- **Android context errors:** rebuild the native app after installing or
+  upgrading the package so the Android manifest initializer is merged.
 
 ## Development
 

@@ -1,6 +1,6 @@
 {
   "name": "react-native-nitro-amplitude",
-  "version": "0.5.3",
+  "version": "0.5.4",
   "description": "Amplitude Analytics and Experiment SDK for React Native powered by Nitro Modules and C++ on native platforms, with web-compatible fetch and storage fallbacks.",
   "main": "lib/commonjs/index.js",
   "module": "lib/module/index.js",
@@ -40,6 +40,7 @@
     "ios",
     "nitrogen",
     "nitro.json",
+    "CHANGELOG.md",
     "*.podspec",
     "app.plugin.js",
     ".watchmanconfig",

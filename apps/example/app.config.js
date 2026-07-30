@@ -34,9 +34,6 @@ module.exports = {
       [
         "expo-build-properties",
         {
-          "ios": {
-            "buildReactNativeFromSource": true
-          },
           "android": {
             "usePrecompiledHeaders": true
           }

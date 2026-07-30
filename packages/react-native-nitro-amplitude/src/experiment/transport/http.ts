@@ -13,7 +13,8 @@ import unfetch from "unfetch";
 
 import { HttpClient, SimpleResponse } from "../types/transport";
 
-const getFetch = () => safeGlobal.fetch || unfetch;
+const runtimeGlobal = safeGlobal ?? globalThis;
+const getFetch = () => runtimeGlobal.fetch || unfetch;
 
 type AbortControllerLike = {
   signal: AbortSignal;
@@ -25,7 +26,7 @@ type GlobalScopeWithAbortController = typeof globalThis & {
 };
 
 const getAbortController = (): AbortControllerLike | undefined => {
-  const scope = safeGlobal as GlobalScopeWithAbortController;
+  const scope = runtimeGlobal as GlobalScopeWithAbortController;
   return typeof scope.AbortController === "function"
     ? new scope.AbortController()
     : undefined;
@@ -40,17 +41,17 @@ const timeout = (
     return promise;
   }
   return new Promise(function (resolve, reject) {
-    const timeoutHandle = safeGlobal.setTimeout(function () {
+    const timeoutHandle = runtimeGlobal.setTimeout(function () {
       abortController?.abort();
       reject(Error("Request timeout after " + timeoutMillis + " milliseconds"));
     }, timeoutMillis);
     promise.then(
       (value) => {
-        safeGlobal.clearTimeout(timeoutHandle);
+        runtimeGlobal.clearTimeout(timeoutHandle);
         resolve(value);
       },
       (error) => {
-        safeGlobal.clearTimeout(timeoutHandle);
+        runtimeGlobal.clearTimeout(timeoutHandle);
         reject(error);
       },
     );

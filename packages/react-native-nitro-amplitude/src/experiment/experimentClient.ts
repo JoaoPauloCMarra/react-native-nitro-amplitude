@@ -111,8 +111,7 @@ export class ExperimentClient implements Client {
   private user: ExperimentUser = {};
   private readonly defaultUserProvider: DefaultUserProvider;
   private readonly userSessionExposureTracker:
-    | UserSessionExposureTracker
-    | undefined;
+    UserSessionExposureTracker | undefined;
   private retriesBackoff: Backoff | undefined;
   private readonly poller: Poller = new Poller(
     () => this.pollFlags(),

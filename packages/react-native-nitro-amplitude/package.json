@@ -1,6 +1,6 @@
 {
   "name": "react-native-nitro-amplitude",
-  "version": "0.5.4",
+  "version": "0.5.5",
   "description": "Amplitude Analytics and Experiment SDK for React Native powered by Nitro Modules and C++ on native platforms, with web-compatible fetch and storage fallbacks.",
   "main": "lib/commonjs/index.js",
   "module": "lib/module/index.js",
@@ -64,7 +64,7 @@
     "format:check": "bunx prettier --check \"src/**/*.{ts,tsx}\" \"../../README.md\" \"../../CHANGELOG.md\"",
     "typecheck": "tsc --noEmit",
     "test:types": "tsc --noEmit -p tsconfig.types.json",
-    "test": "jest",
+    "test": "jest --runInBand",
     "test:coverage": "jest --coverage",
     "benchmark": "node scripts/benchmark-check.js",
     "test:cpp": "node scripts/test-cpp.js",
@@ -102,21 +102,21 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dependencies": {
-    "@amplitude/analytics-connector": "^1.6.4",
-    "@amplitude/analytics-core": "2.49.0",
-    "@amplitude/experiment-core": "^0.13.1",
+    "@amplitude/analytics-connector": "^1.6.6",
+    "@amplitude/analytics-core": "2.54.1",
+    "@amplitude/experiment-core": "^0.13.4",
     "@amplitude/ua-parser-js": "^0.7.33",
     "tslib": "^2.8.1",
     "unfetch": "^4.2.0"
   },
   "devDependencies": {
-    "@react-native/babel-preset": "^0.85.3",
-    "@types/react": "~19.2.0"
+    "@react-native/babel-preset": "^0.86.2",
+    "@types/react": "~19.2.17"
   },
   "peerDependencies": {
     "react": ">=18.2.0",
     "react-native": ">=0.75.0",
-    "react-native-nitro-modules": ">=0.35.7"
+    "react-native-nitro-modules": ">=0.36.4 <0.37.0"
   },
   "react-native-builder-bob": {
     "source": "src",

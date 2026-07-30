@@ -19,6 +19,7 @@ import {
   Event,
   Result,
   ReactNativeClient,
+  NavigationState,
   Campaign,
   IdentityEventSender,
   getAnalyticsConnector,
@@ -112,6 +113,7 @@ export class AmplitudeReactNative
   private lastFlushTime: number | undefined;
   private lastFlushDurationMillis: number | undefined;
   private lastFlushError: string | undefined;
+  private lastScreenName: string | undefined;
   explicitSessionId: number | undefined;
 
   // @ts-ignore
@@ -126,6 +128,47 @@ export class AmplitudeReactNative
       });
     return returnWrapper(this.initPromise);
   }
+
+  trackScreenView(
+    screenName: string,
+    eventProperties?: Record<string, unknown>,
+    eventOptions?: EventOptions,
+  ) {
+    return this.track(
+      "[Amplitude] Screen Viewed",
+      {
+        "[Amplitude] Screen Name": screenName,
+        ...eventProperties,
+      },
+      eventOptions,
+    );
+  }
+
+  trackScreenViewOnNavigationStateChange(
+    navigationState: NavigationState | undefined,
+    eventProperties?: Record<string, unknown>,
+    eventOptions?: EventOptions,
+  ) {
+    let currentState = navigationState;
+    let screenName: string | undefined;
+
+    while (currentState) {
+      const route = currentState.routes[currentState.index];
+      if (!route) {
+        return returnWrapper(Promise.resolve(undefined));
+      }
+      screenName = route.name;
+      currentState = route.state;
+    }
+
+    if (!screenName || screenName === this.lastScreenName) {
+      return returnWrapper(Promise.resolve(undefined));
+    }
+
+    this.lastScreenName = screenName;
+    return this.trackScreenView(screenName, eventProperties, eventOptions);
+  }
+
   protected override async _init(
     options: ReactNativeOptions & { apiKey: string },
   ) {
@@ -134,6 +177,7 @@ export class AmplitudeReactNative
       return;
     }
     this.initializing = true;
+    this.lastScreenName = undefined;
     this.explicitSessionId = options.sessionId;
     let appStateHandlerInstalled = false;
 
@@ -218,6 +262,7 @@ export class AmplitudeReactNative
     this.q = [];
     this.dispatchQ = [];
     this.isReady = false;
+    this.lastScreenName = undefined;
 
     const connectorInstanceName = this.config
       ? this.getConnectorInstanceName()
@@ -711,6 +756,18 @@ export const createInstance = (): AmplitudeReactNativeClient => {
     track: debugWrapper(
       client.track.bind(client),
       "track",
+      getClientLogConfig(client),
+      getClientStates(client, ["config.apiKey", "timeline.queue.length"]),
+    ),
+    trackScreenView: debugWrapper(
+      client.trackScreenView.bind(client),
+      "trackScreenView",
+      getClientLogConfig(client),
+      getClientStates(client, ["config.apiKey", "timeline.queue.length"]),
+    ),
+    trackScreenViewOnNavigationStateChange: debugWrapper(
+      client.trackScreenViewOnNavigationStateChange.bind(client),
+      "trackScreenViewOnNavigationStateChange",
       getClientLogConfig(client),
       getClientStates(client, ["config.apiKey", "timeline.queue.length"]),
     ),

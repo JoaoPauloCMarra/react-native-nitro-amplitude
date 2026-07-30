@@ -11,13 +11,10 @@ export type AmplitudeDiagnosticFailureKind =
   | "unknown";
 
 export type AmplitudeDiagnosticOperation =
-  | "analytics_upload"
-  | "experiment_fetch";
+  "analytics_upload" | "experiment_fetch";
 
 export type AmplitudeDiagnosticSurface =
-  | "analytics_upload"
-  | "experiment_variant_fetch"
-  | "experiment_flag_fetch";
+  "analytics_upload" | "experiment_variant_fetch" | "experiment_flag_fetch";
 
 export type AmplitudeDiagnosticFailure = {
   operation: AmplitudeDiagnosticOperation;

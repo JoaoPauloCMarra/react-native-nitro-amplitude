@@ -48,10 +48,42 @@ type CreateInstanceHasTrack = Assert<
 type WebCreateInstanceHasTrack = Assert<
   Extends<WebCreateInstanceClient["track"], Types.ReactNativeClient["track"]>
 >;
+type CreateInstanceHasTrackScreenView = Assert<
+  Extends<
+    CreateInstanceClient["trackScreenView"],
+    Types.ReactNativeClient["trackScreenView"]
+  >
+>;
+type WebCreateInstanceHasTrackScreenView = Assert<
+  Extends<
+    WebCreateInstanceClient["trackScreenView"],
+    Types.ReactNativeClient["trackScreenView"]
+  >
+>;
+type CreateInstanceHasNavigationScreenView = Assert<
+  Extends<
+    CreateInstanceClient["trackScreenViewOnNavigationStateChange"],
+    Types.ReactNativeClient["trackScreenViewOnNavigationStateChange"]
+  >
+>;
+type WebCreateInstanceHasNavigationScreenView = Assert<
+  Extends<
+    WebCreateInstanceClient["trackScreenViewOnNavigationStateChange"],
+    Types.ReactNativeClient["trackScreenViewOnNavigationStateChange"]
+  >
+>;
 const createInstanceHasTrack: CreateInstanceHasTrack = true;
 const webCreateInstanceHasTrack: WebCreateInstanceHasTrack = true;
+const createInstanceHasTrackScreenView: CreateInstanceHasTrackScreenView = true;
+const webCreateInstanceHasTrackScreenView: WebCreateInstanceHasTrackScreenView = true;
+const createInstanceHasNavigationScreenView: CreateInstanceHasNavigationScreenView = true;
+const webCreateInstanceHasNavigationScreenView: WebCreateInstanceHasNavigationScreenView = true;
 void createInstanceHasTrack;
 void webCreateInstanceHasTrack;
+void createInstanceHasTrackScreenView;
+void webCreateInstanceHasTrackScreenView;
+void createInstanceHasNavigationScreenView;
+void webCreateInstanceHasNavigationScreenView;
 
 prefetchNativeContext();
 

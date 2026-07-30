@@ -434,6 +434,21 @@ describe("react-native-nitro-amplitude", () => {
     expect(await memory.get("flag")).toBeNull();
   });
 
+  it("shares web memory storage across instances in the same namespace", async () => {
+    const first = new WebMemoryStorage("shared");
+    const second = new WebMemoryStorage("shared");
+    const isolated = new WebMemoryStorage("isolated");
+
+    await first.put("flag", "on");
+
+    expect(await second.get("flag")).toBe("on");
+    expect(await isolated.get("flag")).toBeNull();
+
+    await second.reset();
+
+    expect(await first.get("flag")).toBeNull();
+  });
+
   it("bridges Nitro HTTP requests through the worker", async () => {
     jest.useFakeTimers();
 
@@ -685,6 +700,47 @@ describe("react-native-nitro-amplitude", () => {
       });
       expect(result.sent).toBeGreaterThanOrEqual(1);
       expect(analytics.getDiagnostics().queueSize).toBe(0);
+    } finally {
+      analytics.shutdown();
+    }
+  });
+
+  it("tracks screen views and deduplicates unchanged navigation state", async () => {
+    const analytics = createInstance();
+    try {
+      await analytics.init("analytics-key", "screen-user", {
+        instanceName: "screen-views",
+        migrateLegacyData: false,
+        transportProvider: dryRunTransport,
+      }).promise;
+
+      const directResult = analytics.trackScreenView("Home").promise;
+      const navigationState = {
+        index: 0,
+        routes: [
+          {
+            name: "Root",
+            state: {
+              index: 0,
+              routes: [{ name: "Details" }],
+            },
+          },
+        ],
+      };
+      const navigationResult =
+        analytics.trackScreenViewOnNavigationStateChange(
+          navigationState,
+        ).promise;
+      const duplicateResult =
+        analytics.trackScreenViewOnNavigationStateChange(
+          navigationState,
+        ).promise;
+
+      await analytics.flushWithResult();
+
+      await expect(directResult).resolves.toMatchObject({ code: 202 });
+      await expect(navigationResult).resolves.toMatchObject({ code: 202 });
+      await expect(duplicateResult).resolves.toBeUndefined();
     } finally {
       analytics.shutdown();
     }

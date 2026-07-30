@@ -125,27 +125,29 @@ export class NitroExperimentStorage implements ExperimentStorage {
 }
 
 export class NitroMemoryStorage implements ExperimentStorage {
-  private readonly values = new Map<string, string>();
+  private static readonly values = new Map<string, string>();
 
   constructor(private readonly namespace: string) {}
 
   async get(key: string): Promise<string | null> {
-    return this.values.get(namespaceKey(this.namespace, key)) ?? null;
+    return (
+      NitroMemoryStorage.values.get(namespaceKey(this.namespace, key)) ?? null
+    );
   }
 
   async put(key: string, value: string): Promise<void> {
-    this.values.set(namespaceKey(this.namespace, key), value);
+    NitroMemoryStorage.values.set(namespaceKey(this.namespace, key), value);
   }
 
   async delete(key: string): Promise<void> {
-    this.values.delete(namespaceKey(this.namespace, key));
+    NitroMemoryStorage.values.delete(namespaceKey(this.namespace, key));
   }
 
   async reset(): Promise<void> {
     const prefix = `${this.namespace}::`;
-    for (const key of this.values.keys()) {
+    for (const key of NitroMemoryStorage.values.keys()) {
       if (key.startsWith(prefix)) {
-        this.values.delete(key);
+        NitroMemoryStorage.values.delete(key);
       }
     }
   }

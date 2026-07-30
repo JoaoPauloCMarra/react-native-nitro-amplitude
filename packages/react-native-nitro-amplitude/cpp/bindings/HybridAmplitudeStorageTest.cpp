@@ -7,6 +7,7 @@
 
 #include <cassert>
 #include <chrono>
+#include <cmath>
 #include <iostream>
 #include <limits>
 #include <stdexcept>
@@ -68,14 +69,29 @@ void testContextFallbacks() {
   assert(context->getLegacyEventsJson("default", "events").empty());
 
   context->removeLegacyEvent("default", "events", 1);
+  context->removeLegacyEvent(
+      "default",
+      "events",
+      static_cast<double>(std::numeric_limits<int64_t>::min()));
 
-  bool invalidEventIdThrown = false;
-  try {
-    context->removeLegacyEvent("default", "events", std::numeric_limits<double>::quiet_NaN());
-  } catch (const std::runtime_error&) {
-    invalidEventIdThrown = true;
+  const double invalidEventIds[] = {
+      std::numeric_limits<double>::quiet_NaN(),
+      std::numeric_limits<double>::infinity(),
+      1.5,
+      std::ldexp(1.0, 63),
+      std::nextafter(
+          -std::ldexp(1.0, 63),
+          -std::numeric_limits<double>::infinity()),
+  };
+  for (const double invalidEventId : invalidEventIds) {
+    bool invalidEventIdThrown = false;
+    try {
+      context->removeLegacyEvent("default", "events", invalidEventId);
+    } catch (const std::runtime_error&) {
+      invalidEventIdThrown = true;
+    }
+    assert(invalidEventIdThrown);
   }
-  assert(!invalidEventIdThrown);
 }
 
 void testWorkerFallbacks() {

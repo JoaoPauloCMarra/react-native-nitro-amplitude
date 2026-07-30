@@ -4,6 +4,8 @@ import { safeGlobal } from "@amplitude/experiment-core";
 import { Exposure, ExposureTrackingProvider } from "../types/exposure";
 import { ExperimentUser, ExperimentUserProvider } from "../types/user";
 
+const runtimeGlobal = safeGlobal ?? globalThis;
+
 type UserProperties = Record<
   string,
   string | number | boolean | (string | number | boolean)[]
@@ -19,10 +21,11 @@ export class ConnectorUserProvider implements ExperimentUserProvider {
     const identity = this.identityStore.getIdentity();
     if (!identity.userId && !identity.deviceId) {
       return new Promise<void>((resolve, reject) => {
-        let timeoutHandle: ReturnType<typeof safeGlobal.setTimeout> | undefined;
+        let timeoutHandle:
+          ReturnType<typeof runtimeGlobal.setTimeout> | undefined;
         const cleanup = () => {
           if (timeoutHandle != null) {
-            safeGlobal.clearTimeout(timeoutHandle);
+            runtimeGlobal.clearTimeout(timeoutHandle);
             timeoutHandle = undefined;
           }
           this.identityStore.removeIdentityListener(listener);
@@ -32,7 +35,7 @@ export class ConnectorUserProvider implements ExperimentUserProvider {
           resolve();
         };
 
-        timeoutHandle = safeGlobal.setTimeout(() => {
+        timeoutHandle = runtimeGlobal.setTimeout(() => {
           cleanup();
           reject(
             Error(
@@ -53,8 +56,7 @@ export class ConnectorUserProvider implements ExperimentUserProvider {
   getUserSync(): ExperimentUser {
     const identity = this.identityStore.getIdentity();
     const userProperties = identity.userProperties as
-      | UserProperties
-      | undefined;
+      UserProperties | undefined;
     return {
       user_id: identity.userId,
       device_id: identity.deviceId,

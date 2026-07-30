@@ -4,9 +4,9 @@
 [![npm downloads](https://img.shields.io/npm/dm/react-native-nitro-amplitude?color=22c55e&label=downloads)](https://www.npmjs.com/package/react-native-nitro-amplitude)
 [![CI](https://github.com/JoaoPauloCMarra/react-native-nitro-amplitude/actions/workflows/ci.yml/badge.svg)](https://github.com/JoaoPauloCMarra/react-native-nitro-amplitude/actions/workflows/ci.yml)
 [![license](https://img.shields.io/npm/l/react-native-nitro-amplitude?color=007ec6)](https://github.com/JoaoPauloCMarra/react-native-nitro-amplitude/blob/main/LICENSE)
-[![React Native](https://img.shields.io/badge/react--native-%3E%3D0.75-61dafb)](https://reactnative.dev/)
-[![Expo](https://img.shields.io/badge/expo-SDK%2056-000020)](https://docs.expo.dev/)
-[![Nitro Modules](https://img.shields.io/badge/nitro--modules-%3E%3D0.35.7-black)](https://nitro.margelo.com/)
+[![React Native](https://img.shields.io/badge/react--native-%3E%3D0.75-61dafb)](https://reactnative.dev/docs/0.86/getting-started-without-a-framework)
+[![Expo](https://img.shields.io/badge/expo-SDK%2057-000020)](https://docs.expo.dev/versions/v57.0.0/)
+[![Nitro Modules](https://img.shields.io/badge/nitro--modules-0.36.x-black)](https://nitro.margelo.com/)
 [![TypeScript](https://img.shields.io/badge/typescript-6.0-3178c6)](https://www.typescriptlang.org/)
 
 Amplitude Analytics and Amplitude Experiment for React Native and Expo in one
@@ -22,13 +22,14 @@ through Nitro, and still works on web through fetch and storage fallbacks.
 bun add react-native-nitro-amplitude react-native-nitro-modules
 ```
 
-Peer dependencies:
+Compatibility for `0.5.5`:
 
-| Package                      | Version    |
-| ---------------------------- | ---------- |
-| `react`                      | `>=18.2.0` |
-| `react-native`               | `>=0.75.0` |
-| `react-native-nitro-modules` | `>=0.35.7` |
+| Dependency                   | Supported range    | `0.5.5` baseline |
+| ---------------------------- | ------------------ | ---------------- |
+| `react`                      | `>=18.2.0`         | `19.2.3`         |
+| `react-native`               | `>=0.75.0`         | `0.86.2`         |
+| `react-native-nitro-modules` | `>=0.36.4 <0.37.0` | `0.36.4`         |
+| Expo development builds      | SDK 57             | `~57.0.9`        |
 
 For Expo development builds:
 
@@ -38,7 +39,13 @@ bunx expo prebuild
 ```
 
 Expo Go cannot load Nitro native modules. Use an Expo development build or a
-bare app.
+bare app. Rebuild native apps after installing or upgrading this package. Bare
+iOS apps must also install pods:
+
+```sh
+cd ios
+pod install
+```
 
 ## Expo Config
 
@@ -88,6 +95,27 @@ Compatibility import:
 ```ts
 import { init, track } from "react-native-nitro-amplitude/analytics";
 ```
+
+### Screen tracking
+
+Clients created with `createInstance()` expose the current Amplitude
+screen-view contract:
+
+```ts
+import { createInstance } from "react-native-nitro-amplitude";
+
+const analytics = createInstance();
+
+analytics.trackScreenView("Checkout", {
+  step: "payment",
+});
+
+analytics.trackScreenViewOnNavigationStateChange(navigationState);
+```
+
+Navigation-state tracking records the deepest active route and suppresses
+consecutive duplicates. Reinitializing or shutting down the client resets that
+deduplication state.
 
 ## Experiment
 
@@ -201,6 +229,34 @@ hits a transient DNS, timeout, or offline fetch failure. Pass a custom
 `storage`, such as `NitroMemoryStorage`, only when process-local experiment
 state is intentional.
 
+## Error Handling
+
+Use `AmplitudeError` and `getAmplitudeErrorCode()` when application behavior
+depends on a stable error category:
+
+```ts
+import {
+  AmplitudeError,
+  getAmplitudeErrorCode,
+} from "react-native-nitro-amplitude";
+
+try {
+  await experiment.fetch();
+} catch (error) {
+  const code = getAmplitudeErrorCode(error);
+
+  if (error instanceof AmplitudeError) {
+    console.warn(code, error.message);
+  }
+}
+```
+
+Error codes cover initialization, network, storage, credentials, Experiment
+fetches, native availability, serialization, event size, timeouts, and unknown
+failures. Native startup failures are also available through
+`getLastNativeError()` and diagnostics. Do not expose raw error messages to end
+users without reviewing them for application-specific sensitive data.
+
 ## API
 
 Analytics exports:
@@ -225,12 +281,13 @@ Native HybridObject types:
 
 ## Platform Support
 
-| Platform | Status                                          |
-| -------- | ----------------------------------------------- |
-| iOS      | Native Nitro context, storage, and HTTP worker. |
-| Android  | Native Nitro context, storage, and HTTP worker. |
-| Web      | Browser fetch and storage fallbacks.            |
-| Expo     | Development builds with the config plugin.      |
+| Platform | Behavior                                                                   |
+| -------- | -------------------------------------------------------------------------- |
+| iOS      | Native Nitro context, storage, and HTTP worker; pods and rebuild required. |
+| Android  | Native Nitro context, storage, and package-owned context initializer.      |
+| Web      | Browser fetch and storage fallbacks; no native plugin required.            |
+| Expo     | SDK 57 development builds with the config plugin.                          |
+| Expo Go  | Unsupported because Expo Go cannot load custom Nitro modules.              |
 
 Architecture notes:
 
@@ -238,9 +295,11 @@ Architecture notes:
   platform adapters: Objective-C++ on iOS and Kotlin over JNI on Android.
   There is no Swift layer by design — the C++ core talks to platform APIs
   directly, avoiding extra interop hops.
-- Privacy stance: Android `adid` and `appSetId` context fields are returned
-  empty even when requested via context options. Wire your own values through
-  event enrichment if your app has consent to collect them.
+- Privacy stance: Android omits unavailable `carrier`, `idfv`, `adid`, and
+  `appSetId` context fields even when requested via context options. Wire your
+  own values through event enrichment if your app has consent to collect them.
+- Web memory storage is shared across package instances in the same JavaScript
+  process and isolated by namespace, matching native memory-storage semantics.
 - Legacy Amplitude SDK SQLite migration is not implemented yet:
   `migrateLegacyData` restores no legacy data, and
   `getNativeStartupDiagnostics().legacyMigrationSupported` reports `false`.
@@ -257,6 +316,8 @@ Architecture notes:
   unless you intentionally rely on fallback variants.
 - **Android context errors:** rebuild the native app after installing or
   upgrading the package so the Android manifest initializer is merged.
+- **Native module unavailable:** verify `react-native-nitro-modules` satisfies
+  the supported range, reinstall pods on iOS, then rebuild the app.
 
 ## Development
 

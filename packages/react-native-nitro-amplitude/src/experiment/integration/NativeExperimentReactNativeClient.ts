@@ -18,8 +18,6 @@ const turboModule = TurboModuleRegistry.get<Spec>(
   "ExperimentReactNativeClient",
 );
 const legacyModule = NativeModules.ExperimentReactNativeClient as
-  | Spec
-  | undefined
-  | null;
+  Spec | undefined | null;
 
 export default turboModule ?? legacyModule;

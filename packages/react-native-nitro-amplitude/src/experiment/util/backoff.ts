@@ -1,5 +1,7 @@
 import { safeGlobal } from "@amplitude/experiment-core";
 
+const runtimeGlobal = safeGlobal ?? globalThis;
+
 export class Backoff {
   private readonly attempts: number;
   private readonly min: number;
@@ -9,7 +11,8 @@ export class Backoff {
   private started = false;
   private done = false;
 
-  private timeoutHandle: ReturnType<typeof safeGlobal.setTimeout> | undefined;
+  private timeoutHandle:
+    ReturnType<typeof runtimeGlobal.setTimeout> | undefined;
 
   public constructor(
     attempts: number,
@@ -35,7 +38,7 @@ export class Backoff {
   public cancel(): void {
     this.done = true;
     if (this.timeoutHandle != null) {
-      safeGlobal.clearTimeout(this.timeoutHandle);
+      runtimeGlobal.clearTimeout(this.timeoutHandle);
       this.timeoutHandle = undefined;
     }
   }
@@ -48,7 +51,7 @@ export class Backoff {
     if (this.done) {
       return;
     }
-    this.timeoutHandle = safeGlobal.setTimeout(async () => {
+    this.timeoutHandle = runtimeGlobal.setTimeout(async () => {
       try {
         this.timeoutHandle = undefined;
         await fn();

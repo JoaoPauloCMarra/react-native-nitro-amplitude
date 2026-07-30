@@ -4,6 +4,31 @@ All notable changes to this project are documented in this file.
 
 The format follows Keep a Changelog and the project adheres to SemVer.
 
+## 0.5.5 - 2026-07-30
+
+### Fixed
+
+- Omitted unavailable Android context fields instead of returning empty
+  identifiers, matching the native context omission contract.
+- Shared web memory storage across package instances in the same JavaScript
+  process while preserving namespace isolation.
+- Rejected non-finite, fractional, and out-of-range legacy event IDs before
+  converting them to native 64-bit integers.
+- Aligned CocoaPods source resolution with the repository's `v<version>`
+  release tags.
+
+### Changes
+
+- **Breaking changes:** None.
+- Added typed Analytics screen-view methods to clients returned by
+  `createInstance()`, including React Navigation state tracking.
+- Updated the Analytics and Experiment runtime dependencies, including
+  `@amplitude/analytics-core` 2.54.1.
+- Raised the Nitro Modules peer range to `>=0.36.4 <0.37.0` and set React
+  Native 0.86 with Expo SDK 57 development builds as the release baseline.
+- Expanded consumer documentation for compatibility, native installation,
+  error handling, and platform-specific behavior.
+
 ## 0.5.4 - 2026-06-11
 
 ### Fixed

@@ -27,4 +27,18 @@ describe("Android initializer", () => {
       "context?.applicationContext?.let(AndroidAmplitudeAdapter::setContext)",
     );
   });
+
+  it("omits unavailable Android context fields", () => {
+    const adapter = fs.readFileSync(
+      path.join(
+        packageRoot,
+        "android/src/main/java/com/nitroamplitude/AndroidAmplitudeAdapter.kt",
+      ),
+      "utf8",
+    );
+
+    for (const field of ["carrier", "idfv", "adid", "appSetId"]) {
+      expect(adapter).not.toContain(`json.put("${field}", "")`);
+    }
+  });
 });

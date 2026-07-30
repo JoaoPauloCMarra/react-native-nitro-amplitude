@@ -1,11 +1,11 @@
 # AGENTS.md - react-native-nitro-amplitude
 
-Nitro-powered Amplitude Analytics + Experiment SDK for React Native (Expo 56 / RN 0.85).
+Nitro-powered Amplitude Analytics + Experiment SDK for React Native (Expo 57 / RN 0.86).
 
 ## Package
 
 - Publishable package: `packages/react-native-nitro-amplitude`
-- Example app: `apps/example` (Expo Router, SDK 56)
+- Example app: `apps/example` (Expo Router, SDK 57)
 
 ## Native ABI
 

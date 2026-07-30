@@ -98,10 +98,7 @@ export type ExperimentUser = {
    */
   user_properties?: {
     [propertyName: string]:
-      | string
-      | number
-      | boolean
-      | (string | number | boolean)[];
+      string | number | boolean | (string | number | boolean)[];
   };
 
   groups?: {
@@ -112,10 +109,7 @@ export type ExperimentUser = {
     [groupType: string]: {
       [groupName: string]: {
         [propertyName: string]:
-          | string
-          | number
-          | boolean
-          | (string | number | boolean)[];
+          string | number | boolean | (string | number | boolean)[];
       };
     };
   };

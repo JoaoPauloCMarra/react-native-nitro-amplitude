@@ -35,7 +35,7 @@ object AndroidAmplitudeAdapter {
   @JvmStatic
   fun prefetchContext() {
     executor.execute {
-      cachedDefaultContextJson = buildApplicationContextJson(DEFAULT_OPTIONS_JSON)
+      cachedDefaultContextJson = buildApplicationContextJson()
     }
   }
 
@@ -44,17 +44,11 @@ object AndroidAmplitudeAdapter {
     if (optionsJson == DEFAULT_OPTIONS_JSON) {
       cachedDefaultContextJson?.let { return it }
     }
-    return buildApplicationContextJson(optionsJson)
+    return buildApplicationContextJson()
   }
 
-  private fun buildApplicationContextJson(optionsJson: String): String {
+  private fun buildApplicationContextJson(): String {
     val context = getContext()
-    val options = try {
-      JSONObject(optionsJson)
-    } catch (_: Exception) {
-      JSONObject()
-    }
-
     val locale = context.resources.configuration.locales[0]
     val json = JSONObject()
     json.put("version", context.packageManager.getPackageInfo(context.packageName, 0).versionName)
@@ -66,18 +60,6 @@ object AndroidAmplitudeAdapter {
     json.put("deviceManufacturer", Build.MANUFACTURER)
     json.put("deviceModel", Build.MODEL)
     json.put("deviceBrand", Build.BRAND)
-    if (options.optBoolean("carrier", false)) {
-      json.put("carrier", "")
-    }
-    if (options.optBoolean("idfv", false)) {
-      json.put("idfv", "")
-    }
-    if (options.optBoolean("adid", false)) {
-      json.put("adid", "")
-    }
-    if (options.optBoolean("appSetId", false)) {
-      json.put("appSetId", "")
-    }
     return json.toString()
   }
 

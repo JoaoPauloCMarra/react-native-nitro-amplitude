@@ -47,11 +47,15 @@ void HybridAmplitudeContext::removeLegacyEvent(
     const std::string& instanceName,
     const std::string& eventKind,
     double eventId) {
+  const double int64Limit = std::ldexp(1.0, 63);
+  if (!std::isfinite(eventId) ||
+      std::trunc(eventId) != eventId ||
+      eventId < -int64Limit ||
+      eventId >= int64Limit) {
+    throw std::runtime_error("NitroAmplitude: Invalid eventId");
+  }
   if (!adapter_) {
     return;
-  }
-  if (std::isnan(eventId) || std::isinf(eventId)) {
-    throw std::runtime_error("NitroAmplitude: Invalid eventId");
   }
   adapter_->removeLegacyEvent(instanceName, eventKind, static_cast<int64_t>(eventId));
 }

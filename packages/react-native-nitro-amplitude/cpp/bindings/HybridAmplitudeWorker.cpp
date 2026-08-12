@@ -11,12 +11,32 @@ namespace margelo::nitro::NitroAmplitude {
 namespace {
 constexpr int kDefaultTimeoutMillis = 10000;
 constexpr int kMaxTimeoutMillis = 300000;
+constexpr size_t kMaxQueuedRequests = 100;
+constexpr size_t kWorkerThreadCount = 2;
+
+size_t requestBodyBytes(const WorkerRequest& request) {
+  size_t headerBytes = 0;
+  for (const auto& header : request.headers) {
+    headerBytes += header.first.size() + header.second.size();
+  }
+  return request.body.size() + headerBytes;
+}
 } // namespace
 
 HybridAmplitudeWorker::HybridAmplitudeWorker()
     : HybridObject(TAG), HybridAmplitudeWorkerSpec() {
-  adapter_ = ::NitroAmplitude::getSharedPlatformAdapter();
-  workerThread_ = std::thread([this]() { workerLoop(); });
+  adapter_ = ::NitroAmplitude::getSharedPlatformAdapters().http;
+  for (size_t i = 0; i < kWorkerThreadCount; ++i) {
+    workerThreads_.emplace_back([this]() { workerLoop(); });
+  }
+}
+
+HybridAmplitudeWorker::HybridAmplitudeWorker(
+    std::shared_ptr<::NitroAmplitude::HttpAdapter> adapter)
+    : HybridObject(TAG), HybridAmplitudeWorkerSpec(), adapter_(std::move(adapter)) {
+  for (size_t i = 0; i < kWorkerThreadCount; ++i) {
+    workerThreads_.emplace_back([this]() { workerLoop(); });
+  }
 }
 
 HybridAmplitudeWorker::~HybridAmplitudeWorker() {
@@ -25,8 +45,10 @@ HybridAmplitudeWorker::~HybridAmplitudeWorker() {
     running_ = false;
   }
   queueCv_.notify_all();
-  if (workerThread_.joinable()) {
-    workerThread_.join();
+  for (auto& thread : workerThreads_) {
+    if (thread.joinable()) {
+      thread.join();
+    }
   }
 }
 
@@ -54,13 +76,12 @@ void HybridAmplitudeWorker::enqueue(
       static_cast<int>(timeoutMillis),
   };
 
-  size_t headerBytes = 0;
-  for (const auto& header : request.headers) {
-    headerBytes += header.first.size() + header.second.size();
-  }
-  const size_t bodyBytes = request.body.size() + headerBytes;
+  const size_t bodyBytes = requestBodyBytes(request);
   {
     std::lock_guard<std::mutex> lock(queueMutex_);
+    if (queue_.size() >= kMaxQueuedRequests) {
+      throw std::runtime_error("NitroAmplitude: queue_full");
+    }
     cancelledRequests_.erase(requestId);
     queue_.push(std::move(request));
     queueSize_ = queue_.size();
@@ -98,6 +119,14 @@ double HybridAmplitudeWorker::queueSize() {
   return static_cast<double>(queueSize_.load());
 }
 
+double HybridAmplitudeWorker::inFlightCount() {
+  return static_cast<double>(inFlightCount_.load());
+}
+
+double HybridAmplitudeWorker::pendingBodyBytes() {
+  return static_cast<double>(pendingBodyBytes_.load());
+}
+
 size_t HybridAmplitudeWorker::getExternalMemorySize() noexcept {
   return pendingBodyBytes_.load();
 }
@@ -105,28 +134,35 @@ size_t HybridAmplitudeWorker::getExternalMemorySize() noexcept {
 void HybridAmplitudeWorker::workerLoop() {
   while (true) {
     WorkerRequest request;
+    bool notifyCancelled = false;
     {
       std::unique_lock<std::mutex> lock(queueMutex_);
       queueCv_.wait(lock, [this]() { return !running_ || !queue_.empty(); });
-      if (!running_ && queue_.empty()) {
-        return;
+      if (queue_.empty()) {
+        if (!running_) {
+          return;
+        }
+        continue;
       }
       request = std::move(queue_.front());
       queue_.pop();
       queueSize_ = queue_.size();
-      size_t headerBytes = 0;
-  for (const auto& header : request.headers) {
-    headerBytes += header.first.size() + header.second.size();
-  }
-  const size_t bodyBytes = request.body.size() + headerBytes;
+      const size_t bodyBytes = requestBodyBytes(request);
       pendingBodyBytes_ -= std::min(pendingBodyBytes_.load(), bodyBytes);
-      if (cancelledRequests_.erase(request.requestId) > 0) {
-        notifyComplete(request.requestId, 0, "", "cancelled");
-        continue;
+      if (!running_ || cancelledRequests_.erase(request.requestId) > 0) {
+        notifyCancelled = true;
+      } else {
+        ++inFlightCount_;
       }
     }
 
+    if (notifyCancelled) {
+      notifyComplete(request.requestId, 0, "", "cancelled");
+      continue;
+    }
+
     if (!adapter_) {
+      --inFlightCount_;
       notifyComplete(request.requestId, 0, "", "Native adapter unavailable");
       continue;
     }
@@ -154,6 +190,11 @@ void HybridAmplitudeWorker::workerLoop() {
           request.timeoutMillis);
     }();
 
+    --inFlightCount_;
+    {
+      std::lock_guard<std::mutex> lock(queueMutex_);
+      cancelledRequests_.erase(request.requestId);
+    }
     notifyComplete(
         request.requestId,
         static_cast<double>(result.statusCode),
@@ -167,9 +208,16 @@ void HybridAmplitudeWorker::notifyComplete(
     double statusCode,
     const std::string& body,
     const std::string& error) {
-  std::lock_guard<std::mutex> lock(listenersMutex_);
-  for (const auto& listener : listeners_) {
-    listener.callback(requestId, statusCode, body, error);
+  std::vector<Listener> snapshot;
+  {
+    std::lock_guard<std::mutex> lock(listenersMutex_);
+    snapshot = listeners_;
+  }
+  for (const auto& listener : snapshot) {
+    try {
+      listener.callback(requestId, statusCode, body, error);
+    } catch (...) {
+    }
   }
 }
 

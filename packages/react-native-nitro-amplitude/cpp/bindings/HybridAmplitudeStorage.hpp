@@ -1,16 +1,20 @@
 #pragma once
 
 #include "HybridAmplitudeStorageSpec.hpp"
-#include "../core/NativeAmplitudeAdapter.hpp"
+#include "../core/StorageAdapter.hpp"
 #include <memory>
 #include <mutex>
+#include <string>
 #include <unordered_map>
+#include <variant>
+#include <vector>
 
 namespace margelo::nitro::NitroAmplitude {
 
 class HybridAmplitudeStorage : public HybridAmplitudeStorageSpec {
 public:
   HybridAmplitudeStorage();
+  explicit HybridAmplitudeStorage(std::shared_ptr<::NitroAmplitude::StorageAdapter> adapter);
   ~HybridAmplitudeStorage() override = default;
 
   void set(const std::string& key, const std::string& value, bool persist) override;
@@ -26,13 +30,13 @@ public:
       bool persist) override;
   size_t getExternalMemorySize() noexcept override;
 
-  std::vector<std::string> getBatch(
+  std::vector<std::variant<nitro::NullType, std::string>> getBatch(
       const std::vector<std::string>& keys,
       bool persist) override;
   void removeBatch(const std::vector<std::string>& keys, bool persist) override;
 
 private:
-  std::shared_ptr<::NitroAmplitude::NativeAmplitudeAdapter> adapter_;
+  std::shared_ptr<::NitroAmplitude::StorageAdapter> adapter_;
   std::unordered_map<std::string, std::string> memoryStore_;
   std::mutex memoryMutex_;
 };

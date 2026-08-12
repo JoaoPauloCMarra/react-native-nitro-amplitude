@@ -1,24 +1,25 @@
 #pragma once
 
-#include "../../cpp/core/NativeAmplitudeAdapter.hpp"
+#include "../../cpp/core/ContextAdapter.hpp"
+#include "../../cpp/core/HttpAdapter.hpp"
+#include "../../cpp/core/StorageAdapter.hpp"
+
+#include <map>
+#include <mutex>
+#include <string>
 
 namespace NitroAmplitude {
 
-class IOSAmplitudeAdapterCpp : public NativeAmplitudeAdapter {
+class IOSAmplitudeAdapterCpp
+    : public ContextAdapter,
+      public StorageAdapter,
+      public HttpAdapter {
 public:
   IOSAmplitudeAdapterCpp();
   ~IOSAmplitudeAdapterCpp() override = default;
 
   void prefetchContext() override;
   std::string getApplicationContextJson(const std::string& optionsJson) override;
-  std::string getLegacySessionDataJson(const std::string& instanceName) override;
-  std::vector<std::string> getLegacyEventsJson(
-      const std::string& instanceName,
-      const std::string& eventKind) override;
-  void removeLegacyEvent(
-      const std::string& instanceName,
-      const std::string& eventKind,
-      int64_t eventId) override;
 
   void setDisk(const std::string& key, const std::string& value) override;
   std::optional<std::string> getDisk(const std::string& key) override;
@@ -32,6 +33,10 @@ public:
       const std::unordered_map<std::string, std::string>& headers,
       const std::string& body,
       int timeoutMillis) override;
+
+private:
+  std::mutex contextCacheMutex_;
+  std::map<std::string, std::string> contextCache_;
 };
 
 } // namespace NitroAmplitude

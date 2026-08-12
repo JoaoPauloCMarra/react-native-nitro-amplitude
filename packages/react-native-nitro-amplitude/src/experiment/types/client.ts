@@ -58,10 +58,19 @@ export type ExperimentFetchResult = {
   failureReason?: string;
 };
 
+export type VariantFreshness = "fresh" | "stale" | "unknown";
+
 export type ExperimentVariantResult = {
   variant: Variant;
   source?: VariantSource;
   fallback: boolean;
+  /** True when the variant data comes from a cache that last failed to refresh. */
   stale: boolean;
+  /**
+   * Freshness of the variant data: `fresh` after a successful fetch,
+   * `stale` when a fetch failure left cached data, `unknown` before any
+   * fetch outcome (initial variants, inline fallbacks, or missing data).
+   */
+  freshness: VariantFreshness;
   reason?: "missing_flag" | "fetch_failure" | "no_assignment" | "fallback";
 };

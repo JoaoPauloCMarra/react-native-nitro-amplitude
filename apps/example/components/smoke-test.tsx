@@ -24,7 +24,15 @@ export function SmokeTestRunner() {
     const next: LogEntry[] = [];
     setSummary("Running");
 
-    const run = async (label: string, fn: () => void | Promise<void>) => {
+    const run = async (
+      label: string,
+      fn: () => void | Promise<void>,
+      skipReason?: string,
+    ) => {
+      if (skipReason) {
+        next.push({ label, status: "skipped", detail: skipReason });
+        return;
+      }
       try {
         await fn();
         next.push({ label, status: "pass" });
@@ -86,8 +94,11 @@ export function SmokeTestRunner() {
     setLogs(next);
     const passed = next.filter((entry) => entry.status === "pass").length;
     const failed = next.filter((entry) => entry.status === "fail").length;
+    const skipped = next.filter((entry) => entry.status === "skipped").length;
     setSummary(
-      `${passed}/${next.length} passed${failed ? ` · ${failed} failed` : ""}`,
+      `${passed} passed · ${failed} failed · ${skipped} skipped · ${
+        next.length
+      } total`,
     );
   }, []);
 

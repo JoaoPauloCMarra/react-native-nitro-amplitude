@@ -148,6 +148,7 @@ export function createMockExperimentClient(
         variant: variants.get(key) ?? normalizeFallback(fallback),
         fallback: !variants.has(key),
         stale: false,
+        freshness: variants.has(key) ? "fresh" : "unknown",
         reason: variants.has(key) ? undefined : "fallback",
       }),
     ),

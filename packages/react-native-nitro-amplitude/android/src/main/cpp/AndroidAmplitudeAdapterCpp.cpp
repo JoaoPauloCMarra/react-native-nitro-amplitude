@@ -80,30 +80,6 @@ std::string AndroidAmplitudeAdapterCpp::getApplicationContextJson(const std::str
   return result ? result->toStdString() : std::string("{}");
 }
 
-std::string AndroidAmplitudeAdapterCpp::getLegacySessionDataJson(const std::string& instanceName) {
-  static auto method = AndroidAmplitudeAdapterJava::javaClassStatic()->getStaticMethod<jstring(std::string)>(
-      "getLegacySessionDataJson", "(Ljava/lang/String;)Ljava/lang/String;");
-  auto result = method(AndroidAmplitudeAdapterJava::javaClassStatic(), instanceName);
-  return result ? result->toStdString() : std::string("{}");
-}
-
-std::vector<std::string> AndroidAmplitudeAdapterCpp::getLegacyEventsJson(
-    const std::string& instanceName,
-    const std::string& eventKind) {
-  static auto method = AndroidAmplitudeAdapterJava::javaClassStatic()->getStaticMethod<JavaStringArray(std::string, std::string)>(
-      "getLegacyEventsJson", "(Ljava/lang/String;Ljava/lang/String;)[Ljava/lang/String;");
-  return fromJavaStringArray(method(AndroidAmplitudeAdapterJava::javaClassStatic(), instanceName, eventKind));
-}
-
-void AndroidAmplitudeAdapterCpp::removeLegacyEvent(
-    const std::string& instanceName,
-    const std::string& eventKind,
-    int64_t eventId) {
-  static auto method = AndroidAmplitudeAdapterJava::javaClassStatic()->getStaticMethod<void(std::string, std::string, jlong)>(
-      "removeLegacyEvent", "(Ljava/lang/String;Ljava/lang/String;J)V");
-  method(AndroidAmplitudeAdapterJava::javaClassStatic(), instanceName, eventKind, eventId);
-}
-
 void AndroidAmplitudeAdapterCpp::setDisk(const std::string& key, const std::string& value) {
   static auto method = AndroidAmplitudeAdapterJava::javaClassStatic()->getStaticMethod<void(std::string, std::string)>(
       "setDisk", "(Ljava/lang/String;Ljava/lang/String;)V");
@@ -165,10 +141,10 @@ HttpResult AndroidAmplitudeAdapterCpp::performHttpRequest(
     httpResult.body = result[1];
     httpResult.error = result[2];
     if (!numeric && httpResult.error.empty()) {
-      httpResult.error = "Invalid HTTP status from Android adapter";
+      httpResult.error = "invalid_http_response";
     }
   } else {
-    httpResult.error = "Invalid HTTP response from Android adapter";
+    httpResult.error = "invalid_http_response";
   }
   return httpResult;
 }

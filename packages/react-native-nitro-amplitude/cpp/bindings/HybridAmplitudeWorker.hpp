@@ -1,7 +1,7 @@
 #pragma once
 
 #include "HybridAmplitudeWorkerSpec.hpp"
-#include "../core/NativeAmplitudeAdapter.hpp"
+#include "../core/HttpAdapter.hpp"
 #include <atomic>
 #include <condition_variable>
 #include <functional>
@@ -28,6 +28,7 @@ struct WorkerRequest {
 class HybridAmplitudeWorker : public HybridAmplitudeWorkerSpec {
 public:
   HybridAmplitudeWorker();
+  explicit HybridAmplitudeWorker(std::shared_ptr<::NitroAmplitude::HttpAdapter> adapter);
   ~HybridAmplitudeWorker() override;
 
   void enqueue(
@@ -45,6 +46,8 @@ public:
           const std::string&,
           const std::string&)>& callback) override;
   double queueSize() override;
+  double inFlightCount() override;
+  double pendingBodyBytes() override;
   size_t getExternalMemorySize() noexcept override;
 
 private:
@@ -55,14 +58,15 @@ private:
       const std::string& body,
       const std::string& error);
 
-  std::shared_ptr<::NitroAmplitude::NativeAmplitudeAdapter> adapter_;
-  std::thread workerThread_;
+  std::shared_ptr<::NitroAmplitude::HttpAdapter> adapter_;
+  std::vector<std::thread> workerThreads_;
   std::mutex queueMutex_;
   std::condition_variable queueCv_;
   std::queue<WorkerRequest> queue_;
   std::unordered_set<std::string> cancelledRequests_;
   std::atomic<bool> running_{true};
   std::atomic<size_t> queueSize_{0};
+  std::atomic<size_t> inFlightCount_{0};
   std::atomic<size_t> pendingBodyBytes_{0};
 
   std::mutex listenersMutex_;

@@ -18,6 +18,8 @@ namespace margelo::nitro::NitroAmplitude {
       prototype.registerHybridMethod("cancel", &HybridAmplitudeWorkerSpec::cancel);
       prototype.registerHybridMethod("addOnComplete", &HybridAmplitudeWorkerSpec::addOnComplete);
       prototype.registerHybridMethod("queueSize", &HybridAmplitudeWorkerSpec::queueSize);
+      prototype.registerHybridMethod("inFlightCount", &HybridAmplitudeWorkerSpec::inFlightCount);
+      prototype.registerHybridMethod("pendingBodyBytes", &HybridAmplitudeWorkerSpec::pendingBodyBytes);
     });
   }
 

@@ -6,7 +6,7 @@
 [![license](https://img.shields.io/npm/l/react-native-nitro-amplitude?color=007ec6)](https://github.com/JoaoPauloCMarra/react-native-nitro-amplitude/blob/main/LICENSE)
 [![React Native](https://img.shields.io/badge/react--native-%3E%3D0.75-61dafb)](https://reactnative.dev/docs/0.86/getting-started-without-a-framework)
 [![Expo](https://img.shields.io/badge/expo-SDK%2057-000020)](https://docs.expo.dev/versions/v57.0.0/)
-[![Nitro Modules](https://img.shields.io/badge/nitro--modules-0.36.x-black)](https://nitro.margelo.com/)
+[![Nitro Modules](https://img.shields.io/badge/nitro--modules-%3E%3D0.36.5%20%3C0.37.0-black)](https://nitro.margelo.com/)
 [![TypeScript](https://img.shields.io/badge/typescript-6.0-3178c6)](https://www.typescriptlang.org/)
 
 Amplitude Analytics and Amplitude Experiment for React Native and Expo in one
@@ -22,14 +22,14 @@ through Nitro, and still works on web through fetch and storage fallbacks.
 bun add react-native-nitro-amplitude react-native-nitro-modules
 ```
 
-Compatibility for `0.5.5`:
+Compatibility for `0.6.0`:
 
-| Dependency                   | Supported range    | `0.5.5` baseline |
+| Dependency                   | Supported range    | `0.6.0` baseline |
 | ---------------------------- | ------------------ | ---------------- |
 | `react`                      | `>=18.2.0`         | `19.2.3`         |
 | `react-native`               | `>=0.75.0`         | `0.86.2`         |
-| `react-native-nitro-modules` | `>=0.36.4 <0.37.0` | `0.36.4`         |
-| Expo development builds      | SDK 57             | `~57.0.9`        |
+| `react-native-nitro-modules` | `>=0.36.5 <0.37.0` | `0.36.5`         |
+| Expo development builds      | SDK 57             | `~57.0.12`       |
 
 For Expo development builds:
 
@@ -174,40 +174,66 @@ The preset stores analytics session state, device ID, user ID, and experiment
 variants through the package storage layer. Use a different namespace per app,
 environment, or test suite.
 
+The default analytics session store is durable: device ID, user ID, and session
+ID survive app restarts through the Nitro disk store on native and browser
+localStorage on web. `LocalStorage` is the durable store; `MemoryStorage` /
+`InMemoryStorage` are process-local only. Persisted session state is plain
+text in the app sandbox; do not rely on it for secrets.
+
 ## Network Controls
 
 ```ts
 import {
-  enableDryRunTransport,
   getDiagnostics,
   getSafeDiagnostics,
-  setNetworkEnabled,
 } from "react-native-nitro-amplitude";
+import {
+  clearDryRunTransportRecords,
+  DryRunHttpClient,
+  DryRunTransport,
+  setNetworkEnabled,
+} from "react-native-nitro-amplitude/network";
 
 setNetworkEnabled(false);
-enableDryRunTransport();
 
-const diagnostics = getDiagnostics();
-const sentrySafeDiagnostics = getSafeDiagnostics();
+const dryRunTransport = new DryRunTransport();
+const dryRunHttpClient = new DryRunHttpClient();
 ```
 
-Use dry-run transport in examples and tests when you need track/flush behavior
-without sending events to Amplitude.
+`DryRunTransport` and `DryRunHttpClient` record requests without sending them;
+use `getDryRunTransportRecords()` and `getDryRunAnalyticsEvents()` in tests and
+examples when you need track/flush behavior without events reaching Amplitude.
+`clearDryRunTransportRecords()` resets the recorded requests and events.
 
 For offline-aware apps, pair `setNetworkEnabled` with a connectivity listener
 (for example `@react-native-community/netinfo`): disable the network while
 offline and re-enable it on reconnect, then call `flush()`. Events queue in
 durable Nitro storage while the network is disabled.
 
+Network-control, dry-run record access, bounded timing helpers
+(`createNetworkTimingBuffer`, `createTimedAnalyticsTransport`,
+`createTimedHttpClient`), and their types live on the
+`react-native-nitro-amplitude/network` subpath, and mock testing helpers
+(`createMockAmplitudeClient`, `createMockExperimentClient`,
+`createFakeExperimentStorage`) live on the `react-native-nitro-amplitude/testing`
+subpath. The production root export stays limited to the supported SDK API.
+
 ## Diagnostics
 
-Main diagnostics fields include:
+`getDiagnostics()` returns:
 
-- Native context readiness.
-- Storage backend readiness.
-- `AmplitudeWorker` queue and transport state.
-- Flush and fetch metadata.
-- Request timing summaries for analytics and experiment calls.
+- Native readiness per capability: `contextAvailable`, `storageAvailable`,
+  `workerAvailable`, and `nativeAvailable` are reported independently, so one
+  failing module does not hide the others.
+- `workerMetrics`: current `queueSize`, `inFlightCount`, and
+  `pendingBodyBytes` from the native HTTP worker (bounded queue of 100
+  requests, 2 concurrent workers).
+- `networkTimings`: the bounded list of recent analytics and experiment
+  request timings.
+- Flush and fetch metadata plus `diagnosticFailures`.
+
+`healthCheck()` probes the durable disk store and the worker alongside module
+availability and returns `diskStorageWritable` and `workerReady`.
 
 These APIs are for app health checks, support tooling, and release validation.
 Do not send diagnostics that contain user identifiers to analytics or logs
@@ -253,31 +279,69 @@ try {
 
 Error codes cover initialization, network, storage, credentials, Experiment
 fetches, native availability, serialization, event size, timeouts, and unknown
-failures. Native startup failures are also available through
-`getLastNativeError()` and diagnostics. Do not expose raw error messages to end
-users without reviewing them for application-specific sensitive data.
+failures. Native transport and storage failures carry stable machine-readable
+codes (`invalid_url`, `timeout`, `network_error`, `invalid_http_response`,
+`cancelled`, `queue_full`, `disk_adapter_unavailable`); classification does not
+depend on localized message text. Native startup failures are also available
+through `getLastNativeError()` and diagnostics. Do not expose raw error
+messages to end users without reviewing them for application-specific
+sensitive data.
+
+## Experiment lifecycle and freshness
+
+`Experiment.initialize` returns the existing singleton for a given instance
+name and API key and ignores later configuration changes. Use
+`Experiment.reinitialize(apiKey, config)` to replace an instance explicitly;
+the previous instance is stopped first.
+
+`variantWithMetadata()` reports a `freshness` state for variant data: `fresh`
+after a successful fetch, `stale` when a fetch failure left cached data, and
+`unknown` before any fetch outcome (initial variants, inline fallbacks, or
+missing data). `stale: true` mirrors the `stale` freshness state.
+
+`createAmplitudeClient(...).reset()` is a combined reset: it resets the
+analytics identity (new device ID, cleared user ID) and clears the experiment
+user and cached variants together.
 
 ## API
 
 Analytics exports:
 
 - `init`, `track`, `identify`, `groupIdentify`, `setGroup`, `revenue`,
-  `flush`, `reset`, `shutdown`, and `createInstance`.
+  `flush`, `reset`, `shutdown`, `extendSession`, `flushWithResult`,
+  `healthCheck`, and `createInstance`.
 - `Identify`, `Revenue`, and analytics `Types`.
-- `nitroTransport`, `nitroHttpClient`, network controls, testing helpers, and
-  diagnostics helpers.
+- `nitroTransport`, `nitroHttpClient`, storage adapters
+  (`NitroAnalyticsStorage`, `NitroExperimentStorage`, `NitroMemoryStorage`,
+  `LocalStorage`, `MemoryStorage`, `InMemoryStorage`).
+- Network controls, dry-run record access, and timing helpers are on the
+  `react-native-nitro-amplitude/network` subpath; mock testing helpers are on
+  the `react-native-nitro-amplitude/testing` subpath.
+- Diagnostics: `getDiagnostics`, `getSafeDiagnostics`,
+  `getNativeStartupDiagnostics`, `getLastNativeError`, `healthCheck`,
+  `clearDiagnosticFailures`, and worker metrics.
 
 Experiment exports:
 
-- `Experiment.initialize` and `Experiment.initializeWithAmplitudeAnalytics`.
+- `Experiment.initialize`, `Experiment.reinitialize`, and
+  `Experiment.initializeWithAmplitudeAnalytics`.
 - `ExperimentClient`, `StubExperimentClient`, `Source`, `LogLevel`, storage
-  types, exposure types, user types, and typed variant helpers.
+  types, exposure types, user types, freshness types, and typed variant
+  helpers.
+
+Presets and combined client:
+
+- `createDurableAmplitudeStoragePreset`, `createPersistentAmplitudeConfig`,
+  `createAmplitudeClient`, `createExperimentUser`, `getConnectorIdentity`.
 
 Native HybridObject types:
 
-- `AmplitudeContext`.
-- `AmplitudeStorage`.
-- `AmplitudeWorker`.
+- `AmplitudeContext` (context JSON + prefetch, cached by normalized option
+  set on both platforms).
+- `AmplitudeStorage` (sync memory/disk KV; missing batch values are typed
+  `null`).
+- `AmplitudeWorker` (bounded queue, 2 concurrent workers, request-scoped
+  completion, cancellation of queued requests, queue/in-flight/byte metrics).
 
 ## Platform Support
 
@@ -294,15 +358,21 @@ Architecture notes:
 - The native layer is a shared C++ core (Nitro HybridObjects) with thin
   platform adapters: Objective-C++ on iOS and Kotlin over JNI on Android.
   There is no Swift layer by design — the C++ core talks to platform APIs
-  directly, avoiding extra interop hops.
+  directly, avoiding extra interop hops. The adapter interface is split by
+  capability (`ContextAdapter`, `StorageAdapter`, `HttpAdapter`) and the C++
+  test gate runs contract tests against fake adapters.
 - Privacy stance: Android omits unavailable `carrier`, `idfv`, `adid`, and
   `appSetId` context fields even when requested via context options. Wire your
   own values through event enrichment if your app has consent to collect them.
+  Missing native context values are serialized as empty strings.
+- Web context reports `platform`, `language`, and OS/device fields parsed from
+  the user agent; `carrier`, `adid`, `appSetId`, and `idfv` are unavailable on
+  web.
 - Web memory storage is shared across package instances in the same JavaScript
   process and isolated by namespace, matching native memory-storage semantics.
-- Legacy Amplitude SDK SQLite migration is not implemented yet:
-  `migrateLegacyData` restores no legacy data, and
-  `getNativeStartupDiagnostics().legacyMigrationSupported` reports `false`.
+- Legacy Amplitude SDK SQLite migration was removed; the package does not
+  import data written by the legacy Amplitude SDK and `migrateLegacyData` is
+  ignored.
 - For typed Experiment variant payloads, prefer the typed variant helpers
   exported from the package (`react-native-nitro-amplitude/experiment`) over
   reading the untyped `variant.payload` directly.

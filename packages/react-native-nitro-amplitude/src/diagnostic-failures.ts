@@ -2,6 +2,11 @@ import type { Payload, Response, Transport } from "@amplitude/analytics-core";
 import { Status } from "@amplitude/analytics-core";
 import type { HttpClient, SimpleResponse } from "./experiment/types/transport";
 import { PACKAGE_VERSION } from "./package-version";
+import {
+  clearDiagnosticEvents,
+  getDiagnosticEventsByType,
+  recordDiagnosticEvent,
+} from "./diagnostics-pipeline";
 
 export type AmplitudeDiagnosticFailureKind =
   | "network_error"
@@ -39,7 +44,54 @@ type RecordDiagnosticFailureInput = Omit<
   kind: AmplitudeDiagnosticFailureKind;
 };
 
-const diagnosticFailures = new Map<string, AmplitudeDiagnosticFailure>();
+export function recordDiagnosticFailure(
+  input: RecordDiagnosticFailureInput,
+): void {
+  const surface =
+    input.surface ??
+    (input.operation === "analytics_upload"
+      ? "analytics_upload"
+      : "experiment_variant_fetch");
+  const existing = getDiagnosticFailures().find((failure) => {
+    return (
+      failure.operation === input.operation &&
+      failure.surface === surface &&
+      failure.kind === input.kind &&
+      failure.targetHost === input.targetHost &&
+      failure.httpStatus === input.httpStatus &&
+      failure.maxRetriesExceeded === (input.maxRetriesExceeded ?? false)
+    );
+  });
+  const lastFailureAt = Date.now();
+  recordDiagnosticEvent({
+    type: "failure",
+    recordedAt: lastFailureAt,
+    failure: {
+      operation: input.operation,
+      surface,
+      kind: input.kind,
+      targetHost: input.targetHost,
+      httpStatus: input.httpStatus,
+      batchSize: input.batchSize,
+      queuedEventCount: input.queuedEventCount,
+      retryCount: input.retryCount,
+      maxRetriesExceeded: input.maxRetriesExceeded,
+      lastFailureAt,
+      throttledCount: existing ? existing.throttledCount + 1 : 0,
+      packageVersion: PACKAGE_VERSION,
+    },
+  });
+}
+
+export function getDiagnosticFailures(): AmplitudeDiagnosticFailure[] {
+  return getDiagnosticEventsByType("failure").map((event) => ({
+    ...event.failure,
+  }));
+}
+
+export function clearDiagnosticFailures(): void {
+  clearDiagnosticEvents();
+}
 
 function getPayloadBatchSize(payload: Payload): number | undefined {
   return Array.isArray(payload.events) ? payload.events.length : undefined;
@@ -111,50 +163,6 @@ export function classifyDiagnosticFailure(
     return "network_error";
   }
   return "unknown";
-}
-
-export function recordDiagnosticFailure(
-  input: RecordDiagnosticFailureInput,
-): void {
-  const surface =
-    input.surface ??
-    (input.operation === "analytics_upload"
-      ? "analytics_upload"
-      : "experiment_variant_fetch");
-  const key = [
-    input.operation,
-    surface,
-    input.kind,
-    input.targetHost ?? "",
-    input.httpStatus ?? "",
-    input.maxRetriesExceeded === true ? "max_retries" : "",
-  ].join("|");
-  const existing = diagnosticFailures.get(key);
-  const lastFailureAt = Date.now();
-  diagnosticFailures.set(key, {
-    operation: input.operation,
-    surface,
-    kind: input.kind,
-    targetHost: input.targetHost,
-    httpStatus: input.httpStatus,
-    batchSize: input.batchSize,
-    queuedEventCount: input.queuedEventCount,
-    retryCount: input.retryCount,
-    maxRetriesExceeded: input.maxRetriesExceeded,
-    lastFailureAt,
-    throttledCount: existing ? existing.throttledCount + 1 : 0,
-    packageVersion: PACKAGE_VERSION,
-  });
-}
-
-export function getDiagnosticFailures(): AmplitudeDiagnosticFailure[] {
-  return Array.from(diagnosticFailures.values()).map((failure) => ({
-    ...failure,
-  }));
-}
-
-export function clearDiagnosticFailures(): void {
-  diagnosticFailures.clear();
 }
 
 export function createDiagnosticAnalyticsTransport(

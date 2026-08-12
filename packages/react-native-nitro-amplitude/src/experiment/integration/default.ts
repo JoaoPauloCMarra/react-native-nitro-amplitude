@@ -7,7 +7,10 @@ import { Poller } from "@amplitude/experiment-core";
 import { ExperimentUser, ExperimentUserProvider } from "../types/user";
 import { isNative } from "../util/platform";
 
-import { getNativeApplicationContext } from "../../native/context";
+import {
+  EXPERIMENT_CONTEXT_OPTIONS,
+  getNativeApplicationContext,
+} from "../../native/context";
 import { ConnectorUserProvider } from "./connector";
 
 export class DefaultUserProvider implements ExperimentUserProvider {
@@ -52,20 +55,9 @@ export class DefaultUserProvider implements ExperimentUserProvider {
       return this.cachedApplicationContext;
     } else if (isNative()) {
       try {
-        this.cachedApplicationContext = getNativeApplicationContext({
-          adid: true,
-          carrier: true,
-          deviceManufacturer: true,
-          deviceModel: true,
-          ipAddress: false,
-          language: true,
-          osName: true,
-          osVersion: true,
-          platform: true,
-          appSetId: true,
-          idfv: true,
-          country: true,
-        });
+        this.cachedApplicationContext = getNativeApplicationContext(
+          EXPERIMENT_CONTEXT_OPTIONS,
+        );
       } catch {
         this.cachedApplicationContext = {};
       }

@@ -1,6 +1,8 @@
 #pragma once
 
-#include "../../cpp/core/NativeAmplitudeAdapter.hpp"
+#include "../../cpp/core/ContextAdapter.hpp"
+#include "../../cpp/core/HttpAdapter.hpp"
+#include "../../cpp/core/StorageAdapter.hpp"
 #include <fbjni/fbjni.h>
 
 namespace NitroAmplitude {
@@ -15,21 +17,16 @@ struct AndroidAmplitudeAdapterJava : facebook::jni::JavaClass<AndroidAmplitudeAd
   }
 };
 
-class AndroidAmplitudeAdapterCpp : public NativeAmplitudeAdapter {
+class AndroidAmplitudeAdapterCpp
+    : public ContextAdapter,
+      public StorageAdapter,
+      public HttpAdapter {
 public:
   explicit AndroidAmplitudeAdapterCpp(facebook::jni::alias_ref<facebook::jni::JObject> context);
   ~AndroidAmplitudeAdapterCpp() override = default;
 
   void prefetchContext() override;
   std::string getApplicationContextJson(const std::string& optionsJson) override;
-  std::string getLegacySessionDataJson(const std::string& instanceName) override;
-  std::vector<std::string> getLegacyEventsJson(
-      const std::string& instanceName,
-      const std::string& eventKind) override;
-  void removeLegacyEvent(
-      const std::string& instanceName,
-      const std::string& eventKind,
-      int64_t eventId) override;
 
   void setDisk(const std::string& key, const std::string& value) override;
   std::optional<std::string> getDisk(const std::string& key) override;

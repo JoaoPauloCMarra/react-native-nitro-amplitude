@@ -4,6 +4,43 @@ All notable changes to this project are documented in this file.
 
 The format follows Keep a Changelog and the project adheres to SemVer.
 
+## 0.6.0 - 2026-08-12
+
+### Breaking changes
+
+- Removed the legacy Amplitude SDK migration surface from the Nitro
+  `AmplitudeContext` object (`getLegacySessionDataJson`, `getLegacyEventsJson`,
+  `removeLegacyEvent`) and the `migrateLegacyData` initialization path. The
+  package never read legacy Amplitude SDK SQLite data; consumers that need it
+  must migrate with the official Amplitude SDK before switching.
+- `AmplitudeStorage.getBatch` now returns `(string | null)[]` for missing keys
+  instead of the previous `BATCH_MISSING_SENTINEL` placeholder strings, so real
+  stored values can never collide with the missing-value marker. Update batch
+  consumers to handle `null` as a missing entry.
+- Dry-run transports, network controls (`setNetworkEnabled`), timing helpers,
+  and their types moved to `react-native-nitro-amplitude/network`; mock testing
+  helpers moved to `react-native-nitro-amplitude/testing`. Replace affected
+  root imports with the matching subpath import.
+
+### Changed
+
+- Default analytics identity is durable: device ID, user ID, and session ID
+  survive app restarts through the Nitro disk store on native and browser
+  localStorage on web.
+- `shutdown()` flushes accepted events before teardown; `flushWithResult()`
+  reports `failed` and `retried` as distinct outcomes.
+- Analytics, experiment, and combined `reset()` now clear analytics identity
+  and experiment user/cache together.
+- Native transport errors carry stable codes (`invalid_url`, `timeout`,
+  `cancelled`, `invalid_http_response`, `network_error`) instead of localized
+  message text.
+- Diagnostics report per-capability native availability, bounded worker
+  metrics, and disk/worker probes from `healthCheck()`.
+- Experiment variants report `freshness` (`fresh`, `stale`, `unknown`), and
+  `Experiment.reinitialize` replaces singletons explicitly.
+- Web `LocalStorage` keys are namespaced and `reset()` clears only package
+  keys, matching native namespace-scoped reset behavior.
+
 ## 0.5.5 - 2026-07-30
 
 ### Fixed

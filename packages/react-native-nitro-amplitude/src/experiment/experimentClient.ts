@@ -11,8 +11,6 @@ import {
   FetchError,
   FlagApi,
   Poller,
-  SdkFlagApi,
-  SdkEvaluationApi,
   GetVariantsOptions,
 } from "@amplitude/experiment-core";
 
@@ -20,26 +18,16 @@ import { version as PACKAGE_VERSION } from "./gen/version";
 import { ConnectorUserProvider } from "./integration/connector";
 import { DefaultUserProvider } from "./integration/default";
 import { AmpLogger } from "./logger/ampLogger";
-import { ConsoleLogger } from "./logger/consoleLogger";
-import {
-  getFlagStorage,
-  getVariantsOptionsStorage,
-  getVariantStorage,
-  LoadStoreCache,
-  SingleValueStoreCache,
-} from "./storage/cache";
-import { MemoryStorage } from "./storage/local-storage";
-import { FetchHttpClient, WrapperClient } from "./transport/http";
-import { createDiagnosticHttpClient } from "../diagnostic-failures";
+import { LoadStoreCache, SingleValueStoreCache } from "./storage/cache";
 import {
   Client,
   ExperimentFetchResult,
   ExperimentVariantResult,
   FetchOptions,
+  VariantFreshness,
 } from "./types/client";
-import { ExperimentConfig, Defaults } from "./types/config";
+import { ExperimentConfig } from "./types/config";
 import { Exposure } from "./types/exposure";
-import { LogLevel } from "./types/logger";
 import { isFallback, Source, VariantSource } from "./types/source";
 import { ExperimentUser, ExperimentUserProvider } from "./types/user";
 import { Variant, Variants } from "./types/variant";
@@ -55,6 +43,13 @@ import {
   convertVariant,
 } from "./util/convert";
 import { UserSessionExposureTracker } from "./util/userSessionExposureTracker";
+import {
+  createDefaultUserProvider,
+  createExperimentLogger,
+  createExperimentProviders,
+  resolveExperimentConfig,
+  ResolvedExperimentConfig,
+} from "./providers";
 
 // Configs which have been removed from the public API.
 // May be added back in the future.
@@ -64,34 +59,6 @@ const fetchBackoffMinMillis = 500;
 const fetchBackoffMaxMillis = 10000;
 const fetchBackoffScalar = 1.5;
 const flagPollerIntervalMillis = 60000;
-
-const euServerUrl = "https://api.lab.eu.amplitude.com";
-const euFlagsServerUrl = "https://flag.lab.eu.amplitude.com";
-
-type ResolvedExperimentConfig = ExperimentConfig & {
-  debug: boolean;
-  logLevel: LogLevel;
-  loggerProvider: NonNullable<ExperimentConfig["loggerProvider"]> | null;
-  instanceName: string;
-  fallbackVariant: Variant;
-  initialVariants: Variants;
-  source: Source;
-  serverUrl: string;
-  flagsServerUrl: string;
-  serverZone: "US" | "EU";
-  fetchTimeoutMillis: number;
-  retryFetchOnFailure: boolean;
-  automaticExposureTracking: boolean;
-  pollOnStart: boolean;
-  fetchOnStart: boolean;
-  automaticFetchOnAmplitudeIdentityChange: boolean;
-  userProvider: ExperimentUserProvider | null;
-  exposureTrackingProvider: NonNullable<
-    ExperimentConfig["exposureTrackingProvider"]
-  > | null;
-  httpClient: NonNullable<ExperimentConfig["httpClient"]>;
-  storage: NonNullable<ExperimentConfig["storage"]> | null;
-};
 
 /**
  * The default {@link Client} used to fetch variations from Experiment's
@@ -139,89 +106,20 @@ export class ExperimentClient implements Client {
    */
   public constructor(apiKey: string, config: ExperimentConfig) {
     this.apiKey = apiKey;
-    const serverZone = config?.serverZone ?? Defaults.serverZone ?? "US";
-    this.config = {
-      ...Defaults,
-      ...config,
-      debug: config?.debug ?? Defaults.debug ?? false,
-      logLevel: config?.logLevel ?? Defaults.logLevel ?? LogLevel.Error,
-      loggerProvider: config?.loggerProvider ?? Defaults.loggerProvider ?? null,
-      instanceName:
-        config?.instanceName ?? Defaults.instanceName ?? "$default_instance",
-      fallbackVariant:
-        config?.fallbackVariant ?? Defaults.fallbackVariant ?? {},
-      initialVariants:
-        config?.initialVariants ?? Defaults.initialVariants ?? {},
-      source: config?.source ?? Defaults.source ?? Source.LocalStorage,
-      serverZone,
-      serverUrl:
-        config?.serverUrl ??
-        (serverZone === "EU"
-          ? euServerUrl
-          : (Defaults.serverUrl ?? "https://api.lab.amplitude.com")),
-      flagsServerUrl:
-        config?.flagsServerUrl ??
-        (serverZone === "EU"
-          ? euFlagsServerUrl
-          : (Defaults.flagsServerUrl ?? "https://flag.lab.amplitude.com")),
-      fetchTimeoutMillis:
-        config?.fetchTimeoutMillis ?? Defaults.fetchTimeoutMillis ?? 10000,
-      retryFetchOnFailure:
-        config?.retryFetchOnFailure ?? Defaults.retryFetchOnFailure ?? true,
-      automaticExposureTracking:
-        config?.automaticExposureTracking ??
-        Defaults.automaticExposureTracking ??
-        true,
-      pollOnStart: config?.pollOnStart ?? Defaults.pollOnStart ?? true,
-      fetchOnStart: config?.fetchOnStart ?? Defaults.fetchOnStart ?? true,
-      automaticFetchOnAmplitudeIdentityChange:
-        config?.automaticFetchOnAmplitudeIdentityChange ??
-        Defaults.automaticFetchOnAmplitudeIdentityChange ??
-        false,
-      userProvider: config?.userProvider ?? Defaults.userProvider ?? null,
-      exposureTrackingProvider:
-        config?.exposureTrackingProvider ??
-        Defaults.exposureTrackingProvider ??
-        null,
-      httpClient: createDiagnosticHttpClient(
-        config?.httpClient ?? Defaults.httpClient ?? FetchHttpClient,
-      ),
-      storage: config?.storage ?? Defaults.storage ?? null,
-    };
-    this.logger = new AmpLogger(
-      this.config.loggerProvider || new ConsoleLogger(),
-      ExperimentClient.getLogLevel(this.config),
-    );
-    this.defaultUserProvider = new DefaultUserProvider(
-      this.config.userProvider,
-    );
+    this.config = resolveExperimentConfig(apiKey, config);
+    this.logger = createExperimentLogger(this.config);
+    this.defaultUserProvider = createDefaultUserProvider(this.config);
     if (this.config.exposureTrackingProvider) {
       this.userSessionExposureTracker = new UserSessionExposureTracker(
         this.config.exposureTrackingProvider,
       );
     }
-    // Setup Remote APIs
-    const httpClient = new WrapperClient(
-      this.config.httpClient || FetchHttpClient,
-    );
-    this.flagApi = new SdkFlagApi(
-      this.apiKey,
-      this.config.flagsServerUrl,
-      httpClient,
-    );
-    this.evaluationApi = new SdkEvaluationApi(
-      this.apiKey,
-      this.config.serverUrl,
-      httpClient,
-    );
-    // Storage & Caching
-    const storage = this.config.storage || new MemoryStorage();
-    this.variants = getVariantStorage(
-      this.apiKey,
-      this.config.instanceName,
-      storage,
-    );
-    this.flags = getFlagStorage(this.apiKey, this.config.instanceName, storage);
+    const providers = createExperimentProviders(apiKey, this.config);
+    this.flagApi = providers.flagApi;
+    this.evaluationApi = providers.evaluationApi;
+    this.variants = providers.variants;
+    this.flags = providers.flags;
+    this.fetchVariantsOptions = providers.fetchVariantsOptions;
     if (this.config.initialFlags) {
       try {
         this.initialFlags = JSON.parse(this.config.initialFlags);
@@ -229,11 +127,6 @@ export class ExperimentClient implements Client {
         this.logger.warn(error);
       }
     }
-    this.fetchVariantsOptions = getVariantsOptionsStorage(
-      this.apiKey,
-      this.config.instanceName,
-      storage,
-    );
     this.flagsAndVariantsLoadedPromise = [
       this.flags.load(this.convertInitialFlagsForStorage()),
       this.variants.load(),
@@ -430,6 +323,7 @@ export class ExperimentClient implements Client {
         variant: { value: undefined },
         fallback: true,
         stale: false,
+        freshness: "unknown",
         reason: "missing_flag",
       };
     }
@@ -443,11 +337,13 @@ export class ExperimentClient implements Client {
     const variant = sourceVariant.variant || {};
     const fallbackVariant = isFallback(sourceVariant.source);
     const missingVariant = variant.value === undefined;
+    const freshness = this.getFreshness();
     return {
       variant,
       source: sourceVariant.source,
       fallback: fallbackVariant,
-      stale: false,
+      stale: freshness === "stale",
+      freshness,
       reason: missingVariant
         ? this.lastFetchFailure
           ? "fetch_failure"
@@ -458,6 +354,18 @@ export class ExperimentClient implements Client {
           ? "fallback"
           : undefined,
     };
+  }
+
+  private getFreshness(): VariantFreshness {
+    if (this.lastFetchFailure !== undefined) {
+      return Object.keys(this.variants.getAll()).length > 0
+        ? "stale"
+        : "unknown";
+    }
+    if (this.lastFetchTime !== undefined) {
+      return "fresh";
+    }
+    return "unknown";
   }
 
   /**
@@ -1080,15 +988,6 @@ export class ExperimentClient implements Client {
     if (metadata) exposure.metadata = metadata;
     const user = this.addContextSync(this.getUser());
     this.userSessionExposureTracker?.track(exposure, user);
-  }
-
-  private static getLogLevel(config: ExperimentConfig): LogLevel {
-    // Backwards compatibility: if debug flag is set to true, use Debug level
-    if (config.debug === true) {
-      return LogLevel.Debug;
-    }
-    // Otherwise use the configured logLevel or default to Warn
-    return config.logLevel ?? LogLevel.Warn;
   }
 
   private shouldRetryFetch(e: unknown): boolean {

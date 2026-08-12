@@ -1,5 +1,6 @@
 import type { ReactNativeTrackingOptions } from "@amplitude/analytics-core";
-import type { LegacySessionData, NativeApplicationContext } from "./context";
+import UAParser from "@amplitude/ua-parser-js";
+import type { NativeApplicationContext } from "./context";
 
 type NavigatorWithLanguage = Navigator & {
   userLanguage?: string;
@@ -14,25 +15,26 @@ export function getNativeApplicationContext(
     typeof navigator === "undefined"
       ? undefined
       : (navigator as NavigatorWithLanguage);
-  return {
+  const userAgent =
+    typeof navigator !== "undefined" && navigator.userAgent
+      ? navigator.userAgent
+      : undefined;
+  const uaResult = new UAParser(userAgent).getResult();
+  const context: NativeApplicationContext = {
     platform: "Web",
     language: browserNavigator?.language ?? browserNavigator?.userLanguage,
   };
+  if (uaResult.os.name) {
+    context.osName = uaResult.os.name;
+  }
+  if (uaResult.os.version) {
+    context.osVersion = uaResult.os.version;
+  }
+  if (uaResult.device.vendor) {
+    context.deviceManufacturer = uaResult.device.vendor;
+  }
+  if (uaResult.device.model) {
+    context.deviceModel = uaResult.device.model;
+  }
+  return context;
 }
-
-export function getLegacySessionData(_instanceName: string): LegacySessionData {
-  return {};
-}
-
-export function getLegacyEvents(
-  _instanceName: string,
-  _eventKind: string,
-): string[] {
-  return [];
-}
-
-export function removeLegacyEvent(
-  _instanceName: string,
-  _eventKind: string,
-  _eventId: number,
-): void {}

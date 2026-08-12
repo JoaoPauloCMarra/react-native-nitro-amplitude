@@ -1,6 +1,8 @@
 #pragma once
 
-#include "NativeAmplitudeAdapter.hpp"
+#include "ContextAdapter.hpp"
+#include "HttpAdapter.hpp"
+#include "StorageAdapter.hpp"
 #include <memory>
 
 #ifndef NITRO_AMPLITUDE_DISABLE_PLATFORM_ADAPTER
@@ -14,22 +16,25 @@
 
 namespace NitroAmplitude {
 
-inline std::shared_ptr<NativeAmplitudeAdapter> getSharedPlatformAdapter() {
+struct PlatformAdapters {
+  std::shared_ptr<ContextAdapter> context;
+  std::shared_ptr<StorageAdapter> storage;
+  std::shared_ptr<HttpAdapter> http;
+};
+
+inline PlatformAdapters getSharedPlatformAdapters() {
 #ifndef NITRO_AMPLITUDE_DISABLE_PLATFORM_ADAPTER
 #if __APPLE__
-  static std::shared_ptr<NativeAmplitudeAdapter> adapter =
+  static std::shared_ptr<IOSAmplitudeAdapterCpp> adapter =
       std::make_shared<IOSAmplitudeAdapterCpp>();
-  return adapter;
+  return PlatformAdapters{adapter, adapter, adapter};
 #elif __ANDROID__
-  static std::shared_ptr<NativeAmplitudeAdapter> adapter =
+  static std::shared_ptr<AndroidAmplitudeAdapterCpp> adapter =
       std::make_shared<AndroidAmplitudeAdapterCpp>(AndroidAmplitudeAdapterJava::getContext());
-  return adapter;
-#else
-  return nullptr;
+  return PlatformAdapters{adapter, adapter, adapter};
 #endif
-#else
-  return nullptr;
 #endif
+  return PlatformAdapters{nullptr, nullptr, nullptr};
 }
 
 } // namespace NitroAmplitude

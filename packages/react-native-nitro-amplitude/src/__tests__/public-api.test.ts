@@ -34,11 +34,7 @@ function createStorageHybrid() {
       });
     }),
     getBatch: jest.fn((keys: string[], persist: boolean) => {
-      return keys.map(
-        (key) =>
-          selectStore(persist).get(key) ??
-          "__nitro_amplitude_batch_missing__::v1",
-      );
+      return keys.map((key) => selectStore(persist).get(key) ?? null);
     }),
     removeBatch: jest.fn((keys: string[], persist: boolean) => {
       keys.forEach((key) => selectStore(persist).delete(key));
@@ -52,15 +48,6 @@ function createContextHybrid() {
     getApplicationContextJson: jest.fn(() =>
       JSON.stringify({ platform: "iOS", version: "1.0.0" }),
     ),
-    getLegacySessionDataJson: jest.fn(() =>
-      JSON.stringify({
-        deviceId: "legacy-device",
-        userId: "legacy-user",
-        sessionId: 123,
-      }),
-    ),
-    getLegacyEventsJson: jest.fn(() => ["event-one", "event-two"]),
-    removeLegacyEvent: jest.fn(),
   };
 }
 
@@ -100,6 +87,8 @@ function createWorkerHybrid() {
       return jest.fn(() => listeners.delete(callback));
     }),
     queueSize: jest.fn(() => 0),
+    inFlightCount: jest.fn(() => 0),
+    pendingBodyBytes: jest.fn(() => 0),
   };
 }
 
@@ -132,59 +121,66 @@ import { Status } from "@amplitude/analytics-core";
 import { NetworkGuardedFetchTransport } from "../analytics/network-guarded-fetch-transport";
 import {
   clearDryRunTransportRecords,
-  clearDiagnosticFailures,
-  createAmplitudeClient,
-  createDurableAmplitudeStoragePreset,
-  createFakeExperimentStorage,
-  createMockExperimentClient,
   createNetworkTimingBuffer,
   createTimedAnalyticsTransport,
   createTimedHttpClient,
-  Experiment,
-  createInstance,
   dryRunHttpClient,
   dryRunTransport,
+  getDryRunAnalyticsEvents,
   getDryRunTransportRecords,
+  getNetworkEnabled,
+  setNetworkEnabled,
+} from "../network";
+import {
+  createFakeExperimentStorage,
+  createMockExperimentClient,
+} from "../testing";
+import {
+  clearDiagnosticFailures,
+  createAmplitudeClient,
+  createDurableAmplitudeStoragePreset,
+  Experiment,
+  createInstance,
   getAmplitudeErrorCode,
   getDiagnostics,
   getLastNativeError,
-  getNetworkEnabled,
   getNativeStartupDiagnostics,
   getSafeAmplitudeDiagnostics,
   prefetchNativeContext,
   nitroHttpClient,
-  setNetworkEnabled,
   variantBoolean,
   variantString,
 } from "../index";
 import * as AnalyticsCompat from "../analytics";
 import * as ExperimentCompat from "../experiment";
-import {
-  getLegacyEvents,
-  getLegacySessionData,
-  getNativeApplicationContext,
-  removeLegacyEvent,
-} from "../native/context";
+import { getNativeApplicationContext } from "../native/context";
 import { resetHybridInstancesForTests } from "../native/hybrid";
 import {
   NitroAnalyticsStorage,
   NitroExperimentStorage,
   NitroMemoryStorage,
 } from "../native/storage";
+import { getBatchValues } from "../native/storage";
 import {
   NitroAnalyticsStorage as WebAnalyticsStorage,
   NitroExperimentStorage as WebExperimentStorage,
   NitroMemoryStorage as WebMemoryStorage,
 } from "../native/storage.web";
 import {
-  getLegacyEvents as getWebLegacyEvents,
-  getLegacySessionData as getWebLegacySessionData,
   getNativeApplicationContext as getWebApplicationContext,
   prefetchNativeContext as prefetchWebNativeContext,
-  removeLegacyEvent as removeWebLegacyEvent,
 } from "../native/context.web";
 import { nitroHttpClient as webNitroHttpClient } from "../native/http.web";
 import * as WebEntry from "../index.web";
+import { getDiagnosticEvents } from "../diagnostics-pipeline";
+import {
+  LocalStorage,
+  MemoryStorage,
+} from "../analytics/storage/local-storage";
+
+function getRawBatchValue(key: string): string | undefined {
+  return mockDisk.get(key);
+}
 
 type ConnectorGlobal = typeof globalThis & {
   analyticsConnectorInstances?: unknown;
@@ -303,7 +299,7 @@ describe("react-native-nitro-amplitude", () => {
     expect(typeof ExperimentCompat.ExperimentClient).toBe("function");
   });
 
-  it("reads native context and legacy migration hooks through Nitro", () => {
+  it("reads native context through Nitro and normalizes null values", () => {
     prefetchNativeContext();
     const context = getNativeApplicationContext({
       platform: true,
@@ -319,16 +315,57 @@ describe("react-native-nitro-amplitude", () => {
       idfv: false,
       country: false,
     });
-    const legacy = getLegacySessionData("example");
-    const events = getLegacyEvents("example", "events");
-    removeLegacyEvent("example", "events", 1);
 
     expect(context.platform).toBe("iOS");
-    expect(legacy.deviceId).toBe("legacy-device");
-    expect(events).toEqual(["event-one", "event-two"]);
+    expect(mockHybridObjects.AmplitudeContext?.prefetch).toHaveBeenCalled();
+
+    const hybrid = mockHybridObjects.AmplitudeContext;
+    hybrid.getApplicationContextJson.mockReturnValue(
+      JSON.stringify({ version: null, platform: "Android", osName: 7 }),
+    );
+    const normalized = getNativeApplicationContext({
+      platform: true,
+      language: true,
+      osName: true,
+      osVersion: true,
+      deviceManufacturer: true,
+      deviceModel: true,
+      adid: false,
+      carrier: false,
+      ipAddress: false,
+      appSetId: false,
+      idfv: false,
+      country: false,
+    });
+    expect(normalized.version).toBe("");
+    expect(normalized.platform).toBe("Android");
+    expect(normalized.osName).toBeUndefined();
+  });
+
+  it("removed the legacy SQLite migration surface", () => {
+    expect(mockHybridObjects.AmplitudeContext).toBeUndefined();
+    const context = getNativeApplicationContext({
+      platform: true,
+      language: true,
+      osName: true,
+      osVersion: true,
+      deviceManufacturer: true,
+      deviceModel: true,
+      adid: false,
+      carrier: false,
+      ipAddress: false,
+      appSetId: false,
+      idfv: false,
+      country: false,
+    });
+    expect(context).toEqual({ platform: "iOS", version: "1.0.0" });
     expect(
-      mockHybridObjects.AmplitudeContext?.removeLegacyEvent,
-    ).toHaveBeenCalledWith("example", "events", 1);
+      (
+        mockHybridObjects.AmplitudeContext as unknown as {
+          getLegacySessionDataJson?: unknown;
+        }
+      ).getLegacySessionDataJson,
+    ).toBeUndefined();
   });
 
   it("clears stale native diagnostics after successful probes", () => {
@@ -643,7 +680,7 @@ describe("react-native-nitro-amplitude", () => {
       expect(result).toMatchObject({
         ok: false,
         sent: 0,
-        failed: 1,
+        failed: 0,
         retried: 1,
       });
       expect(result.reason).toContain("queued event");
@@ -1008,10 +1045,7 @@ describe("react-native-nitro-amplitude", () => {
     expect(await disk.get("variant")).toBe("disk-on");
     expect(await experiment.get("variant")).toBe("on");
     expect(getWebApplicationContext({ platform: true }).platform).toBe("Web");
-    expect(getWebLegacySessionData("default")).toEqual({});
-    expect(getWebLegacyEvents("default", "events")).toEqual([]);
     expect(prefetchWebNativeContext()).toBeUndefined();
-    expect(removeWebLegacyEvent("default", "events", 1)).toBeUndefined();
 
     await analytics.reset();
     await disk.reset();
@@ -1093,9 +1127,8 @@ describe("react-native-nitro-amplitude", () => {
       blockedAnalytics.track("web_blocked_transport");
       await expect(blockedAnalytics.flushWithResult()).resolves.toMatchObject({
         ok: false,
-        failed: 1,
+        retried: 1,
       });
-      await new WebAnalyticsStorage("analytics-events").reset();
       await blockedAnalytics.reset();
       blockedAnalytics.shutdown();
       setNetworkEnabled(true);
@@ -1165,6 +1198,7 @@ describe("react-native-nitro-amplitude", () => {
       expect(mockHybridObjects.AmplitudeStorage).toBeUndefined();
 
       await analytics.reset();
+      await new WebAnalyticsStorage("analytics-events").reset();
 
       expect(
         Array.from(values.keys()).filter((key) =>
@@ -1186,5 +1220,333 @@ describe("react-native-nitro-amplitude", () => {
       });
       globalThis.fetch = originalFetch;
     }
+  });
+
+  it("persists analytics identity across restarts through durable storage", async () => {
+    const first = createInstance();
+    try {
+      await first.init("durable-identity-key", "durable-user", {
+        instanceName: "durable-identity",
+        migrateLegacyData: false,
+      }).promise;
+    } finally {
+      first.shutdown();
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    const deviceId = first.getDeviceId();
+    const sessionId = first.getSessionId();
+
+    const second = createInstance();
+    try {
+      await second.init("durable-identity-key", undefined, {
+        instanceName: "durable-identity",
+        migrateLegacyData: false,
+      }).promise;
+      expect(second.getDeviceId()).toBe(deviceId);
+      expect(second.getUserId()).toBe("durable-user");
+      expect(second.getSessionId()).toBe(sessionId);
+    } finally {
+      second.shutdown();
+    }
+  });
+
+  it("keeps LocalStorage durable while MemoryStorage stays process-local", async () => {
+    const first = new LocalStorage<{ ok: boolean }>();
+    const second = new LocalStorage<{ ok: boolean }>();
+    const memory = new MemoryStorage<{ ok: boolean }>();
+
+    await first.set("durable", { ok: true });
+    await memory.set("memory", { ok: true });
+
+    expect(await second.get("durable")).toEqual({ ok: true });
+    expect(await first.get("durable")).toEqual({ ok: true });
+    expect(await memory.get("memory")).toEqual({ ok: true });
+
+    await first.remove("durable");
+    expect(await second.get("durable")).toBeUndefined();
+  });
+
+  it("scopes web LocalStorage reset to package keys", async () => {
+    const values = new Map<string, string>();
+    const originalLocalStorage = globalThis.localStorage;
+    (jest.requireMock("react-native") as ReactNativeMock).Platform.OS = "web";
+
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      value: {
+        get length() {
+          return values.size;
+        },
+        key: (index: number) => Array.from(values.keys())[index] ?? null,
+        getItem: (key: string) => values.get(key) ?? null,
+        setItem: (key: string, value: string) => {
+          values.set(key, value);
+        },
+        removeItem: (key: string) => {
+          values.delete(key);
+        },
+      },
+    });
+
+    try {
+      values.set("unrelated-app-key", "keep");
+      const storage = new LocalStorage<{ ok: boolean }>();
+      await storage.set("own", { ok: true });
+
+      expect(values.get("unrelated-app-key")).toBe("keep");
+      expect(values.has("nitro-amplitude::local::own")).toBe(true);
+
+      await storage.reset();
+
+      expect(values.has("nitro-amplitude::local::own")).toBe(false);
+      expect(values.get("unrelated-app-key")).toBe("keep");
+      expect(await storage.get("own")).toBeUndefined();
+    } finally {
+      Object.defineProperty(globalThis, "localStorage", {
+        configurable: true,
+        value: originalLocalStorage,
+      });
+    }
+  });
+
+  it("decodes real values equal to the old batch sentinel as present", async () => {
+    const storage = new NitroAnalyticsStorage<{ ok: boolean }>("sentinel");
+    await storage.set("collision", { ok: true });
+    const raw = getRawBatchValue("sentinel::collision");
+    expect(raw).toBe('{"ok":true}');
+    const values = getBatchValues(["sentinel::collision"], true);
+    expect(values).toEqual(['{"ok":true}']);
+    const missing = getBatchValues(["sentinel::missing"], true);
+    expect(missing).toEqual([undefined]);
+  });
+
+  it("flushes accepted events before shutdown teardown", async () => {
+    clearDryRunTransportRecords();
+    const analytics = createInstance();
+    try {
+      await analytics.init("shutdown-flush-key", "shutdown-user", {
+        instanceName: "shutdown-flush",
+        migrateLegacyData: false,
+        transportProvider: dryRunTransport,
+      }).promise;
+      analytics.track("shutdown_flush_event");
+    } finally {
+      analytics.shutdown();
+    }
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    const events = getDryRunAnalyticsEvents();
+    expect(
+      events.some((entry) =>
+        entry.payload.events.some(
+          (event) => event.event_type === "shutdown_flush_event",
+        ),
+      ),
+    ).toBe(true);
+  });
+
+  it("resets analytics identity and experiment state together", async () => {
+    const client = createAmplitudeClient({
+      analyticsApiKey: "combined-reset-analytics",
+      experimentDeploymentKey: "combined-reset-key",
+      instanceName: "combined-reset",
+      userId: "reset-user",
+      durableStorage: false,
+      dryRun: true,
+    });
+    await client.init({ user_id: "reset-user" });
+    const oldUserId = client.getUserId();
+    const oldDeviceId = client.getDeviceId();
+    expect(oldUserId).toBe("reset-user");
+    client.reset();
+    expect(client.getUserId()).toBeUndefined();
+    expect(client.getDeviceId()).not.toBe(oldDeviceId);
+    expect(client.experiment?.getUser().user_id).toBeUndefined();
+  });
+
+  it("reports variant freshness transitions", async () => {
+    let failFetch = false;
+    const httpClient = {
+      async request(requestUrl: string) {
+        if (failFetch) {
+          throw new Error(
+            "A server with the specified hostname could not be found.",
+          );
+        }
+        if (requestUrl.includes("/sdk/v2/flags")) {
+          return { status: 200, body: "[]" };
+        }
+        return {
+          status: 200,
+          body: JSON.stringify({
+            "fresh-flag": { key: "on", value: "on" },
+          }),
+        };
+      },
+    };
+    const client = new ExperimentCompat.ExperimentClient("freshness-key", {
+      fetchOnStart: false,
+      pollOnStart: false,
+      retryFetchOnFailure: false,
+      httpClient,
+    });
+
+    expect(client.variantWithMetadata("fresh-flag")).toMatchObject({
+      freshness: "unknown",
+    });
+
+    await client.fetchOrThrow(
+      { user_id: "freshness-user" },
+      { flagKeys: ["fresh-flag"] },
+    );
+    expect(client.variantWithMetadata("fresh-flag")).toMatchObject({
+      variant: { value: "on" },
+      freshness: "fresh",
+      stale: false,
+    });
+
+    failFetch = true;
+    await expect(
+      client.fetchOrThrow(
+        { user_id: "freshness-user" },
+        { flagKeys: ["fresh-flag"] },
+      ),
+    ).rejects.toThrow("hostname");
+    expect(client.variantWithMetadata("fresh-flag")).toMatchObject({
+      variant: { value: "on" },
+      freshness: "stale",
+      stale: true,
+      reason: undefined,
+    });
+  });
+
+  it("replaces experiment singletons on explicit reinitialize", () => {
+    const first = Experiment.initialize("reinit-key", {
+      instanceName: "reinit",
+      fetchOnStart: false,
+      pollOnStart: false,
+      initialVariants: { flag: { value: "first" } },
+    });
+    expect(first.variant("flag")).toMatchObject({ value: "first" });
+
+    const sameInstance = Experiment.initialize("reinit-key", {
+      instanceName: "reinit",
+      fetchOnStart: false,
+      pollOnStart: false,
+      initialVariants: { flag: { value: "ignored" } },
+    });
+    expect(sameInstance).toBe(first);
+    expect(first.variant("flag")).toMatchObject({ value: "first" });
+
+    const replacement = Experiment.reinitialize("reinit-key", {
+      instanceName: "reinit",
+      fetchOnStart: false,
+      pollOnStart: false,
+      initialVariants: { flag: { value: "second" } },
+    });
+    expect(replacement).not.toBe(first);
+    expect(replacement.variant("flag")).toMatchObject({ value: "second" });
+    expect(
+      Experiment.initialize("reinit-key", {
+        instanceName: "reinit",
+        fetchOnStart: false,
+        pollOnStart: false,
+      }),
+    ).toBe(replacement);
+  });
+
+  it("reports per-capability native availability", () => {
+    const nitroModules = jest.requireMock("react-native-nitro-modules") as {
+      NitroModules: {
+        createHybridObject: jest.Mock;
+      };
+    };
+    const createHybridObject = nitroModules.NitroModules.createHybridObject;
+    const originalCreateHybridObject =
+      createHybridObject.getMockImplementation();
+
+    createHybridObject.mockImplementation((name: string) => {
+      if (name === "AmplitudeStorage") {
+        throw new Error("storage unavailable");
+      }
+      return originalCreateHybridObject?.(name);
+    });
+
+    expect(getNativeStartupDiagnostics()).toMatchObject({
+      contextAvailable: true,
+      storageAvailable: false,
+      workerAvailable: true,
+      nativeAvailable: false,
+    });
+
+    resetHybridInstancesForTests();
+    if (originalCreateHybridObject) {
+      createHybridObject.mockImplementation(originalCreateHybridObject);
+    }
+  });
+
+  it("probes durable storage and worker readiness in health checks", async () => {
+    const analytics = createInstance();
+    try {
+      await analytics.init("health-key", "health-user", {
+        instanceName: "health-probe",
+        migrateLegacyData: false,
+      }).promise;
+      const result = await analytics.healthCheck();
+      expect(result).toMatchObject({
+        ok: true,
+        nativeAvailable: true,
+        storageWritable: true,
+        diskStorageWritable: true,
+        workerReady: true,
+        errors: [],
+      });
+      expect(mockHybridObjects.AmplitudeStorage?.set).toHaveBeenCalledWith(
+        expect.stringContaining("health::"),
+        "ok",
+        true,
+      );
+      expect(mockHybridObjects.AmplitudeWorker?.queueSize).toHaveBeenCalled();
+    } finally {
+      analytics.shutdown();
+    }
+  });
+
+  it("reports bounded worker metrics through diagnostics", () => {
+    const diagnostics = getDiagnostics();
+    expect(diagnostics.workerMetrics).toEqual({
+      queueSize: 0,
+      inFlightCount: 0,
+      pendingBodyBytes: 0,
+    });
+    expect(mockHybridObjects.AmplitudeWorker?.inFlightCount).toHaveBeenCalled();
+    expect(
+      mockHybridObjects.AmplitudeWorker?.pendingBodyBytes,
+    ).toHaveBeenCalled();
+  });
+
+  it("records network timing and health events in the bounded pipeline", async () => {
+    clearDiagnosticFailures();
+    const analytics = createInstance();
+    try {
+      const result = await analytics.healthCheck();
+      expect(result.ok).toBe(true);
+    } finally {
+      analytics.shutdown();
+    }
+    const buffer = createNetworkTimingBuffer();
+    await createTimedAnalyticsTransport(dryRunTransport, buffer.record).send(
+      "https://example.com/events",
+      { events: [{ event_type: "demo" }] },
+    );
+    const events = getDiagnosticEvents();
+    expect(events.some((event) => event.type === "health")).toBe(true);
+    expect(
+      events.some(
+        (event) =>
+          event.type === "network_timing" && event.timing.kind === "analytics",
+      ),
+    ).toBe(true);
   });
 });

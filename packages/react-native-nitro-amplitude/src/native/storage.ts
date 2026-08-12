@@ -1,8 +1,10 @@
-import type { Storage as AnalyticsStorage } from "@amplitude/analytics-core";
+import type {
+  Event,
+  UserSession,
+  Storage as AnalyticsStorage,
+} from "@amplitude/analytics-core";
 import type { Storage as ExperimentStorage } from "../experiment/types/storage";
 import { getAmplitudeStorage } from "./hybrid";
-
-export const BATCH_MISSING_SENTINEL = "__nitro_amplitude_batch_missing__::v1";
 
 export function getBatchValues(
   keys: string[],
@@ -11,11 +13,31 @@ export function getBatchValues(
   const storage = getAmplitudeStorage();
   return storage
     .getBatch(keys, persist)
-    .map((value) => (value === BATCH_MISSING_SENTINEL ? undefined : value));
+    .map((value) => (value === null ? undefined : value));
 }
 
 function namespaceKey(namespace: string, key: string): string {
   return `${namespace}::${key}`;
+}
+
+export type NamespacedStores = {
+  analyticsEvents: NitroAnalyticsStorage<Event[]>;
+  analyticsSession: NitroAnalyticsStorage<UserSession>;
+  experimentVariants: NitroExperimentStorage;
+};
+
+export function createNamespacedStores(namespace: string): NamespacedStores {
+  return {
+    analyticsEvents: new NitroAnalyticsStorage<Event[]>(
+      `${namespace}:analytics-events`,
+    ),
+    analyticsSession: new NitroAnalyticsStorage<UserSession>(
+      `${namespace}:analytics-session`,
+    ),
+    experimentVariants: new NitroExperimentStorage(
+      `${namespace}:experiment-variants`,
+    ),
+  };
 }
 
 export class NitroAnalyticsStorage<T> implements AnalyticsStorage<T> {

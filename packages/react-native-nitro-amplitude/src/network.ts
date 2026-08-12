@@ -2,6 +2,7 @@ import { BaseTransport } from "@amplitude/analytics-core";
 import type { Payload, Response, Transport } from "@amplitude/analytics-core";
 import type { HttpClient, SimpleResponse } from "./experiment/types/transport";
 import { createAmplitudeError } from "./errors";
+import { recordDiagnosticEvent } from "./diagnostics-pipeline";
 
 let networkEnabled = true;
 
@@ -109,6 +110,18 @@ function createTiming(
   };
 }
 
+function recordTiming(
+  record: AmplitudeNetworkTimingRecorder,
+  timing: AmplitudeNetworkTiming,
+): void {
+  record(timing);
+  recordDiagnosticEvent({
+    type: "network_timing",
+    recordedAt: Date.now(),
+    timing,
+  });
+}
+
 export function createNetworkTimingBuffer(
   limit = 20,
 ): AmplitudeNetworkTimingBuffer {
@@ -145,7 +158,8 @@ export function createTimedAnalyticsTransport(
           payload,
           enableRequestBodyCompression,
         );
-        record(
+        recordTiming(
+          record,
           createTiming(
             "analytics",
             serverUrl,
@@ -156,7 +170,8 @@ export function createTimedAnalyticsTransport(
         );
         return response;
       } catch (error) {
-        record(
+        recordTiming(
+          record,
           createTiming(
             "analytics",
             serverUrl,
@@ -193,7 +208,8 @@ export function createTimedHttpClient(
           data,
           timeoutMillis,
         );
-        record(
+        recordTiming(
+          record,
           createTiming(
             "experiment",
             requestUrl,
@@ -204,7 +220,8 @@ export function createTimedHttpClient(
         );
         return response;
       } catch (error) {
-        record(
+        recordTiming(
+          record,
           createTiming(
             "experiment",
             requestUrl,

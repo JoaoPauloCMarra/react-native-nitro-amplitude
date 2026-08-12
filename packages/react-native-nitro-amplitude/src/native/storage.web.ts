@@ -1,8 +1,32 @@
-import type { Storage as AnalyticsStorage } from "@amplitude/analytics-core";
+import type {
+  Event,
+  UserSession,
+  Storage as AnalyticsStorage,
+} from "@amplitude/analytics-core";
 import type { Storage as ExperimentStorage } from "../experiment/types/storage";
 
 function namespaceKey(namespace: string, key: string): string {
   return `${namespace}::${key}`;
+}
+
+export type NamespacedStores = {
+  analyticsEvents: NitroAnalyticsStorage<Event[]>;
+  analyticsSession: NitroAnalyticsStorage<UserSession>;
+  experimentVariants: NitroExperimentStorage;
+};
+
+export function createNamespacedStores(namespace: string): NamespacedStores {
+  return {
+    analyticsEvents: new NitroAnalyticsStorage<Event[]>(
+      `${namespace}:analytics-events`,
+    ),
+    analyticsSession: new NitroAnalyticsStorage<UserSession>(
+      `${namespace}:analytics-session`,
+    ),
+    experimentVariants: new NitroExperimentStorage(
+      `${namespace}:experiment-variants`,
+    ),
+  };
 }
 
 class WebStringStorage {

@@ -10,6 +10,12 @@
       ],
       "react-native-nitro-amplitude/experiment": [
         "../../packages/react-native-nitro-amplitude/src/experiment/index.ts"
+      ],
+      "react-native-nitro-amplitude/network": [
+        "../../packages/react-native-nitro-amplitude/src/network.ts"
+      ],
+      "react-native-nitro-amplitude/testing": [
+        "../../packages/react-native-nitro-amplitude/src/testing.ts"
       ]
     },
     "strict": true,

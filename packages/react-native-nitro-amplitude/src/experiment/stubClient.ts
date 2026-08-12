@@ -78,6 +78,7 @@ export class StubExperimentClient implements Client {
       variant: Defaults.fallbackVariant ?? {},
       fallback: true,
       stale: false,
+      freshness: "unknown",
       reason: "fallback",
     };
   }

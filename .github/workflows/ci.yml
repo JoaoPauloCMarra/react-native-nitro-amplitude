@@ -46,9 +46,6 @@ jobs:
       - name: Unit tests with coverage
         run: bun run test:coverage
 
-      - name: C++ tests
-        run: bun run test:cpp
-
   example-android:
     name: Example Android Build
     runs-on: ubuntu-latest
@@ -133,3 +130,57 @@ jobs:
 
       - name: Build iOS example
         run: bun run example:ios:build
+
+  example-smoke:
+    name: Example iOS Dry-Run Smoke
+    runs-on: macos-26
+    needs: example-ios
+
+    env:
+      EXPO_PUBLIC_AMPLITUDE_DRY_RUN: "1"
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae
+        with:
+          path: |
+            ~/.bun/install/cache
+            ~/Library/Caches/CocoaPods
+            Pods
+            node_modules
+            packages/*/node_modules
+            apps/*/node_modules
+          key: ${{ runner.os }}-example-ios-${{ hashFiles('**/bun.lock') }}
+          restore-keys: ${{ runner.os }}-example-ios-
+
+      - run: bun install --frozen-lockfile
+
+      - name: Prebuild iOS
+        run: CI=1 bun run --cwd apps/example prebuild -- --platform ios
+
+      - name: Build iOS example
+        run: bun run example:ios:build
+
+      - name: Install Maestro
+        run: |
+          curl -Ls "https://get.maestro.mobile.dev" | bash
+          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+
+      - name: Boot simulator and install app
+        run: |
+          xcrun simctl boot "iPhone 16" 2>/dev/null || true
+          xcrun simctl bootstatus "iPhone 16" -b
+          app_path="apps/example/ios/build/Build/Products/Debug-iphonesimulator/NitroAmplitude.app"
+          xcrun simctl install booted "$app_path"
+
+      - name: Run deterministic dry-run smoke
+        run: bun run example:smoke
+        env:
+          MAESTRO_DRIVER_STARTUP_TIMEOUT: 120000

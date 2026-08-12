@@ -10,38 +10,8 @@ type PendingRequest = {
   timeoutId: ReturnType<typeof setTimeout>;
 };
 
-const pendingRequests = new Map<string, PendingRequest>();
-let listenerInstalled = false;
-let listenerWorker: AmplitudeWorker | undefined;
 const DEFAULT_TIMEOUT_MILLIS = 10000;
 const MAX_TIMEOUT_MILLIS = 300000;
-
-function ensureListener(): void {
-  const worker = getAmplitudeWorker();
-  if (listenerInstalled && listenerWorker === worker) {
-    return;
-  }
-  listenerInstalled = true;
-  listenerWorker = worker;
-  worker.addOnComplete((requestId, statusCode, body, error) => {
-    const pending = pendingRequests.get(requestId);
-    if (!pending) {
-      return;
-    }
-    pendingRequests.delete(requestId);
-    clearTimeout(pending.timeoutId);
-    if (error) {
-      pending.reject(
-        createAmplitudeError(getAmplitudeErrorCode(new Error(error)), error),
-      );
-      return;
-    }
-    pending.resolve({
-      status: statusCode,
-      body,
-    });
-  });
-}
 
 function createRequestId(): string {
   return `req_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
@@ -55,6 +25,37 @@ function normalizeTimeoutMillis(timeoutMillis: number): number {
 }
 
 export class NitroHttpClient implements HttpClient {
+  private readonly pendingRequests = new Map<string, PendingRequest>();
+  private listenerInstalled = false;
+  private listenerWorker: AmplitudeWorker | undefined;
+
+  private ensureListener(): void {
+    const worker = getAmplitudeWorker();
+    if (this.listenerInstalled && this.listenerWorker === worker) {
+      return;
+    }
+    this.listenerInstalled = true;
+    this.listenerWorker = worker;
+    worker.addOnComplete((requestId, statusCode, body, error) => {
+      const pending = this.pendingRequests.get(requestId);
+      if (!pending) {
+        return;
+      }
+      this.pendingRequests.delete(requestId);
+      clearTimeout(pending.timeoutId);
+      if (error) {
+        pending.reject(
+          createAmplitudeError(getAmplitudeErrorCode(new Error(error)), error),
+        );
+        return;
+      }
+      pending.resolve({
+        status: statusCode,
+        body,
+      });
+    });
+  }
+
   async request(
     requestUrl: string,
     method: string,
@@ -63,12 +64,12 @@ export class NitroHttpClient implements HttpClient {
     timeoutMillis = DEFAULT_TIMEOUT_MILLIS,
   ): Promise<SimpleResponse> {
     assertNetworkEnabled();
-    ensureListener();
+    this.ensureListener();
     const requestId = createRequestId();
     const normalizedTimeoutMillis = normalizeTimeoutMillis(timeoutMillis);
     return new Promise<SimpleResponse>((resolve, reject) => {
       const timeoutId = setTimeout(() => {
-        pendingRequests.delete(requestId);
+        this.pendingRequests.delete(requestId);
         getAmplitudeWorker().cancel(requestId);
         reject(
           createAmplitudeError(
@@ -78,7 +79,7 @@ export class NitroHttpClient implements HttpClient {
         );
       }, normalizedTimeoutMillis + 250);
 
-      pendingRequests.set(requestId, { resolve, reject, timeoutId });
+      this.pendingRequests.set(requestId, { resolve, reject, timeoutId });
 
       try {
         getAmplitudeWorker().enqueue(
@@ -90,7 +91,7 @@ export class NitroHttpClient implements HttpClient {
           normalizedTimeoutMillis,
         );
       } catch (error) {
-        pendingRequests.delete(requestId);
+        this.pendingRequests.delete(requestId);
         clearTimeout(timeoutId);
         reject(
           createAmplitudeError(

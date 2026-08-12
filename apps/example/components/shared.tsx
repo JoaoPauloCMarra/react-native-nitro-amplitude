@@ -249,11 +249,16 @@ export const CodeBlock = ({
   children: string;
   testID?: string;
 }) => (
-  <View style={styles.codeBlock}>
+  <ScrollView
+    contentContainerStyle={styles.codeBlockContent}
+    horizontal
+    showsHorizontalScrollIndicator
+    style={styles.codeBlock}
+  >
     <Text testID={testID} style={styles.codeBlockText}>
       {children}
     </Text>
-  </View>
+  </ScrollView>
 );
 
 export const Section = ({
@@ -540,7 +545,10 @@ export const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: "#1e293b",
+  },
+  codeBlockContent: {
     padding: 14,
+    minWidth: "100%",
   },
   codeBlockText: {
     fontFamily: fontMono400,

@@ -13,11 +13,8 @@ export interface AmplitudeStorage extends HybridObject<{
   getKeysByPrefix(prefix: string, persist: boolean): string[];
   setBatch(keys: string[], values: string[], persist: boolean): void;
   /**
-   * Returns one entry per requested key. Missing keys are reported with the
-   * `BATCH_MISSING_SENTINEL` placeholder because Nitrogen represents this
-   * surface as `string[]`; use `getBatchValues()` from `native/storage` for a
-   * `(string | undefined)[]` view.
+   * Returns one entry per requested key; missing keys are reported as `null`.
    */
-  getBatch(keys: string[], persist: boolean): string[];
+  getBatch(keys: string[], persist: boolean): (string | null)[];
   removeBatch(keys: string[], persist: boolean): void;
 }

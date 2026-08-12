@@ -130,24 +130,6 @@ static bool waitUntil(const std::function<bool()>& predicate, int attempts = 200
   return predicate();
 }
 
-static bool waitForCompletion(
-    HybridAmplitudeWorker& worker,
-    const std::string& requestId,
-    std::string& resultError,
-    int attempts = 200) {
-  bool received = false;
-  auto removeListener = worker.addOnComplete(
-      [&](const std::string& id, double, const std::string&, const std::string& error) {
-        if (id == requestId) {
-          received = true;
-          resultError = error;
-        }
-      });
-  const bool completed = waitUntil([&]() { return received; }, attempts);
-  removeListener();
-  return completed;
-}
-
 void testStorage() {
   auto storage = std::make_shared<HybridAmplitudeStorage>();
 

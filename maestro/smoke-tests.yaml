@@ -8,37 +8,124 @@ name: "Nitro Amplitude Smoke"
     timeout: 120000
 - tapOn: "Run All"
 - extendedWaitUntil:
-    visible: "0 failed"
+    visible:
+      id: "smoke-summary"
+      text: ".*0 failed.*"
     timeout: 30000
 - extendedWaitUntil:
-    visible: "passed"
+    visible:
+      id: "smoke-summary"
+      text: ".*passed.*"
     timeout: 30000
 - assertNotVisible: "FAILED"
 - scrollUntilVisible:
     element:
-      text: "Track Event"
+      id: "track-event"
     direction: DOWN
     timeout: 30000
-- tapOn: "Track Event"
-- extendedWaitUntil:
-    visible: "Tracked nitro_amplitude_demo"
+- tapOn:
+    id: "track-event"
+- scrollUntilVisible:
+    element:
+      id: "analytics-result"
+    direction: DOWN
     timeout: 30000
-- tapOn: "Flush"
 - extendedWaitUntil:
-    visible: "Flush complete"
+    visible:
+      id: "analytics-result"
+      text: "Tracked nitro_amplitude_demo.*"
     timeout: 30000
 - scrollUntilVisible:
     element:
-      text: "Fetch"
+      id: "identify-user"
+    direction: UP
+    timeout: 30000
+- tapOn:
+    id: "identify-user"
+- scrollUntilVisible:
+    element:
+      id: "analytics-result"
     direction: DOWN
     timeout: 30000
-- tapOn: "Fetch"
 - extendedWaitUntil:
-    visible: "Fetched demo-flag: on"
+    visible:
+      id: "analytics-result"
+      text: "Identified demo-user.*"
     timeout: 30000
-- tapOn: "Read Variant"
+- scrollUntilVisible:
+    element:
+      id: "read-diagnostics"
+    direction: UP
+    timeout: 30000
+- tapOn:
+    id: "read-diagnostics"
+- scrollUntilVisible:
+    element:
+      id: "analytics-result"
+    direction: DOWN
+    timeout: 30000
 - extendedWaitUntil:
-    visible: "Read demo-flag: on"
+    visible:
+      id: "analytics-result"
+      text: "queue=.*initialized=.*"
+    timeout: 30000
+- scrollUntilVisible:
+    element:
+      id: "flush-events"
+    direction: UP
+    timeout: 30000
+- tapOn:
+    id: "flush-events"
+- scrollUntilVisible:
+    element:
+      id: "analytics-result"
+    direction: DOWN
+    timeout: 30000
+- extendedWaitUntil:
+    visible:
+      id: "analytics-result"
+      text: "Flush ok.*"
+    timeout: 30000
+- scrollUntilVisible:
+    element:
+      id: "fetch-variants"
+    direction: DOWN
+    timeout: 30000
+- tapOn:
+    id: "fetch-variants"
+- scrollUntilVisible:
+    element:
+      id: "experiment-result"
+    direction: DOWN
+    timeout: 30000
+- extendedWaitUntil:
+    visible:
+      id: "experiment-result"
+      text: "Fetched 1 key\\(s\\).*"
+    timeout: 30000
+- tapOn:
+    id: "read-variant"
+- scrollUntilVisible:
+    element:
+      id: "experiment-result"
+    direction: DOWN
+    timeout: 30000
+- extendedWaitUntil:
+    visible:
+      id: "experiment-result"
+      text: "Read demo-flag: on.*"
+    timeout: 30000
+- tapOn:
+    id: "send-exposure"
+- scrollUntilVisible:
+    element:
+      id: "experiment-result"
+    direction: DOWN
+    timeout: 30000
+- extendedWaitUntil:
+    visible:
+      id: "experiment-result"
+      text: "Exposure queued for demo-flag.*"
     timeout: 30000
 - scrollUntilVisible:
     element:

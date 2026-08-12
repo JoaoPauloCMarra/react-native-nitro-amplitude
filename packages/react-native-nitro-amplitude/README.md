@@ -213,10 +213,11 @@ durable Nitro storage while the network is disabled.
 Network-control, dry-run record access, bounded timing helpers
 (`createNetworkTimingBuffer`, `createTimedAnalyticsTransport`,
 `createTimedHttpClient`), and their types live on the
-`react-native-nitro-amplitude/network` subpath, and mock testing helpers
+`react-native-nitro-amplitude/network` subpath. The established root imports
+remain compatible. Mock testing helpers
 (`createMockAmplitudeClient`, `createMockExperimentClient`,
 `createFakeExperimentStorage`) live on the `react-native-nitro-amplitude/testing`
-subpath. The production root export stays limited to the supported SDK API.
+subpath and remain available from the root for compatibility.
 
 ## Diagnostics
 
@@ -314,9 +315,9 @@ Analytics exports:
 - `nitroTransport`, `nitroHttpClient`, storage adapters
   (`NitroAnalyticsStorage`, `NitroExperimentStorage`, `NitroMemoryStorage`,
   `LocalStorage`, `MemoryStorage`, `InMemoryStorage`).
-- Network controls, dry-run record access, and timing helpers are on the
-  `react-native-nitro-amplitude/network` subpath; mock testing helpers are on
-  the `react-native-nitro-amplitude/testing` subpath.
+- Network controls, dry-run record access, timing helpers, and mock helpers
+  remain available from the root. Prefer the `/network` and `/testing`
+  subpaths in new code.
 - Diagnostics: `getDiagnostics`, `getSafeDiagnostics`,
   `getNativeStartupDiagnostics`, `getLastNativeError`, `healthCheck`,
   `clearDiagnosticFailures`, and worker metrics.
@@ -338,8 +339,8 @@ Native HybridObject types:
 
 - `AmplitudeContext` (context JSON + prefetch, cached by normalized option
   set on both platforms).
-- `AmplitudeStorage` (sync memory/disk KV; missing batch values are typed
-  `null`).
+- `AmplitudeStorage` (sync memory/disk KV with a compatible `string[]` batch
+  ABI; `getBatchValues` safely maps missing values to `undefined`).
 - `AmplitudeWorker` (bounded queue, 2 concurrent workers, request-scoped
   completion, cancellation of queued requests, queue/in-flight/byte metrics).
 
@@ -370,9 +371,9 @@ Architecture notes:
   web.
 - Web memory storage is shared across package instances in the same JavaScript
   process and isolated by namespace, matching native memory-storage semantics.
-- Legacy Amplitude SDK SQLite migration was removed; the package does not
-  import data written by the legacy Amplitude SDK and `migrateLegacyData` is
-  ignored.
+- Legacy migration methods and `migrateLegacyData` remain accepted for source
+  and native ABI compatibility. The package does not import legacy Amplitude
+  SDK SQLite data; migrate that data before switching SDKs if it is required.
 - For typed Experiment variant payloads, prefer the typed variant helpers
   exported from the package (`react-native-nitro-amplitude/experiment`) over
   reading the untyped `variant.payload` directly.

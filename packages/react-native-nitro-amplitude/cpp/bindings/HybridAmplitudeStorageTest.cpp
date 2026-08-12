@@ -165,14 +165,9 @@ void testStorage() {
 
   const auto batch = storage->getBatch({"alpha", "beta", "missing"}, false);
   assert(batch.size() == 3);
-  assert(std::holds_alternative<std::string>(batch[0]));
-  assert(std::get<std::string>(batch[0]) == "1");
-  assert(std::holds_alternative<std::string>(batch[1]));
-  assert(std::get<std::string>(batch[1]) == "2");
-  assert(std::holds_alternative<margelo::nitro::NullType>(batch[2]));
-
-  const auto realValue = storage->getBatch({"alpha"}, false);
-  assert(std::holds_alternative<std::string>(realValue[0]));
+  assert(batch[0] == "1");
+  assert(batch[1] == "2");
+  assert(batch[2] == "__nitro_amplitude_batch_missing__::v1");
 
   bool mismatchThrown = false;
   try {

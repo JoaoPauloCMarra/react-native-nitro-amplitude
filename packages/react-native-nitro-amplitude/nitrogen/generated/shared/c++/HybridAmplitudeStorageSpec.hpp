@@ -18,8 +18,6 @@
 #include <string>
 #include <optional>
 #include <vector>
-#include <NitroModules/Null.hpp>
-#include <variant>
 
 namespace margelo::nitro::NitroAmplitude {
 
@@ -60,7 +58,7 @@ namespace margelo::nitro::NitroAmplitude {
       virtual std::vector<std::string> getAllKeys(bool persist) = 0;
       virtual std::vector<std::string> getKeysByPrefix(const std::string& prefix, bool persist) = 0;
       virtual void setBatch(const std::vector<std::string>& keys, const std::vector<std::string>& values, bool persist) = 0;
-      virtual std::vector<std::variant<nitro::NullType, std::string>> getBatch(const std::vector<std::string>& keys, bool persist) = 0;
+      virtual std::vector<std::string> getBatch(const std::vector<std::string>& keys, bool persist) = 0;
       virtual void removeBatch(const std::vector<std::string>& keys, bool persist) = 0;
 
     protected:

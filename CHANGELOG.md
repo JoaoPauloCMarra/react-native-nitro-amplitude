@@ -8,19 +8,10 @@ The format follows Keep a Changelog and the project adheres to SemVer.
 
 ### Breaking changes
 
-- Removed the legacy Amplitude SDK migration surface from the Nitro
-  `AmplitudeContext` object (`getLegacySessionDataJson`, `getLegacyEventsJson`,
-  `removeLegacyEvent`) and the `migrateLegacyData` initialization path. The
-  package never read legacy Amplitude SDK SQLite data; consumers that need it
-  must migrate with the official Amplitude SDK before switching.
-- `AmplitudeStorage.getBatch` now returns `(string | null)[]` for missing keys
-  instead of the previous `BATCH_MISSING_SENTINEL` placeholder strings, so real
-  stored values can never collide with the missing-value marker. Update batch
-  consumers to handle `null` as a missing entry.
-- Dry-run transports, network controls (`setNetworkEnabled`), timing helpers,
-  and their types moved to `react-native-nitro-amplitude/network`; mock testing
-  helpers moved to `react-native-nitro-amplitude/testing`. Replace affected
-  root imports with the matching subpath import.
+- None. Legacy migration methods, `migrateLegacyData`, the `string[]`
+  `AmplitudeStorage.getBatch` contract, and established root exports remain
+  available. The new `/network` and `/testing` subpaths are preferred for
+  clearer production bundles but are not mandatory.
 
 ### Changed
 
@@ -40,6 +31,9 @@ The format follows Keep a Changelog and the project adheres to SemVer.
   `Experiment.reinitialize` replaces singletons explicitly.
 - Web `LocalStorage` keys are namespaced and `reset()` clears only package
   keys, matching native namespace-scoped reset behavior.
+- Batch missing-value decoding now verifies key existence, so a real stored
+  value equal to the legacy sentinel round-trips without changing the native
+  `string[]` ABI.
 
 ## 0.5.5 - 2026-07-30
 

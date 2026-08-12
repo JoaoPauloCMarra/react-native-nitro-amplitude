@@ -34,7 +34,11 @@ function createStorageHybrid() {
       });
     }),
     getBatch: jest.fn((keys: string[], persist: boolean) => {
-      return keys.map((key) => selectStore(persist).get(key) ?? null);
+      return keys.map(
+        (key) =>
+          selectStore(persist).get(key) ??
+          "__nitro_amplitude_batch_missing__::v1",
+      );
     }),
     removeBatch: jest.fn((keys: string[], persist: boolean) => {
       keys.forEach((key) => selectStore(persist).delete(key));

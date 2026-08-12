@@ -3,9 +3,12 @@
 #include "../core/PlatformAdapterFactory.hpp"
 
 #include <stdexcept>
-#include <variant>
 
 namespace margelo::nitro::NitroAmplitude {
+
+namespace {
+constexpr auto kBatchMissingSentinel = "__nitro_amplitude_batch_missing__::v1";
+}
 
 HybridAmplitudeStorage::HybridAmplitudeStorage()
     : HybridObject(TAG), HybridAmplitudeStorageSpec() {
@@ -119,15 +122,14 @@ void HybridAmplitudeStorage::setBatch(
   }
 }
 
-std::vector<std::variant<nitro::NullType, std::string>> HybridAmplitudeStorage::getBatch(
+std::vector<std::string> HybridAmplitudeStorage::getBatch(
     const std::vector<std::string>& keys,
     bool persist) {
-  std::vector<std::variant<nitro::NullType, std::string>> values;
+  std::vector<std::string> values;
   values.reserve(keys.size());
   for (const auto& key : keys) {
     const auto value = get(key, persist);
-    values.push_back(value ? std::variant<nitro::NullType, std::string>(std::in_place_index<1>, *value)
-                           : std::variant<nitro::NullType, std::string>(std::in_place_index<0>, nitro::null));
+    values.push_back(value.value_or(kBatchMissingSentinel));
   }
   return values;
 }

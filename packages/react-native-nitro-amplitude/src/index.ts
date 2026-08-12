@@ -153,6 +153,34 @@ export type {
   DurableAmplitudeStoragePreset,
   DurableAmplitudeStoragePresetOptions,
 } from "./presets";
+export {
+  assertNetworkEnabled,
+  clearDryRunTransportRecords,
+  createNetworkTimingBuffer,
+  createTimedAnalyticsTransport,
+  createTimedHttpClient,
+  DryRunHttpClient,
+  DryRunTransport,
+  dryRunHttpClient,
+  dryRunTransport,
+  getDryRunAnalyticsEvents,
+  getDryRunTransportRecords,
+  getNetworkEnabled,
+  setNetworkEnabled,
+} from "./network";
+export type {
+  AmplitudeNetworkTiming,
+  AmplitudeNetworkTimingBuffer,
+  AmplitudeNetworkTimingRecorder,
+  DryRunEvent,
+  DryRunRequest,
+} from "./network";
+export {
+  createFakeExperimentStorage,
+  createMockAmplitudeClient,
+  createMockExperimentClient,
+} from "./testing";
+export type { FakeExperimentStorage } from "./testing";
 
 export { Experiment };
 export { ExperimentClient };
@@ -167,6 +195,7 @@ export {
   variantNumber,
   variantPayload,
   variantString,
+  parseVariantJson,
 } from "./experiment/typed-variants";
 export {
   LocalStorage as ExperimentLocalStorage,
@@ -179,6 +208,7 @@ export type {
   ExperimentFetchResult,
   ExperimentVariantResult,
   FetchOptions,
+  VariantFreshness,
 } from "./experiment/types/client";
 export type {
   ExperimentUser,

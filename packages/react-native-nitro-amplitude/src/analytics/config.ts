@@ -263,6 +263,12 @@ export const useReactNativeConfig = async (
     options?.storageProvider ??
     (await createEventsStorage(options, defaultConfig));
 
+  if (options?.migrateLegacyData !== false) {
+    options?.loggerProvider?.debug(
+      "NitroAmplitude: migrateLegacyData remains accepted for compatibility; legacy SQLite import is not available.",
+    );
+  }
+
   const config = new ReactNativeConfig(apiKey, {
     ...options,
     cookieStorage,

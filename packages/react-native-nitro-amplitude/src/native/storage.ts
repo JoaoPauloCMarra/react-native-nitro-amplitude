@@ -6,6 +6,8 @@ import type {
 import type { Storage as ExperimentStorage } from "../experiment/types/storage";
 import { getAmplitudeStorage } from "./hybrid";
 
+export const BATCH_MISSING_SENTINEL = "__nitro_amplitude_batch_missing__::v1";
+
 export function getBatchValues(
   keys: string[],
   persist: boolean,
@@ -13,7 +15,12 @@ export function getBatchValues(
   const storage = getAmplitudeStorage();
   return storage
     .getBatch(keys, persist)
-    .map((value) => (value === null ? undefined : value));
+    .map((value, index) =>
+      value === BATCH_MISSING_SENTINEL &&
+      !storage.has(keys[index] ?? "", persist)
+        ? undefined
+        : value,
+    );
 }
 
 function namespaceKey(namespace: string, key: string): string {

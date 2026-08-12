@@ -6,7 +6,6 @@
 #include <mutex>
 #include <string>
 #include <unordered_map>
-#include <variant>
 #include <vector>
 
 namespace margelo::nitro::NitroAmplitude {
@@ -30,7 +29,7 @@ public:
       bool persist) override;
   size_t getExternalMemorySize() noexcept override;
 
-  std::vector<std::variant<nitro::NullType, std::string>> getBatch(
+  std::vector<std::string> getBatch(
       const std::vector<std::string>& keys,
       bool persist) override;
   void removeBatch(const std::vector<std::string>& keys, bool persist) override;

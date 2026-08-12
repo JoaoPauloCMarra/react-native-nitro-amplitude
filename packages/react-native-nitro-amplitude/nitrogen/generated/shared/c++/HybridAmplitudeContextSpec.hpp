@@ -16,6 +16,7 @@
 
 
 #include <string>
+#include <vector>
 
 namespace margelo::nitro::NitroAmplitude {
 
@@ -50,6 +51,9 @@ namespace margelo::nitro::NitroAmplitude {
       // Methods
       virtual void prefetch() = 0;
       virtual std::string getApplicationContextJson(const std::string& optionsJson) = 0;
+      virtual std::string getLegacySessionDataJson(const std::string& instanceName) = 0;
+      virtual std::vector<std::string> getLegacyEventsJson(const std::string& instanceName, const std::string& eventKind) = 0;
+      virtual void removeLegacyEvent(const std::string& instanceName, const std::string& eventKind, double eventId) = 0;
 
     protected:
       // Hybrid Setup

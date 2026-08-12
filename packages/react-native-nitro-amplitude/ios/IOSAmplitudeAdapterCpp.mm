@@ -2,13 +2,36 @@
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
 
+#include <memory>
+
 namespace NitroAmplitude {
 
 static NSString* const kDiskSuiteName = @"com.nitroamplitude.disk";
+static constexpr size_t kMaxCachedContexts = 8;
 
 static NSUserDefaults* NitroDiskDefaults() {
   static NSUserDefaults* defaults = [[NSUserDefaults alloc] initWithSuiteName:kDiskSuiteName];
-  return defaults ?: [NSUserDefaults standardUserDefaults];
+  if (defaults) {
+    return defaults;
+  }
+  return [NSUserDefaults standardUserDefaults];
+}
+
+static bool NitroDiskDefaultsAreSuite() {
+  return NitroDiskDefaults() != [NSUserDefaults standardUserDefaults];
+}
+
+static NSString* CanonicalOptions(NSDictionary* options) {
+  NSArray* sortedKeys = [options.allKeys sortedArrayUsingSelector:@selector(compare:)];
+  NSMutableArray* parts = [NSMutableArray arrayWithCapacity:sortedKeys.count];
+  for (NSString* key in sortedKeys) {
+    id value = options[key];
+    if (value == nil) {
+      value = @"";
+    }
+    [parts addObject:[NSString stringWithFormat:@"%@=%@", key, value]];
+  }
+  return [parts componentsJoinedByString:@"&"];
 }
 
 IOSAmplitudeAdapterCpp::IOSAmplitudeAdapterCpp() {}
@@ -23,6 +46,14 @@ std::string IOSAmplitudeAdapterCpp::getApplicationContextJson(const std::string&
   NSDictionary* options = [NSJSONSerialization JSONObjectWithData:data options:0 error:&optionsError];
   if (optionsError != nil || ![options isKindOfClass:[NSDictionary class]]) {
     options = @{};
+  }
+  NSString* canonical = CanonicalOptions(options);
+  {
+    std::lock_guard<std::mutex> lock(contextCacheMutex_);
+    auto cached = contextCache_.find(canonical.UTF8String ? std::string(canonical.UTF8String) : "");
+    if (cached != contextCache_.end()) {
+      return cached->second;
+    }
   }
 
   UIDevice* device = [UIDevice currentDevice];
@@ -51,23 +82,16 @@ std::string IOSAmplitudeAdapterCpp::getApplicationContextJson(const std::string&
   if (!encoded) {
     return "{}";
   }
-  return std::string(static_cast<const char*>(encoded.bytes), encoded.length);
+  std::string result(static_cast<const char*>(encoded.bytes), encoded.length);
+  {
+    std::lock_guard<std::mutex> lock(contextCacheMutex_);
+    contextCache_[canonical.UTF8String ? std::string(canonical.UTF8String) : ""] = result;
+    while (contextCache_.size() > kMaxCachedContexts) {
+      contextCache_.erase(contextCache_.begin());
+    }
+  }
+  return result;
 }
-
-std::string IOSAmplitudeAdapterCpp::getLegacySessionDataJson(const std::string& /*instanceName*/) {
-  return "{}";
-}
-
-std::vector<std::string> IOSAmplitudeAdapterCpp::getLegacyEventsJson(
-    const std::string& /*instanceName*/,
-    const std::string& /*eventKind*/) {
-  return {};
-}
-
-void IOSAmplitudeAdapterCpp::removeLegacyEvent(
-    const std::string& /*instanceName*/,
-    const std::string& /*eventKind*/,
-    int64_t /*eventId*/) {}
 
 void IOSAmplitudeAdapterCpp::setDisk(const std::string& key, const std::string& value) {
   NSString* nsKey = [NSString stringWithUTF8String:key.c_str()];
@@ -95,7 +119,13 @@ bool IOSAmplitudeAdapterCpp::hasDisk(const std::string& key) {
 }
 
 std::vector<std::string> IOSAmplitudeAdapterCpp::getAllDiskKeys() {
-  NSDictionary<NSString*, id>* entries = [NitroDiskDefaults() persistentDomainForName:kDiskSuiteName] ?: @{};
+  NSUserDefaults* defaults = NitroDiskDefaults();
+  NSDictionary<NSString*, id>* entries;
+  if (NitroDiskDefaultsAreSuite()) {
+    entries = [defaults persistentDomainForName:kDiskSuiteName] ?: @{};
+  } else {
+    entries = [defaults dictionaryRepresentation];
+  }
   std::vector<std::string> keys;
   keys.reserve(entries.count);
   for (NSString* key in entries) {
@@ -112,7 +142,7 @@ HttpResult IOSAmplitudeAdapterCpp::performHttpRequest(
     int timeoutMillis) {
   NSURL* nsUrl = [NSURL URLWithString:[NSString stringWithUTF8String:url.c_str()]];
   if (!nsUrl) {
-    return HttpResult{.error = "Invalid URL"};
+    return HttpResult{.error = "invalid_url"};
   }
 
   NSTimeInterval timeoutSeconds = timeoutMillis / 1000.0;
@@ -135,19 +165,33 @@ HttpResult IOSAmplitudeAdapterCpp::performHttpRequest(
   }
 
   dispatch_semaphore_t semaphore = dispatch_semaphore_create(0);
-  __block HttpResult completedResult;
+  struct SharedResult {
+    std::mutex mutex;
+    HttpResult result;
+  };
+  auto sharedResult = std::make_shared<SharedResult>();
   NSURLSessionDataTask* task = [session
       dataTaskWithRequest:request
         completionHandler:^(NSData* data, NSURLResponse* response, NSError* error) {
+          HttpResult result;
           if (error) {
-            completedResult.error = std::string([[error localizedDescription] UTF8String]);
+            if ([error.domain isEqualToString:NSURLErrorDomain] &&
+                (error.code == NSURLErrorTimedOut || error.code == NSURLErrorCancelled)) {
+              result.error = error.code == NSURLErrorTimedOut ? "timeout" : "cancelled";
+            } else {
+              result.error = "network_error";
+            }
           } else if ([response isKindOfClass:[NSHTTPURLResponse class]]) {
-            completedResult.statusCode = static_cast<int>(((NSHTTPURLResponse*)response).statusCode);
+            result.statusCode = static_cast<int>(((NSHTTPURLResponse*)response).statusCode);
             if (data) {
-              completedResult.body = std::string(static_cast<const char*>(data.bytes), data.length);
+              result.body = std::string(static_cast<const char*>(data.bytes), data.length);
             }
           } else {
-            completedResult.error = "Invalid HTTP response";
+            result.error = "invalid_http_response";
+          }
+          {
+            std::lock_guard<std::mutex> lock(sharedResult->mutex);
+            sharedResult->result = std::move(result);
           }
           dispatch_semaphore_signal(semaphore);
         }];
@@ -156,13 +200,15 @@ HttpResult IOSAmplitudeAdapterCpp::performHttpRequest(
   const int64_t waitMarginMillis = 5000;
   dispatch_time_t deadline =
       dispatch_time(DISPATCH_TIME_NOW, (static_cast<int64_t>(timeoutMillis) + waitMarginMillis) * NSEC_PER_MSEC);
-  if (dispatch_semaphore_wait(semaphore, deadline) != 0) {
+  const bool timedOut = dispatch_semaphore_wait(semaphore, deadline) != 0;
+  if (timedOut) {
     [task cancel];
     [session invalidateAndCancel];
-    return HttpResult{.error = "Request timed out"};
+    return HttpResult{.error = "timeout"};
   }
   [session finishTasksAndInvalidate];
-  return completedResult;
+  std::lock_guard<std::mutex> lock(sharedResult->mutex);
+  return sharedResult->result;
 }
 
 } // namespace NitroAmplitude

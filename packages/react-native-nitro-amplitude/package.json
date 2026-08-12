@@ -1,6 +1,6 @@
 {
   "name": "react-native-nitro-amplitude",
-  "version": "0.5.5",
+  "version": "0.6.0",
   "description": "Amplitude Analytics and Experiment SDK for React Native powered by Nitro Modules and C++ on native platforms, with web-compatible fetch and storage fallbacks.",
   "main": "lib/commonjs/index.js",
   "module": "lib/module/index.js",
@@ -27,6 +27,18 @@
       "react-native": "./src/experiment/index.ts",
       "browser": "./src/experiment/index.ts",
       "default": "./lib/commonjs/experiment/index.js"
+    },
+    "./network": {
+      "types": "./lib/typescript/network.d.ts",
+      "react-native": "./src/network.ts",
+      "browser": "./src/network.ts",
+      "default": "./lib/commonjs/network.js"
+    },
+    "./testing": {
+      "types": "./lib/typescript/testing.d.ts",
+      "react-native": "./src/testing.ts",
+      "browser": "./src/testing.ts",
+      "default": "./lib/commonjs/testing.js"
     },
     "./app.plugin": "./app.plugin.js",
     "./app.plugin.js": "./app.plugin.js",
@@ -116,7 +128,7 @@
   "peerDependencies": {
     "react": ">=18.2.0",
     "react-native": ">=0.75.0",
-    "react-native-nitro-modules": ">=0.36.4 <0.37.0"
+    "react-native-nitro-modules": ">=0.36.5 <0.37.0"
   },
   "react-native-builder-bob": {
     "source": "src",

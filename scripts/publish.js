@@ -267,7 +267,8 @@ function getPackSummary() {
 
   try {
     const parsed = JSON.parse(output);
-    return Array.isArray(parsed) ? parsed[0] : parsed;
+    const metadata = Array.isArray(parsed) ? parsed[0] : parsed;
+    return metadata.files ? metadata : metadata[getPackageName()] ?? null;
   } catch (_error) {
     return null;
   }

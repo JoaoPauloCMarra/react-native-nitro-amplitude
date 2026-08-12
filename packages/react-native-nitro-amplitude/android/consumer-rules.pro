@@ -5,9 +5,6 @@
     public static *** getContext(...);
     public static *** prefetchContext(...);
     public static *** getApplicationContextJson(...);
-    public static *** getLegacySessionDataJson(...);
-    public static *** getLegacyEventsJson(...);
-    public static *** removeLegacyEvent(...);
     public static *** setDisk(...);
     public static *** getDisk(...);
     public static *** deleteDisk(...);

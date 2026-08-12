@@ -1,8 +1,4 @@
-import type {
-  Event,
-  ReactNativeOptions,
-  UserSession,
-} from "@amplitude/analytics-core";
+import type { ReactNativeOptions } from "@amplitude/analytics-core";
 import { getAnalyticsConnector } from "@amplitude/analytics-core";
 import { createInstance } from "./analytics/react-native-client";
 import type { AmplitudeReactNativeClient } from "./analytics/react-native-client";
@@ -84,16 +80,9 @@ export function createDurableAmplitudeStoragePreset(
   options: DurableAmplitudeStoragePresetOptions = {},
 ): DurableAmplitudeStoragePreset {
   const namespace = options.namespace ?? "default";
-  const { NitroAnalyticsStorage, NitroExperimentStorage } = getStorageModule();
-  const analyticsEvents = new NitroAnalyticsStorage<Event[]>(
-    `${namespace}:analytics-events`,
-  );
-  const analyticsSession = new NitroAnalyticsStorage<UserSession>(
-    `${namespace}:analytics-session`,
-  );
-  const experimentVariants = new NitroExperimentStorage(
-    `${namespace}:experiment-variants`,
-  );
+  const { createNamespacedStores } = getStorageModule();
+  const { analyticsEvents, analyticsSession, experimentVariants } =
+    createNamespacedStores(namespace);
   return {
     analytics: {
       storageProvider: analyticsEvents,
@@ -192,7 +181,11 @@ export function createAmplitudeClient(config: AmplitudeCombinedClientConfig) {
       return combined;
     },
     flush: async () => analytics.flush().promise,
-    reset: () => analytics.reset(),
+    reset: () => {
+      analytics.reset();
+      experiment?.clear();
+      experiment?.setUser({});
+    },
     getUserId: () => analytics.getUserId(),
     getDeviceId: () => analytics.getDeviceId(),
   } as AmplitudeCombinedClient;

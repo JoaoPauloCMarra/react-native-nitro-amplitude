@@ -4,18 +4,131 @@
 #include "../../cpp/bindings/HybridAmplitudeContext.hpp"
 #include "../../cpp/bindings/HybridAmplitudeStorage.hpp"
 #include "../../cpp/bindings/HybridAmplitudeWorker.hpp"
+#include "../../cpp/core/ContextAdapter.hpp"
+#include "../../cpp/core/HttpAdapter.hpp"
+#include "../../cpp/core/StorageAdapter.hpp"
 
 #include <cassert>
 #include <chrono>
-#include <cmath>
+#include <condition_variable>
+#include <cstdint>
 #include <iostream>
 #include <limits>
+#include <map>
+#include <mutex>
 #include <stdexcept>
+#include <string>
 #include <thread>
+#include <unordered_map>
+#include <vector>
 
 using margelo::nitro::NitroAmplitude::HybridAmplitudeContext;
 using margelo::nitro::NitroAmplitude::HybridAmplitudeStorage;
 using margelo::nitro::NitroAmplitude::HybridAmplitudeWorker;
+using NitroAmplitude::ContextAdapter;
+using NitroAmplitude::HttpAdapter;
+using NitroAmplitude::HttpResult;
+using NitroAmplitude::StorageAdapter;
+
+class FakeContextAdapter : public ContextAdapter {
+public:
+  int prefetchCount = 0;
+  std::string lastOptions;
+
+  void prefetchContext() override {
+    ++prefetchCount;
+    getApplicationContextJson("{}");
+  }
+
+  std::string getApplicationContextJson(const std::string& optionsJson) override {
+    lastOptions = optionsJson;
+    return "{\"platform\":\"fake\"}";
+  }
+};
+
+class FakeStorageAdapter : public StorageAdapter {
+public:
+  std::map<std::string, std::string> values;
+
+  void setDisk(const std::string& key, const std::string& value) override {
+    values[key] = value;
+  }
+
+  std::optional<std::string> getDisk(const std::string& key) override {
+    auto it = values.find(key);
+    if (it == values.end()) {
+      return std::nullopt;
+    }
+    return it->second;
+  }
+
+  void deleteDisk(const std::string& key) override {
+    values.erase(key);
+  }
+
+  bool hasDisk(const std::string& key) override {
+    return values.find(key) != values.end();
+  }
+
+  std::vector<std::string> getAllDiskKeys() override {
+    std::vector<std::string> keys;
+    for (const auto& entry : values) {
+      keys.push_back(entry.first);
+    }
+    return keys;
+  }
+};
+
+class FakeHttpAdapter : public HttpAdapter {
+public:
+  std::mutex gateMutex;
+  std::condition_variable gateCv;
+  bool gateOpen = true;
+  int requestCount = 0;
+
+  HttpResult performHttpRequest(
+      const std::string& url,
+      const std::string& method,
+      const std::unordered_map<std::string, std::string>& headers,
+      const std::string& body,
+      int timeoutMillis) override {
+    {
+      std::unique_lock<std::mutex> lock(gateMutex);
+      gateCv.wait(lock, [this]() { return gateOpen; });
+      ++requestCount;
+    }
+    if (url.find("error://") == 0) {
+      return HttpResult{.error = "network_error"};
+    }
+    if (url.find("status://") == 0) {
+      return HttpResult{.statusCode = 418, .body = "teapot"};
+    }
+    return HttpResult{.statusCode = 200, .body = body};
+  }
+
+  void openGate() {
+    {
+      std::lock_guard<std::mutex> lock(gateMutex);
+      gateOpen = true;
+    }
+    gateCv.notify_all();
+  }
+
+  void closeGate() {
+    std::lock_guard<std::mutex> lock(gateMutex);
+    gateOpen = false;
+  }
+};
+
+static bool waitUntil(const std::function<bool()>& predicate, int attempts = 200) {
+  for (int i = 0; i < attempts; ++i) {
+    if (predicate()) {
+      return true;
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+  }
+  return predicate();
+}
 
 void testStorage() {
   auto storage = std::make_shared<HybridAmplitudeStorage>();
@@ -60,38 +173,41 @@ void testStorage() {
   assert(!storage->has("disk", true));
 }
 
+void testStorageAdapterContract() {
+  auto adapter = std::make_shared<FakeStorageAdapter>();
+  auto storage = std::make_shared<HybridAmplitudeStorage>(adapter);
+
+  storage->set("disk-key", "disk-value", true);
+  assert(storage->get("disk-key", true).value_or("") == "disk-value");
+  assert(storage->has("disk-key", true));
+  const auto keys = storage->getAllKeys(true);
+  assert(keys.size() == 1 && keys[0] == "disk-key");
+  assert(storage->get("disk-missing", true) == std::nullopt);
+
+  storage->remove("disk-key", true);
+  assert(!storage->has("disk-key", true));
+  assert(storage->getAllKeys(true).empty());
+
+  storage->set("a", "1", false);
+  storage->set("b", "2", false);
+  storage->clear(false);
+  assert(storage->getAllKeys(false).empty());
+}
+
 void testContextFallbacks() {
   auto context = std::make_shared<HybridAmplitudeContext>();
-
   context->prefetch();
   assert(context->getApplicationContextJson("{}") == "{}");
-  assert(context->getLegacySessionDataJson("default") == "{}");
-  assert(context->getLegacyEventsJson("default", "events").empty());
+}
 
-  context->removeLegacyEvent("default", "events", 1);
-  context->removeLegacyEvent(
-      "default",
-      "events",
-      static_cast<double>(std::numeric_limits<int64_t>::min()));
+void testContextAdapterContract() {
+  auto adapter = std::make_shared<FakeContextAdapter>();
+  auto context = std::make_shared<HybridAmplitudeContext>(adapter);
 
-  const double invalidEventIds[] = {
-      std::numeric_limits<double>::quiet_NaN(),
-      std::numeric_limits<double>::infinity(),
-      1.5,
-      std::ldexp(1.0, 63),
-      std::nextafter(
-          -std::ldexp(1.0, 63),
-          -std::numeric_limits<double>::infinity()),
-  };
-  for (const double invalidEventId : invalidEventIds) {
-    bool invalidEventIdThrown = false;
-    try {
-      context->removeLegacyEvent("default", "events", invalidEventId);
-    } catch (const std::runtime_error&) {
-      invalidEventIdThrown = true;
-    }
-    assert(invalidEventIdThrown);
-  }
+  context->prefetch();
+  assert(adapter->prefetchCount == 1);
+  assert(context->getApplicationContextJson("{}") == "{\"platform\":\"fake\"}");
+  assert(adapter->lastOptions == "{}");
 }
 
 void testWorkerFallbacks() {
@@ -115,19 +231,153 @@ void testWorkerFallbacks() {
 
   worker->enqueue("req-1", "https://example.com", "GET", {{"content-type", "application/json"}}, "", std::numeric_limits<double>::infinity());
 
-  for (int i = 0; i < 50 && !receivedUnavailable; ++i) {
-    std::this_thread::sleep_for(std::chrono::milliseconds(10));
-  }
+  assert(waitUntil([&]() { return receivedUnavailable; }));
+  assert(worker->queueSize() == 0);
+  assert(worker->inFlightCount() == 0);
+  assert(worker->pendingBodyBytes() == 0);
+  removeListener();
+}
 
-  assert(receivedUnavailable);
+void testWorkerAdapterContract() {
+  auto adapter = std::make_shared<FakeHttpAdapter>();
+  auto worker = std::make_shared<HybridAmplitudeWorker>(adapter);
+
+  bool okReceived = false;
+  bool errorReceived = false;
+  bool statusReceived = false;
+  auto removeListener = worker->addOnComplete(
+      [&](const std::string& requestId, double statusCode, const std::string& body, const std::string& error) {
+        if (requestId == "ok") {
+          okReceived = statusCode == 200 && body == "payload" && error.empty();
+        } else if (requestId == "error") {
+          errorReceived = statusCode == 0 && error == "network_error";
+        } else if (requestId == "status") {
+          statusReceived = statusCode == 418 && body == "teapot";
+        }
+      });
+
+  worker->enqueue("ok", "https://example.com", "POST", {}, "payload", 1000);
+  worker->enqueue("error", "error://example.com", "GET", {}, "", 1000);
+  worker->enqueue("status", "status://example.com", "GET", {}, "", 1000);
+
+  assert(waitUntil([&]() { return okReceived && errorReceived && statusReceived; }));
+  assert(adapter->requestCount == 3);
+  assert(worker->inFlightCount() == 0);
   assert(worker->queueSize() == 0);
   removeListener();
 }
 
+void testWorkerBoundedConcurrency() {
+  auto adapter = std::make_shared<FakeHttpAdapter>();
+  auto worker = std::make_shared<HybridAmplitudeWorker>(adapter);
+  adapter->closeGate();
+
+  for (int i = 0; i < 102; ++i) {
+    worker->enqueue("slow-" + std::to_string(i), "https://example.com", "GET", {}, "", 1000);
+  }
+
+  assert(waitUntil([&]() { return worker->inFlightCount() == 2 && worker->queueSize() == 100; }));
+
+  bool queueFullThrown = false;
+  try {
+    worker->enqueue("overflow", "https://example.com", "GET", {}, "", 1000);
+  } catch (const std::runtime_error&) {
+    queueFullThrown = true;
+  }
+  assert(queueFullThrown);
+
+  adapter->openGate();
+  assert(waitUntil([&]() { return worker->inFlightCount() == 0 && worker->queueSize() == 0; }));
+  assert(adapter->requestCount == 102);
+}
+
+void testWorkerCancellationOfQueuedRequest() {
+  auto adapter = std::make_shared<FakeHttpAdapter>();
+  auto worker = std::make_shared<HybridAmplitudeWorker>(adapter);
+  adapter->closeGate();
+
+  worker->enqueue("blocker-1", "https://example.com", "GET", {}, "", 1000);
+  worker->enqueue("blocker-2", "https://example.com", "GET", {}, "", 1000);
+  worker->enqueue("cancelled", "https://example.com", "GET", {}, "", 1000);
+  worker->cancel("cancelled");
+  worker->enqueue("after", "https://example.com", "GET", {}, "", 1000);
+
+  assert(waitUntil([&]() { return worker->queueSize() == 2; }));
+
+  std::string cancelledError = "unset";
+  std::string afterError = "unset";
+  auto removeListener = worker->addOnComplete(
+      [&](const std::string& requestId, double, const std::string&, const std::string& error) {
+        if (requestId == "cancelled") {
+          cancelledError = error;
+        } else if (requestId == "after") {
+          afterError = error;
+        }
+      });
+
+  adapter->openGate();
+
+  assert(waitUntil([&]() { return cancelledError == "cancelled"; }));
+  assert(waitUntil([&]() { return afterError == ""; }));
+  assert(adapter->requestCount == 3);
+  assert(worker->inFlightCount() == 0);
+  assert(worker->queueSize() == 0);
+  removeListener();
+}
+
+void testWorkerListenerReentrancy() {
+  auto adapter = std::make_shared<FakeHttpAdapter>();
+  auto worker = std::make_shared<HybridAmplitudeWorker>(adapter);
+  bool outerFired = false;
+  bool innerFired = false;
+
+  auto removeOuter = worker->addOnComplete(
+      [&](const std::string& requestId, double, const std::string&, const std::string&) {
+        if (requestId == "reentrant-1") {
+          outerFired = true;
+          worker->addOnComplete(
+              [&](const std::string& innerRequestId, double, const std::string&, const std::string&) {
+                if (innerRequestId == "reentrant-2") {
+                  innerFired = true;
+                }
+              });
+        }
+      });
+
+  worker->enqueue("reentrant-1", "https://example.com", "GET", {}, "", 1000);
+  assert(waitUntil([&]() { return outerFired; }));
+  worker->enqueue("reentrant-2", "https://example.com", "GET", {}, "", 1000);
+  assert(waitUntil([&]() { return innerFired; }));
+  removeOuter();
+}
+
+void testWorkerQueueSizeMetrics() {
+  auto adapter = std::make_shared<FakeHttpAdapter>();
+  auto worker = std::make_shared<HybridAmplitudeWorker>(adapter);
+  adapter->closeGate();
+
+  worker->enqueue("metric-1", "https://example.com", "GET", {{"x", "1"}}, "body-bytes", 1000);
+  worker->enqueue("metric-2", "https://example.com", "GET", {}, "other-bytes", 1000);
+  worker->enqueue("metric-3", "https://example.com", "GET", {}, "third-bytes", 1000);
+  assert(waitUntil([&]() { return worker->inFlightCount() == 2 && worker->queueSize() == 1; }));
+  assert(worker->pendingBodyBytes() > 0);
+  assert(worker->getExternalMemorySize() == worker->pendingBodyBytes());
+
+  adapter->openGate();
+  assert(waitUntil([&]() { return worker->pendingBodyBytes() == 0 && worker->inFlightCount() == 0; }));
+}
+
 int main() {
   testStorage();
+  testStorageAdapterContract();
   testContextFallbacks();
+  testContextAdapterContract();
   testWorkerFallbacks();
+  testWorkerAdapterContract();
+  testWorkerBoundedConcurrency();
+  testWorkerCancellationOfQueuedRequest();
+  testWorkerListenerReentrancy();
+  testWorkerQueueSizeMetrics();
 
   std::cout << "HybridAmplitudeStorage tests passed" << std::endl;
   std::cout << "HybridAmplitudeContext tests passed" << std::endl;

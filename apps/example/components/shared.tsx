@@ -79,6 +79,9 @@ export const Button = ({
 }: ButtonProps) => (
   <Pressable
     testID={testID}
+    accessibilityRole="button"
+    accessibilityLabel={title}
+    accessibilityState={{ disabled }}
     hitSlop={6}
     style={({ pressed }) => [
       styles.button,
@@ -249,11 +252,16 @@ export const CodeBlock = ({
   children: string;
   testID?: string;
 }) => (
-  <View style={styles.codeBlock}>
+  <ScrollView
+    contentContainerStyle={styles.codeBlockContent}
+    horizontal
+    showsHorizontalScrollIndicator
+    style={styles.codeBlock}
+  >
     <Text testID={testID} style={styles.codeBlockText}>
       {children}
     </Text>
-  </View>
+  </ScrollView>
 );
 
 export const Section = ({
@@ -305,6 +313,7 @@ export const Page = ({
             { paddingTop: contentPaddingTop },
           ]}
           bounces={false}
+          keyboardShouldPersistTaps="handled"
           style={styles.pageBody}
         >
           <Header title={title} subtitle={subtitle} />
@@ -540,7 +549,10 @@ export const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: "#1e293b",
+  },
+  codeBlockContent: {
     padding: 14,
+    minWidth: "100%",
   },
   codeBlockText: {
     fontFamily: fontMono400,

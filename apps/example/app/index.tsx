@@ -1,9 +1,6 @@
 import { useEffect, useState } from "react";
 import { View } from "react-native";
 import {
-  createNetworkTimingBuffer,
-  createTimedAnalyticsTransport,
-  createTimedHttpClient,
   Experiment,
   Identify,
   init,
@@ -17,6 +14,12 @@ import {
   nitroTransport,
 } from "react-native-nitro-amplitude";
 import {
+  createNetworkTimingBuffer,
+  createTimedAnalyticsTransport,
+  createTimedHttpClient,
+  DryRunTransport,
+} from "react-native-nitro-amplitude/network";
+import {
   Button,
   Card,
   CodeBlock,
@@ -28,7 +31,7 @@ import {
   styles,
 } from "../components/shared";
 import { SmokeTestRunner } from "../components/smoke-test";
-import type { AmplitudeNetworkTiming } from "react-native-nitro-amplitude";
+import type { AmplitudeNetworkTiming } from "react-native-nitro-amplitude/network";
 
 const ANALYTICS_API_KEY = process.env.EXPO_PUBLIC_AMPLITUDE_API_KEY ?? "";
 const EXPERIMENT_API_KEY =
@@ -36,6 +39,19 @@ const EXPERIMENT_API_KEY =
   process.env.EXPO_PUBLIC_AMPLITUDE_EXPERIMENT_KEY.length > 0
     ? process.env.EXPO_PUBLIC_AMPLITUDE_EXPERIMENT_KEY
     : ANALYTICS_API_KEY;
+const DRY_RUN = process.env.EXPO_PUBLIC_AMPLITUDE_DRY_RUN === "1";
+
+const fixtureHttpClient = {
+  async request(requestUrl: string) {
+    if (requestUrl.includes("/sdk/v2/flags")) {
+      return { status: 200, body: "[]" };
+    }
+    return {
+      status: 200,
+      body: JSON.stringify({ "demo-flag": { key: "on", value: "on" } }),
+    };
+  },
+};
 
 type TimingSample = {
   durationMillis: number;
@@ -139,12 +155,16 @@ export default function HomeScreen() {
       automaticExposureTracking: true,
       fetchOnStart: false,
       pollOnStart: false,
-      httpClient: createTimedHttpClient(nitroHttpClient, timingTracker.record),
+      httpClient: DRY_RUN
+        ? fixtureHttpClient
+        : createTimedHttpClient(nitroHttpClient, timingTracker.record),
     }),
   );
 
   const [analyticsTransport] = useState(() =>
-    createTimedAnalyticsTransport(nitroTransport, timingTracker.record),
+    DRY_RUN
+      ? new DryRunTransport()
+      : createTimedAnalyticsTransport(nitroTransport, timingTracker.record),
   );
 
   const refreshTimingHistory = () => {
@@ -154,7 +174,7 @@ export default function HomeScreen() {
   useEffect(() => {
     prefetchNativeContext();
     void (async () => {
-      if (!ANALYTICS_API_KEY) {
+      if (!DRY_RUN && !ANALYTICS_API_KEY) {
         setStatus(
           "missing EXPO_PUBLIC_AMPLITUDE_API_KEY in apps/example/.env.local",
         );

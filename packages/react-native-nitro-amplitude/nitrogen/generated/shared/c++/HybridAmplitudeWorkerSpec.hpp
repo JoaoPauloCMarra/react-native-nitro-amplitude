@@ -54,6 +54,8 @@ namespace margelo::nitro::NitroAmplitude {
       virtual void cancel(const std::string& requestId) = 0;
       virtual std::function<void()> addOnComplete(const std::function<void(const std::string& /* requestId */, double /* statusCode */, const std::string& /* body */, const std::string& /* error */)>& callback) = 0;
       virtual double queueSize() = 0;
+      virtual double inFlightCount() = 0;
+      virtual double pendingBodyBytes() = 0;
 
     protected:
       // Hybrid Setup

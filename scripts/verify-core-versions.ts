@@ -1,16 +1,20 @@
 const projectRoot = import.meta.dir + "/..";
 
 const expectedVersions = {
-  expo: "~57.0.9",
-  nitrogen: "0.36.4",
+  expo: "~57.0.12",
+  nitrogen: "0.36.5",
   react: "19.2.3",
   "react-dom": "19.2.3",
   "react-native-gesture-handler": "~2.32.0",
   "react-native": "0.86.2",
-  "react-native-nitro-modules": "0.36.4",
-  "react-native-nitro-modules-peer": ">=0.36.4 <0.37.0",
+  "react-native-nitro-modules": "0.36.5",
+  "react-native-nitro-modules-peer": ">=0.36.5 <0.37.0",
   "react-native-reanimated": "4.5.1",
   "react-native-worklets": "0.10.1",
+  "@amplitude/analytics-core": "2.54.1",
+  "@amplitude/analytics-connector": "^1.6.6",
+  "@amplitude/experiment-core": "^0.13.4",
+  "@amplitude/ua-parser-js": "^0.7.33",
 } as const;
 
 type JsonRecord = Record<string, unknown>;
@@ -63,6 +67,26 @@ const checks: Array<{
         "peerDependencies",
         "react-native-nitro-modules",
         "react-native-nitro-modules-peer",
+      ],
+      [
+        "dependencies",
+        "@amplitude/analytics-core",
+        "@amplitude/analytics-core",
+      ],
+      [
+        "dependencies",
+        "@amplitude/analytics-connector",
+        "@amplitude/analytics-connector",
+      ],
+      [
+        "dependencies",
+        "@amplitude/experiment-core",
+        "@amplitude/experiment-core",
+      ],
+      [
+        "dependencies",
+        "@amplitude/ua-parser-js",
+        "@amplitude/ua-parser-js",
       ],
     ],
   },

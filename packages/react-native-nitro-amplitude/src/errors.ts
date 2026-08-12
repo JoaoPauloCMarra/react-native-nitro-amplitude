@@ -31,28 +31,59 @@ export function createAmplitudeError(
   return new AmplitudeError(code, message, cause);
 }
 
+const NATIVE_ERROR_CODES: Record<string, AmplitudeErrorCode> = {
+  invalid_url: "network_error",
+  network_error: "network_error",
+  timeout: "timeout",
+  invalid_http_response: "network_error",
+  cancelled: "network_error",
+  queue_full: "network_error",
+  adapter_unavailable: "native_unavailable",
+  disk_adapter_unavailable: "storage_error",
+  storage_error: "storage_error",
+  invalid_api_key: "invalid_api_key",
+  invalid_deployment_key: "invalid_deployment_key",
+  serialization_error: "serialization_error",
+  event_too_large: "event_too_large",
+  experiment_fetch_failed: "experiment_fetch_failed",
+  not_initialized: "not_initialized",
+  unknown: "unknown",
+};
+
 export function getAmplitudeErrorCode(error: unknown): AmplitudeErrorCode {
   if (error instanceof AmplitudeError) {
     return error.code;
   }
   if (error instanceof Error) {
-    const message = error.message.toLowerCase();
-    if (message.includes("deployment key")) {
+    const message = error.message.trim();
+    if (message.startsWith("NitroAmplitude:")) {
+      const code = message.slice("NitroAmplitude:".length).trim();
+      const mapped = NATIVE_ERROR_CODES[code];
+      if (mapped !== undefined) {
+        return mapped;
+      }
+    }
+    const directCode = NATIVE_ERROR_CODES[message];
+    if (directCode !== undefined) {
+      return directCode;
+    }
+    const normalized = message.toLowerCase();
+    if (normalized.includes("deployment key")) {
       return "invalid_deployment_key";
     }
-    if (message.includes("api key")) {
+    if (normalized.includes("api key")) {
       return "invalid_api_key";
     }
-    if (message.includes("timeout")) {
+    if (normalized.includes("timeout")) {
       return "timeout";
     }
-    if (message.includes("network") || message.includes("fetch")) {
+    if (normalized.includes("network") || normalized.includes("fetch")) {
       return "network_error";
     }
-    if (message.includes("storage")) {
+    if (normalized.includes("storage")) {
       return "storage_error";
     }
-    if (message.includes("nitro") || message.includes("native")) {
+    if (normalized.includes("nitro") || normalized.includes("native")) {
       return "native_unavailable";
     }
   }

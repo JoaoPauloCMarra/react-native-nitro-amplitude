@@ -92,6 +92,8 @@ export type AmplitudeHealthCheckResult = {
   analyticsInitialized: boolean;
   nativeAvailable: boolean;
   storageWritable: boolean;
+  diskStorageWritable: boolean;
+  workerReady: boolean;
   errors: string[];
 };
 
@@ -254,6 +256,21 @@ export class AmplitudeReactNative
   }
 
   shutdown() {
+    void this.shutdownAndFlush();
+  }
+
+  private async shutdownAndFlush(): Promise<void> {
+    if (this.config && this.isReady) {
+      try {
+        await this.flush().promise;
+      } catch {
+        // teardown must still run even when the final flush fails
+      }
+    }
+    this.teardown();
+  }
+
+  private teardown() {
     this.appStateChangeHandler?.remove();
     this.appStateChangeHandler = undefined;
 
@@ -403,7 +420,7 @@ export class AmplitudeReactNative
         return {
           ok: false,
           sent: this.countSuccessfulOutcomes(outcomes),
-          failed: remainingQueueSize,
+          failed: dropped,
           dropped,
           retried: remainingQueueSize,
           reason: this.lastFlushError,
@@ -447,9 +464,9 @@ export class AmplitudeReactNative
       return {
         ok: false,
         sent: 0,
-        failed: queueSize,
+        failed: 0,
         dropped: 0,
-        retried: 0,
+        retried: queueSize,
         reason: this.lastFlushError,
         finishedAt: this.lastFlushTime,
       };

@@ -5,14 +5,10 @@ import {
   Types,
   createAmplitudeClient,
   createDurableAmplitudeStoragePreset,
-  createFakeExperimentStorage,
   createInstance,
-  createNetworkTimingBuffer,
-  dryRunTransport,
   getDiagnostics,
   prefetchNativeContext,
   nitroHttpClient,
-  setNetworkEnabled,
   variantPayload,
 } from "../src";
 import { init, track } from "../src/analytics";
@@ -20,7 +16,7 @@ import {
   Experiment as ExperimentSubpath,
   type ExperimentConfig as ExperimentSubpathConfig,
 } from "../src/experiment";
-import type { AmplitudeNetworkTimingBuffer, ExperimentClient } from "../src";
+import type { ExperimentClient } from "../src";
 import type { ExperimentConfig } from "../src/experiment/types/config";
 import type { Variant } from "../src/experiment/types/variant";
 import {
@@ -30,6 +26,14 @@ import {
   init as webInit,
   nitroHttpClient as webNitroHttpClient,
 } from "../src/index.web";
+import {
+  AmplitudeNetworkTimingBuffer,
+  createNetworkTimingBuffer,
+  dryRunTransport,
+  setNetworkEnabled,
+} from "../src/network";
+import { createFakeExperimentStorage } from "../src/testing";
+import type { AmplitudeWorker } from "../src/AmplitudeWorker.nitro";
 
 type Equals<A, B> =
   (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2
@@ -37,6 +41,91 @@ type Equals<A, B> =
     : false;
 type Extends<A, B> = A extends B ? true : false;
 type Assert<T extends true> = T;
+
+type RootExportSurface = typeof import("../src");
+type WebExportSurface = typeof import("../src/index.web");
+type ExperimentExportSurface = typeof import("../src/experiment");
+type AnalyticsExportSurface = typeof import("../src/analytics");
+
+type HasDryRunSingleton = Assert<
+  Equals<"dryRunHttpClient" extends keyof RootExportSurface ? true : false, true>
+>;
+type HasDryRunTransportSingleton = Assert<
+  Equals<"dryRunTransport" extends keyof RootExportSurface ? true : false, true>
+>;
+type HasWebDryRunSingleton = Assert<
+  Equals<"dryRunHttpClient" extends keyof WebExportSurface ? true : false, true>
+>;
+type HasNetworkControlInRoot = Assert<
+  Equals<"setNetworkEnabled" extends keyof RootExportSurface ? true : false, true>
+>;
+type HasNetworkControlInWebRoot = Assert<
+  Equals<"getNetworkEnabled" extends keyof WebExportSurface ? true : false, true>
+>;
+type HasTimingHelpersInRoot = Assert<
+  Equals<"createNetworkTimingBuffer" extends keyof RootExportSurface ? true : false, true>
+>;
+type HasTimingHelpersInWebRoot = Assert<
+  Equals<"createTimedHttpClient" extends keyof WebExportSurface ? true : false, true>
+>;
+type HasDryRunClassesInRoot = Assert<
+  Equals<"DryRunTransport" extends keyof RootExportSurface ? true : false, true>
+>;
+type HasTestingHelpersInRoot = Assert<
+  Equals<"createMockExperimentClient" extends keyof RootExportSurface ? true : false, true>
+>;
+type HasTestingHelpersInWebRoot = Assert<
+  Equals<"createFakeExperimentStorage" extends keyof WebExportSurface ? true : false, true>
+>;
+type NoBareExperiment = Assert<
+  Equals<"experimentClient" extends keyof ExperimentExportSurface ? true : false, false>
+>;
+type NoBareFactory = Assert<
+  Equals<"factory" extends keyof ExperimentExportSurface ? true : false, false>
+>;
+type HasAnalyticsCompat = Assert<
+  Extends<AnalyticsExportSurface["init"], RootExportSurface["init"]>
+>;
+type HasExperimentCompat = Assert<
+  Extends<ExperimentExportSurface["Experiment"], RootExportSurface["Experiment"]>
+>;
+type HasWorkerMetrics = Assert<
+  Extends<
+    ReturnType<RootExportSurface["getDiagnostics"]>["workerMetrics"],
+    { queueSize: number; inFlightCount: number; pendingBodyBytes: number } | undefined
+  >
+>;
+const hasDryRunSingleton: HasDryRunSingleton = true;
+const hasDryRunTransportSingleton: HasDryRunTransportSingleton = true;
+const hasWebDryRunSingleton: HasWebDryRunSingleton = true;
+const hasNetworkControlInRoot: HasNetworkControlInRoot = true;
+const hasNetworkControlInWebRoot: HasNetworkControlInWebRoot = true;
+const hasTimingHelpersInRoot: HasTimingHelpersInRoot = true;
+const hasTimingHelpersInWebRoot: HasTimingHelpersInWebRoot = true;
+const hasDryRunClassesInRoot: HasDryRunClassesInRoot = true;
+const hasTestingHelpersInRoot: HasTestingHelpersInRoot = true;
+const hasTestingHelpersInWebRoot: HasTestingHelpersInWebRoot = true;
+const noBareExperiment: NoBareExperiment = true;
+const noBareFactory: NoBareFactory = true;
+const hasAnalyticsCompat: HasAnalyticsCompat = true;
+const hasExperimentCompat: HasExperimentCompat = true;
+const hasWorkerMetrics: HasWorkerMetrics = true;
+void hasDryRunSingleton;
+void hasDryRunTransportSingleton;
+void hasWebDryRunSingleton;
+void hasNetworkControlInRoot;
+void hasNetworkControlInWebRoot;
+void hasTimingHelpersInRoot;
+void hasTimingHelpersInWebRoot;
+void hasDryRunClassesInRoot;
+void hasTestingHelpersInRoot;
+void hasTestingHelpersInWebRoot;
+void noBareExperiment;
+void noBareFactory;
+void hasAnalyticsCompat;
+void hasExperimentCompat;
+void hasWorkerMetrics;
+void (null as unknown as AmplitudeWorker);
 
 const initClient = createInstance;
 void initClient;

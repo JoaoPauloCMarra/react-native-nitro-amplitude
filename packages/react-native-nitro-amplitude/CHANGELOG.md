@@ -4,6 +4,37 @@ All notable changes to this project are documented in this file.
 
 The format follows Keep a Changelog and the project adheres to SemVer.
 
+## 0.6.0 - 2026-08-12
+
+### Breaking changes
+
+- None. Legacy migration methods, `migrateLegacyData`, the `string[]`
+  `AmplitudeStorage.getBatch` contract, and established root exports remain
+  available. The new `/network` and `/testing` subpaths are preferred for
+  clearer production bundles but are not mandatory.
+
+### Changed
+
+- Default analytics identity is durable: device ID, user ID, and session ID
+  survive app restarts through the Nitro disk store on native and browser
+  localStorage on web.
+- `shutdown()` flushes accepted events before teardown; `flushWithResult()`
+  reports `failed` and `retried` as distinct outcomes.
+- Analytics, experiment, and combined `reset()` now clear analytics identity
+  and experiment user/cache together.
+- Native transport errors carry stable codes (`invalid_url`, `timeout`,
+  `cancelled`, `invalid_http_response`, `network_error`) instead of localized
+  message text.
+- Diagnostics report per-capability native availability, bounded worker
+  metrics, and disk/worker probes from `healthCheck()`.
+- Experiment variants report `freshness` (`fresh`, `stale`, `unknown`), and
+  `Experiment.reinitialize` replaces singletons explicitly.
+- Web `LocalStorage` keys are namespaced and `reset()` clears only package
+  keys, matching native namespace-scoped reset behavior.
+- Batch missing-value decoding now verifies key existence, so a real stored
+  value equal to the legacy sentinel round-trips without changing the native
+  `string[]` ABI.
+
 ## 0.5.5 - 2026-07-30
 
 ### Fixed

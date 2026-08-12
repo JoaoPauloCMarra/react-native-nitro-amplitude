@@ -9,8 +9,12 @@ namespace margelo::nitro::NitroAmplitude {
 
 HybridAmplitudeContext::HybridAmplitudeContext()
     : HybridObject(TAG), HybridAmplitudeContextSpec() {
-  adapter_ = ::NitroAmplitude::getSharedPlatformAdapter();
+  adapter_ = ::NitroAmplitude::getSharedPlatformAdapters().context;
 }
+
+HybridAmplitudeContext::HybridAmplitudeContext(
+    std::shared_ptr<::NitroAmplitude::ContextAdapter> adapter)
+    : HybridObject(TAG), HybridAmplitudeContextSpec(), adapter_(std::move(adapter)) {}
 
 void HybridAmplitudeContext::prefetch() {
   if (adapter_) {
@@ -27,25 +31,19 @@ std::string HybridAmplitudeContext::getApplicationContextJson(
 }
 
 std::string HybridAmplitudeContext::getLegacySessionDataJson(
-    const std::string& instanceName) {
-  if (!adapter_) {
-    return "{}";
-  }
-  return adapter_->getLegacySessionDataJson(instanceName);
+    const std::string&) {
+  return "{}";
 }
 
 std::vector<std::string> HybridAmplitudeContext::getLegacyEventsJson(
-    const std::string& instanceName,
-    const std::string& eventKind) {
-  if (!adapter_) {
-    return {};
-  }
-  return adapter_->getLegacyEventsJson(instanceName, eventKind);
+    const std::string&,
+    const std::string&) {
+  return {};
 }
 
 void HybridAmplitudeContext::removeLegacyEvent(
-    const std::string& instanceName,
-    const std::string& eventKind,
+    const std::string&,
+    const std::string&,
     double eventId) {
   const double int64Limit = std::ldexp(1.0, 63);
   if (!std::isfinite(eventId) ||
@@ -54,10 +52,6 @@ void HybridAmplitudeContext::removeLegacyEvent(
       eventId >= int64Limit) {
     throw std::runtime_error("NitroAmplitude: Invalid eventId");
   }
-  if (!adapter_) {
-    return;
-  }
-  adapter_->removeLegacyEvent(instanceName, eventKind, static_cast<int64_t>(eventId));
 }
 
 } // namespace margelo::nitro::NitroAmplitude

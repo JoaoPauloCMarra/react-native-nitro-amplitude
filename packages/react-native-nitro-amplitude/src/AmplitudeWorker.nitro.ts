@@ -27,4 +27,8 @@ export interface AmplitudeWorker extends HybridObject<{
     ) => void,
   ): () => void;
   queueSize(): number;
+  /** Number of requests currently being executed by the HTTP worker threads. */
+  inFlightCount(): number;
+  /** Bytes of request bodies and headers currently waiting in the queue. */
+  pendingBodyBytes(): number;
 }

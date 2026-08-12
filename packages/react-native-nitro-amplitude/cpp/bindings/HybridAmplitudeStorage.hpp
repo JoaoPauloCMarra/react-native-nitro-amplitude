@@ -1,16 +1,19 @@
 #pragma once
 
 #include "HybridAmplitudeStorageSpec.hpp"
-#include "../core/NativeAmplitudeAdapter.hpp"
+#include "../core/StorageAdapter.hpp"
 #include <memory>
 #include <mutex>
+#include <string>
 #include <unordered_map>
+#include <vector>
 
 namespace margelo::nitro::NitroAmplitude {
 
 class HybridAmplitudeStorage : public HybridAmplitudeStorageSpec {
 public:
   HybridAmplitudeStorage();
+  explicit HybridAmplitudeStorage(std::shared_ptr<::NitroAmplitude::StorageAdapter> adapter);
   ~HybridAmplitudeStorage() override = default;
 
   void set(const std::string& key, const std::string& value, bool persist) override;
@@ -32,7 +35,7 @@ public:
   void removeBatch(const std::vector<std::string>& keys, bool persist) override;
 
 private:
-  std::shared_ptr<::NitroAmplitude::NativeAmplitudeAdapter> adapter_;
+  std::shared_ptr<::NitroAmplitude::StorageAdapter> adapter_;
   std::unordered_map<std::string, std::string> memoryStore_;
   std::mutex memoryMutex_;
 };

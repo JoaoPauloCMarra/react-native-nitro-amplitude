@@ -13,9 +13,9 @@ Three C++ HybridObjects (see `nitro.json`):
 
 | Key                | C++ class                | Role                                           |
 | ------------------ | ------------------------ | ---------------------------------------------- |
-| `AmplitudeContext` | `HybridAmplitudeContext` | Sync device context + legacy migration hooks   |
+| `AmplitudeContext` | `HybridAmplitudeContext` | Sync device context (cached by option set)     |
 | `AmplitudeStorage` | `HybridAmplitudeStorage` | Sync memory/disk KV for analytics + experiment |
-| `AmplitudeWorker`  | `HybridAmplitudeWorker`  | Background HTTP queue                          |
+| `AmplitudeWorker`  | `HybridAmplitudeWorker`  | Bounded-concurrency background HTTP queue      |
 
 Never hand-edit `nitrogen/generated/**`; run `bun run codegen` after spec changes.
 
@@ -50,7 +50,11 @@ bun run example:ios
 
 ## Android context init
 
-`app.plugin.js` injects `AndroidAmplitudeAdapter.setContext(this)` in `MainApplication.onCreate`.
+`android/src/main/java/com/nitroamplitude/NitroAmplitudeInitializer.kt` (a
+manifest-registered initializer) calls
+`AndroidAmplitudeAdapter.setContext(applicationContext)`. The Expo config
+plugin (`app.plugin.js`) is only a package registration point for CNG
+projects; apps must not call `setContext` manually.
 
 ## Release bar
 
@@ -60,5 +64,8 @@ bun run example:ios
 
 ## Known gaps
 
-- Legacy Amplitude SDK SQLite migration returns empty stubs on native (TODO).
+- Legacy Amplitude SDK SQLite migration was removed; the package does not
+  import data written by the legacy Amplitude SDK.
 - Web uses browser fetch and storage fallbacks without native Nitro bindings.
+- Smoke flows run deterministically in dry-run fixture mode; real-network
+  example flows require keys from `apps/example/.env.local`.

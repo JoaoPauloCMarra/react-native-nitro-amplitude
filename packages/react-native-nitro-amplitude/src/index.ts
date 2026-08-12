@@ -4,12 +4,63 @@ import analyticsClient, {
 import type {
   AmplitudeDiagnostics,
   AmplitudeSafeDiagnostics,
+  NativeStartupDiagnostics,
+  WorkerMetrics,
 } from "./diagnostics";
 import {
   getAmplitudeDiagnostics,
+  getLastNativeError,
+  getNativeStartupDiagnostics,
   getSafeAmplitudeDiagnostics,
 } from "./diagnostics";
 import { prefetchNativeContext } from "./native/context";
+import { clearDiagnosticFailures } from "./diagnostic-failures";
+import type {
+  AmplitudeDiagnosticFailure,
+  AmplitudeDiagnosticFailureKind,
+  AmplitudeDiagnosticOperation,
+  AmplitudeDiagnosticSurface,
+} from "./diagnostic-failures";
+import {
+  AmplitudeError,
+  createAmplitudeError,
+  getAmplitudeErrorCode,
+} from "./errors";
+import type { AmplitudeErrorCode } from "./errors";
+import {
+  createAmplitudeClient,
+  createDurableAmplitudeStoragePreset,
+  createExperimentUser,
+  createPersistentAmplitudeConfig,
+  getConnectorIdentity,
+} from "./presets";
+import type {
+  AmplitudeCombinedClient,
+  AmplitudeCombinedClientConfig,
+  AmplitudeCombinedClientConfigWithExperiment,
+  AmplitudeCombinedClientWithExperiment,
+  DurableAmplitudeStoragePreset,
+  DurableAmplitudeStoragePresetOptions,
+} from "./presets";
+import { Experiment } from "./experiment/factory";
+import { ExperimentClient } from "./experiment/experimentClient";
+import { StubExperimentClient } from "./experiment/stubClient";
+import { ConsoleLogger } from "./experiment/logger/consoleLogger";
+import { LogLevel } from "./experiment/types/logger";
+import type { Logger } from "./experiment/types/logger";
+import { Source, VariantSource, isFallback } from "./experiment/types/source";
+import {
+  variantBoolean,
+  variantJson,
+  variantNumber,
+  variantPayload,
+  variantString,
+} from "./experiment/typed-variants";
+import {
+  LocalStorage as ExperimentLocalStorage,
+  MemoryStorage as ExperimentMemoryStorage,
+} from "./experiment/storage/local-storage";
+import { PACKAGE_VERSION } from "./package-version";
 
 import * as AnalyticsTypes from "./analytics/types";
 
@@ -68,6 +119,12 @@ export {
   getNativeStartupDiagnostics,
   getSafeAmplitudeDiagnostics,
 } from "./diagnostics";
+export type {
+  AmplitudeDiagnostics,
+  AmplitudeSafeDiagnostics,
+  NativeStartupDiagnostics,
+  WorkerMetrics,
+} from "./diagnostics";
 export { clearDiagnosticFailures } from "./diagnostic-failures";
 export type {
   AmplitudeDiagnosticFailure,
@@ -75,34 +132,94 @@ export type {
   AmplitudeDiagnosticOperation,
   AmplitudeDiagnosticSurface,
 } from "./diagnostic-failures";
+export {
+  AmplitudeError,
+  createAmplitudeError,
+  getAmplitudeErrorCode,
+} from "./errors";
+export type { AmplitudeErrorCode } from "./errors";
+export {
+  createAmplitudeClient,
+  createDurableAmplitudeStoragePreset,
+  createExperimentUser,
+  createPersistentAmplitudeConfig,
+  getConnectorIdentity,
+} from "./presets";
 export type {
-  AmplitudeDiagnostics,
-  AmplitudeSafeDiagnostics,
-  NativeStartupDiagnostics,
-} from "./diagnostics";
-export * from "./errors";
-export * from "./network";
-export * from "./presets";
-export * from "./testing";
+  AmplitudeCombinedClient,
+  AmplitudeCombinedClientConfig,
+  AmplitudeCombinedClientConfigWithExperiment,
+  AmplitudeCombinedClientWithExperiment,
+  DurableAmplitudeStoragePreset,
+  DurableAmplitudeStoragePresetOptions,
+} from "./presets";
+export {
+  assertNetworkEnabled,
+  clearDryRunTransportRecords,
+  createNetworkTimingBuffer,
+  createTimedAnalyticsTransport,
+  createTimedHttpClient,
+  DryRunHttpClient,
+  DryRunTransport,
+  dryRunHttpClient,
+  dryRunTransport,
+  getDryRunAnalyticsEvents,
+  getDryRunTransportRecords,
+  getNetworkEnabled,
+  setNetworkEnabled,
+} from "./network";
+export type {
+  AmplitudeNetworkTiming,
+  AmplitudeNetworkTimingBuffer,
+  AmplitudeNetworkTimingRecorder,
+  DryRunEvent,
+  DryRunRequest,
+} from "./network";
+export {
+  createFakeExperimentStorage,
+  createMockAmplitudeClient,
+  createMockExperimentClient,
+} from "./testing";
+export type { FakeExperimentStorage } from "./testing";
 
-export * from "./experiment/types/config";
-export { Experiment } from "./experiment/factory";
-export { StubExperimentClient } from "./experiment/stubClient";
-export { ExperimentClient } from "./experiment/experimentClient";
-export * from "./experiment/types/client";
-export { Source } from "./experiment/types/source";
-export * from "./experiment/types/user";
-export * from "./experiment/types/variant";
-export * from "./experiment/types/exposure";
-export * from "./experiment/types/storage";
-export { LogLevel } from "./experiment/types/logger";
+export { Experiment };
+export { ExperimentClient };
+export { StubExperimentClient };
+export { ConsoleLogger };
+export { LogLevel };
 export type { Logger } from "./experiment/types/logger";
-export { ConsoleLogger } from "./experiment/logger/consoleLogger";
+export { Source, VariantSource, isFallback };
+export {
+  variantBoolean,
+  variantJson,
+  variantNumber,
+  variantPayload,
+  variantString,
+  parseVariantJson,
+} from "./experiment/typed-variants";
 export {
   LocalStorage as ExperimentLocalStorage,
   MemoryStorage as ExperimentMemoryStorage,
 } from "./experiment/storage/local-storage";
-export * from "./experiment/typed-variants";
+export type { ExperimentConfig } from "./experiment/types/config";
+export { Defaults } from "./experiment/types/config";
+export type {
+  Client,
+  ExperimentFetchResult,
+  ExperimentVariantResult,
+  FetchOptions,
+  VariantFreshness,
+} from "./experiment/types/client";
+export type {
+  ExperimentUser,
+  ExperimentUserProvider,
+} from "./experiment/types/user";
+export type {
+  Exposure,
+  ExposureTrackingProvider,
+} from "./experiment/types/exposure";
+export type { Variant, Variants } from "./experiment/types/variant";
+export type { Storage } from "./experiment/types/storage";
 
 export type { AmplitudeContext } from "./AmplitudeContext.nitro";
 export type { AmplitudeStorage } from "./AmplitudeStorage.nitro";

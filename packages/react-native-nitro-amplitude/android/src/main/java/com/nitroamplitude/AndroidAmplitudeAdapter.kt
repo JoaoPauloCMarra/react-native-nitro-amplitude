@@ -13,10 +13,15 @@ import java.util.concurrent.Executors
 
 object AndroidAmplitudeAdapter {
   private const val DEFAULT_OPTIONS_JSON = "{}"
+  private const val MAX_CACHED_CONTEXTS = 8
 
   private var appContext: Context? = null
   private val executor = Executors.newSingleThreadExecutor()
-  @Volatile private var cachedDefaultContextJson: String? = null
+  private val cachedContexts = object : LinkedHashMap<String, String>(16, 0.75f, true) {
+    override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, String>): Boolean {
+      return size > MAX_CACHED_CONTEXTS
+    }
+  }
 
   @JvmStatic
   fun setContext(context: Context) {
@@ -25,7 +30,7 @@ object AndroidAmplitudeAdapter {
 
   @JvmStatic
   fun getContext(): Context {
-    return appContext ?: throw IllegalStateException("NitroAmplitude context not initialized")
+    return appContext ?: throw IllegalStateException("NitroAmplitude: context not initialized")
   }
 
   private fun prefs(): SharedPreferences {
@@ -35,42 +40,48 @@ object AndroidAmplitudeAdapter {
   @JvmStatic
   fun prefetchContext() {
     executor.execute {
-      cachedDefaultContextJson = buildApplicationContextJson()
+      getApplicationContextJson(DEFAULT_OPTIONS_JSON)
     }
   }
 
   @JvmStatic
   fun getApplicationContextJson(optionsJson: String): String {
-    if (optionsJson == DEFAULT_OPTIONS_JSON) {
-      cachedDefaultContextJson?.let { return it }
+    val canonicalOptions = canonicalOptions(optionsJson)
+    synchronized(cachedContexts) {
+      cachedContexts[canonicalOptions]?.let { return it }
     }
-    return buildApplicationContextJson()
+    val json = buildApplicationContextJson()
+    synchronized(cachedContexts) {
+      cachedContexts[canonicalOptions] = json
+    }
+    return json
+  }
+
+  private fun canonicalOptions(optionsJson: String): String {
+    val options = try {
+      JSONObject(optionsJson)
+    } catch (_: Exception) {
+      return DEFAULT_OPTIONS_JSON
+    }
+    val sortedKeys = options.keys().asSequence().toList().sorted()
+    return sortedKeys.joinToString("&") { key -> "$key=${options.optString(key)}" }
   }
 
   private fun buildApplicationContextJson(): String {
     val context = getContext()
     val locale = context.resources.configuration.locales[0]
     val json = JSONObject()
-    json.put("version", context.packageManager.getPackageInfo(context.packageName, 0).versionName)
+    json.put("version", context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "")
     json.put("platform", "Android")
-    json.put("language", locale.language)
-    json.put("country", locale.country)
+    json.put("language", locale.language ?: "")
+    json.put("country", locale.country ?: "")
     json.put("osName", "android")
-    json.put("osVersion", Build.VERSION.RELEASE)
-    json.put("deviceManufacturer", Build.MANUFACTURER)
-    json.put("deviceModel", Build.MODEL)
-    json.put("deviceBrand", Build.BRAND)
+    json.put("osVersion", Build.VERSION.RELEASE ?: "")
+    json.put("deviceManufacturer", Build.MANUFACTURER ?: "")
+    json.put("deviceModel", Build.MODEL ?: "")
+    json.put("deviceBrand", Build.BRAND ?: "")
     return json.toString()
   }
-
-  @JvmStatic
-  fun getLegacySessionDataJson(instanceName: String): String = "{}"
-
-  @JvmStatic
-  fun getLegacyEventsJson(instanceName: String, eventKind: String): Array<String> = emptyArray()
-
-  @JvmStatic
-  fun removeLegacyEvent(instanceName: String, eventKind: String, eventId: Long) {}
 
   @JvmStatic
   fun setDisk(key: String, value: String) {
@@ -120,7 +131,7 @@ object AndroidAmplitudeAdapter {
         }
       }
     } catch (error: Exception) {
-      return arrayOf("0", "", error.message ?: "HTTP connection setup failed")
+      return arrayOf("0", "", "network_error")
     }
 
     return try {
@@ -134,7 +145,7 @@ object AndroidAmplitudeAdapter {
       } ?: ""
       arrayOf(status.toString(), responseBody, "")
     } catch (error: Exception) {
-      arrayOf("0", "", error.message ?: "HTTP request failed")
+      arrayOf("0", "", "network_error")
     } finally {
       connection.disconnect()
     }

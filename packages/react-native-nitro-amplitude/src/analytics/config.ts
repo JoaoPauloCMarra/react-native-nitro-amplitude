@@ -16,7 +16,6 @@ import {
 import type { Transport } from "@amplitude/analytics-core";
 
 import { LocalStorage } from "./storage/local-storage";
-import RemnantDataMigration from "./migration/remnant-data-migration";
 import { isNative } from "./utils/platform";
 import { NetworkGuardedFetchTransport } from "./network-guarded-fetch-transport";
 import { createDiagnosticAnalyticsTransport } from "../diagnostic-failures";
@@ -42,7 +41,7 @@ function getDefaultTransport(): Transport {
 }
 
 export const getDefaultConfig = () => {
-  const cookieStorage = new MemoryStorage<UserSession>();
+  const cookieStorage = new LocalStorage<UserSession>();
   const trackingOptions: Required<ReactNativeTrackingOptions> = {
     adid: true,
     carrier: true,
@@ -266,20 +265,8 @@ export const useReactNativeConfig = async (
 
   if (options?.migrateLegacyData !== false) {
     options?.loggerProvider?.debug(
-      "NitroAmplitude: legacy SQLite data migration is not yet supported on native; migrateLegacyData currently restores no legacy Amplitude SDK data.",
+      "NitroAmplitude: migrateLegacyData remains accepted for compatibility; legacy SQLite import is not available.",
     );
-    const legacySessionData = await new RemnantDataMigration(
-      apiKey,
-      options?.instanceName,
-      storageProvider,
-      previousCookies?.lastEventTime === undefined,
-      options?.loggerProvider,
-    ).execute();
-    deviceId = deviceId ?? legacySessionData.deviceId;
-    userId = userId ?? legacySessionData.userId;
-    sessionId = sessionId ?? legacySessionData.sessionId;
-    lastEventTime = lastEventTime ?? legacySessionData.lastEventTime;
-    lastEventId = lastEventId ?? legacySessionData.lastEventId;
   }
 
   const config = new ReactNativeConfig(apiKey, {

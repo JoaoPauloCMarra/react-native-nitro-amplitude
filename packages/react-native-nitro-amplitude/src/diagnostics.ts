@@ -6,8 +6,13 @@ import type {
 import { isNative } from "./analytics/utils/platform";
 import { getAmplitudeErrorCode } from "./errors";
 import { getNetworkEnabled } from "./network";
+import type { AmplitudeNetworkTiming } from "./network";
 import type { AmplitudeDiagnosticFailure } from "./diagnostic-failures";
 import { getDiagnosticFailures } from "./diagnostic-failures";
+import {
+  getDiagnosticEventsByType,
+  recordDiagnosticEvent,
+} from "./diagnostics-pipeline";
 
 type HybridModule = typeof import("./native/hybrid");
 
@@ -17,17 +22,24 @@ export type NativeStartupDiagnostics = {
   storageAvailable: boolean;
   workerAvailable: boolean;
   nativeAvailable: boolean;
-  legacyMigrationSupported: boolean;
   lastError?: {
     code: string;
     message: string;
   };
 };
 
+export type WorkerMetrics = {
+  queueSize: number;
+  inFlightCount: number;
+  pendingBodyBytes: number;
+};
+
 export type AmplitudeDiagnostics = AmplitudeAnalyticsDiagnostics & {
   native: NativeStartupDiagnostics;
   networkEnabled: boolean;
   diagnosticFailures: AmplitudeDiagnosticFailure[];
+  networkTimings: AmplitudeNetworkTiming[];
+  workerMetrics: WorkerMetrics | undefined;
 };
 
 export type AmplitudeSafeDiagnostics = Omit<
@@ -48,6 +60,15 @@ export function getLastNativeError(): NativeStartupDiagnostics["lastError"] {
   return lastNativeError;
 }
 
+function recordNativeError(
+  error: unknown,
+): NativeStartupDiagnostics["lastError"] {
+  return {
+    code: getAmplitudeErrorCode(error),
+    message: error instanceof Error ? error.message : String(error),
+  };
+}
+
 export function getNativeStartupDiagnostics(): NativeStartupDiagnostics {
   const result: NativeStartupDiagnostics = {
     nitroModulesAvailable: true,
@@ -55,32 +76,56 @@ export function getNativeStartupDiagnostics(): NativeStartupDiagnostics {
     storageAvailable: false,
     workerAvailable: false,
     nativeAvailable: false,
-    legacyMigrationSupported: false,
     lastError: lastNativeError,
   };
+  let lastError: NativeStartupDiagnostics["lastError"] | undefined;
 
   try {
-    const { getAmplitudeContext, getAmplitudeStorage, getAmplitudeWorker } =
-      getHybridModule();
+    const { getAmplitudeContext } = getHybridModule();
     getAmplitudeContext();
     result.contextAvailable = true;
-    getAmplitudeStorage();
-    result.storageAvailable = true;
-    getAmplitudeWorker();
-    result.workerAvailable = true;
-    result.nativeAvailable = true;
-    lastNativeError = undefined;
-    result.lastError = undefined;
   } catch (error) {
-    lastNativeError = {
-      code: getAmplitudeErrorCode(error),
-      message: error instanceof Error ? error.message : String(error),
-    };
-    result.nitroModulesAvailable = false;
-    result.lastError = lastNativeError;
+    lastError = recordNativeError(error);
   }
 
+  try {
+    const { getAmplitudeStorage } = getHybridModule();
+    getAmplitudeStorage();
+    result.storageAvailable = true;
+  } catch (error) {
+    lastError = recordNativeError(error);
+  }
+
+  try {
+    const { getAmplitudeWorker } = getHybridModule();
+    getAmplitudeWorker();
+    result.workerAvailable = true;
+  } catch (error) {
+    lastError = recordNativeError(error);
+  }
+
+  result.nativeAvailable =
+    result.contextAvailable &&
+    result.storageAvailable &&
+    result.workerAvailable;
+  lastNativeError = lastError;
+  result.lastError = lastError;
+
   return result;
+}
+
+function getWorkerMetrics(): WorkerMetrics | undefined {
+  try {
+    const { getAmplitudeWorker } = getHybridModule();
+    const worker = getAmplitudeWorker();
+    return {
+      queueSize: worker.queueSize(),
+      inFlightCount: worker.inFlightCount(),
+      pendingBodyBytes: worker.pendingBodyBytes(),
+    };
+  } catch {
+    return undefined;
+  }
 }
 
 export function getAmplitudeDiagnostics(
@@ -91,6 +136,10 @@ export function getAmplitudeDiagnostics(
     native: getNativeStartupDiagnostics(),
     networkEnabled: getNetworkEnabled(),
     diagnosticFailures: getDiagnosticFailures(),
+    networkTimings: getDiagnosticEventsByType("network_timing").map(
+      (event) => event.timing,
+    ),
+    workerMetrics: getWorkerMetrics(),
   };
 }
 
@@ -110,15 +159,24 @@ export async function healthCheck(
 ): Promise<AmplitudeHealthCheckResult> {
   const errors: string[] = [];
   const native = getNativeStartupDiagnostics();
-  let storageWritable = false;
+  let diskStorageWritable = false;
+  let workerReady = false;
 
   try {
     const { getAmplitudeStorage } = getHybridModule();
     const storage = getAmplitudeStorage();
     const key = `health::${Date.now()}`;
-    storage.set(key, "ok", false);
-    storageWritable = storage.get(key, false) === "ok";
-    storage.remove(key, false);
+    storage.set(key, "ok", true);
+    diskStorageWritable = storage.get(key, true) === "ok";
+    storage.remove(key, true);
+  } catch (error) {
+    errors.push(error instanceof Error ? error.message : String(error));
+  }
+
+  try {
+    const { getAmplitudeWorker } = getHybridModule();
+    const worker = getAmplitudeWorker();
+    workerReady = worker.queueSize() >= 0;
   } catch (error) {
     errors.push(error instanceof Error ? error.message : String(error));
   }
@@ -131,11 +189,19 @@ export async function healthCheck(
     ? analytics.getDiagnostics().initialized
     : false;
 
-  return {
-    ok: native.nativeAvailable && storageWritable,
+  const result: AmplitudeHealthCheckResult = {
+    ok: native.nativeAvailable && diskStorageWritable && workerReady,
     analyticsInitialized,
     nativeAvailable: native.nativeAvailable,
-    storageWritable,
+    storageWritable: diskStorageWritable,
+    diskStorageWritable,
+    workerReady,
     errors,
   };
+  recordDiagnosticEvent({
+    type: "health",
+    recordedAt: Date.now(),
+    health: result,
+  });
+  return result;
 }

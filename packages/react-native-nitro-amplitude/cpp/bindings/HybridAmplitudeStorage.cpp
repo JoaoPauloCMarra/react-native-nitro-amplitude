@@ -8,12 +8,16 @@ namespace margelo::nitro::NitroAmplitude {
 
 namespace {
 constexpr auto kBatchMissingSentinel = "__nitro_amplitude_batch_missing__::v1";
-} // namespace
+}
 
 HybridAmplitudeStorage::HybridAmplitudeStorage()
     : HybridObject(TAG), HybridAmplitudeStorageSpec() {
-  adapter_ = ::NitroAmplitude::getSharedPlatformAdapter();
+  adapter_ = ::NitroAmplitude::getSharedPlatformAdapters().storage;
 }
+
+HybridAmplitudeStorage::HybridAmplitudeStorage(
+    std::shared_ptr<::NitroAmplitude::StorageAdapter> adapter)
+    : HybridObject(TAG), HybridAmplitudeStorageSpec(), adapter_(std::move(adapter)) {}
 
 void HybridAmplitudeStorage::set(
     const std::string& key,

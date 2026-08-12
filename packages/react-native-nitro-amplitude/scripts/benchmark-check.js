@@ -31,9 +31,6 @@ Module._load = function load(request, parent, isMain) {
         createHybridObject: () => ({
           prefetch: () => {},
           getApplicationContextJson: () => "{}",
-          getLegacySessionDataJson: () => "{}",
-          getLegacyEventsJson: () => "[]",
-          removeLegacyEvent: () => {},
           set: () => {},
           get: () => undefined,
           has: () => false,
@@ -41,8 +38,11 @@ Module._load = function load(request, parent, isMain) {
           getAllKeys: () => [],
           getBatch: () => [],
           removeBatch: () => {},
-          enqueueRequest: () => {},
-          cancelAll: () => {},
+          enqueue: () => {},
+          cancel: () => {},
+          queueSize: () => 0,
+          inFlightCount: () => 0,
+          pendingBodyBytes: () => 0,
         }),
       },
     };
@@ -62,15 +62,14 @@ try {
   Module._load = originalLoad;
 }
 
+const { prefetchNativeContext, Experiment } = amplitudeModule;
 const {
-  prefetchNativeContext,
-  Experiment,
   createNetworkTimingBuffer,
   createTimedAnalyticsTransport,
   createTimedHttpClient,
   dryRunHttpClient,
   dryRunTransport,
-} = amplitudeModule;
+} = require(path.join(packageRoot, "lib", "commonjs", "network.js"));
 
 if (typeof prefetchNativeContext !== "function") {
   console.error("Benchmark failed: prefetchNativeContext export missing.");

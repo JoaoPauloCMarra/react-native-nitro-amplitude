@@ -22,9 +22,9 @@ through Nitro, and still works on web through fetch and storage fallbacks.
 bun add react-native-nitro-amplitude react-native-nitro-modules
 ```
 
-Compatibility for `0.6.0`:
+Compatibility for `0.6.1`:
 
-| Dependency                   | Supported range    | `0.6.0` baseline |
+| Dependency                   | Supported range    | `0.6.1` baseline |
 | ---------------------------- | ------------------ | ---------------- |
 | `react`                      | `>=18.2.0`         | `19.2.3`         |
 | `react-native`               | `>=0.75.0`         | `0.86.2`         |
@@ -63,6 +63,32 @@ Android context setup is owned by the package. Native apps receive an Android
 manifest initializer, and the Expo plugin is kept as the package registration
 point for CNG projects. Apps should not edit `MainApplication` to call
 `AndroidAmplitudeAdapter.setContext(this)`.
+
+## Quick Start
+
+Use `createAmplitudeClient` with a durable storage namespace. This replaces
+hand-rolled analytics and experiment `Storage` adapters.
+
+```ts
+import { createAmplitudeClient, Source } from "react-native-nitro-amplitude";
+
+const amplitude = createAmplitudeClient({
+  analyticsApiKey: "AMPLITUDE_API_KEY",
+  experimentDeploymentKey: "DEPLOYMENT_KEY",
+  durableStorage: { namespace: "myapp" },
+  experiment: {
+    source: Source.LocalStorage,
+    fetchOnStart: false,
+  },
+});
+
+await amplitude.init();
+amplitude.analytics.track("Checkout Started", { source: "cart" });
+const enabled = amplitude.experiment.variant("enable-onboarding").value === "on";
+```
+
+Pass `durableStorage: false` only when the app must supply its own storage
+adapters. Singleton `init` / `track` / `identify` remain available below.
 
 ## Analytics
 

@@ -4,9 +4,9 @@
 [![npm downloads](https://img.shields.io/npm/dm/react-native-nitro-amplitude?color=22c55e&label=downloads)](https://www.npmjs.com/package/react-native-nitro-amplitude)
 [![CI](https://github.com/JoaoPauloCMarra/react-native-nitro-amplitude/actions/workflows/ci.yml/badge.svg)](https://github.com/JoaoPauloCMarra/react-native-nitro-amplitude/actions/workflows/ci.yml)
 [![license](https://img.shields.io/npm/l/react-native-nitro-amplitude?color=007ec6)](https://github.com/JoaoPauloCMarra/react-native-nitro-amplitude/blob/main/LICENSE)
-[![React Native](https://img.shields.io/badge/react--native-%3E%3D0.75-61dafb)](https://reactnative.dev/docs/0.86/getting-started-without-a-framework)
-[![Expo](https://img.shields.io/badge/expo-SDK%2057-000020)](https://docs.expo.dev/versions/v57.0.0/)
-[![Nitro Modules](https://img.shields.io/badge/nitro--modules-%3E%3D0.36.5%20%3C0.37.0-black)](https://nitro.margelo.com/)
+[![React Native](https://img.shields.io/badge/react--native-0.87.0-61dafb)](https://reactnative.dev/docs/0.87/getting-started-without-a-framework)
+[![Expo](https://img.shields.io/badge/expo-SDK%2057%20%28RN%200.86.2%29-000020)](https://docs.expo.dev/versions/v57.0.0/)
+[![Nitro Modules](https://img.shields.io/badge/nitro--modules-%3E%3D0.37.0%20%3C0.38.0-black)](https://nitro.margelo.com/)
 [![TypeScript](https://img.shields.io/badge/typescript-6.0-3178c6)](https://www.typescriptlang.org/)
 
 Amplitude Analytics and Amplitude Experiment for React Native and Expo in one
@@ -22,14 +22,34 @@ through Nitro, and still works on web through fetch and storage fallbacks.
 bun add react-native-nitro-amplitude react-native-nitro-modules
 ```
 
-Compatibility for `0.6.0`:
+Compatibility for `0.7.0`:
 
-| Dependency                   | Supported range    | `0.6.0` baseline |
-| ---------------------------- | ------------------ | ---------------- |
-| `react`                      | `>=18.2.0`         | `19.2.3`         |
-| `react-native`               | `>=0.75.0`         | `0.86.2`         |
-| `react-native-nitro-modules` | `>=0.36.5 <0.37.0` | `0.36.5`         |
-| Expo development builds      | SDK 57             | `~57.0.12`       |
+| Dependency                   | Supported range    | `0.7.0` baseline                                         |
+| ---------------------------- | ------------------ | -------------------------------------------------------- |
+| `react`                      | `>=18.2.0`         | `19.2.3`                                                 |
+| `react-native`               | `>=0.75.0`         | `0.87.0` standalone; `0.86.2` in the Expo SDK 57 example |
+| `react-native-nitro-modules` | `>=0.37.0 <0.38.0` | `0.37.0`                                                 |
+| Expo development builds      | SDK 57             | `~57.0.15`                                               |
+
+The standalone package gate uses React Native `0.87.0` and the Strict
+TypeScript API. The example app uses Expo SDK 57's supported React Native
+`0.86.2` baseline. Do not override the Expo-managed React Native version in an
+Expo app; use the Expo version matched to your SDK.
+
+### Upgrade from 0.6.0
+
+This release has a breaking native peer boundary: `react-native-nitro-amplitude`
+`0.7.0` requires `react-native-nitro-modules` `>=0.37.0 <0.38.0`. Upgrade the
+Nitro package together with this package, then regenerate and rebuild native
+projects so the committed Nitro 0.37.0 bindings are compiled into the app:
+
+```sh
+bun add react-native-nitro-amplitude@0.7.0 react-native-nitro-modules@0.37.0
+bunx expo prebuild
+```
+
+For bare iOS apps, run `pod install` after the dependency update. Expo Go does
+not support this native module.
 
 For Expo development builds:
 

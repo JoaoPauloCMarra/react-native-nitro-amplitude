@@ -4,6 +4,26 @@ All notable changes to this project are documented in this file.
 
 The format follows Keep a Changelog and the project adheres to SemVer.
 
+## 0.7.0 - 2026-08-20
+
+### Breaking changes
+
+- The `react-native-nitro-modules` peer range is now `>=0.37.0 <0.38.0`.
+  Upgrade the Nitro package and rebuild native projects when upgrading from
+  0.6.0.
+
+### Changed
+
+- Upgraded Nitro Modules and Nitrogen to 0.37.0 and regenerated the committed
+  native bindings.
+- Updated the Amplitude analytics and experiment runtime dependencies to their
+  current compatible patch releases.
+- The standalone package development and type baseline is now React Native
+  0.87.0. The Expo SDK 57 example remains on its supported React Native 0.86.2
+  baseline.
+- Normalized `AppState.currentState` at the React Native boundary so the
+  package remains type-safe under React Native 0.87's Strict TypeScript API.
+
 ## 0.6.0 - 2026-08-12
 
 ### Breaking changes

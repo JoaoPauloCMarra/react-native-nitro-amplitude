@@ -272,7 +272,12 @@ void testWorkerBoundedConcurrency() {
   auto worker = std::make_shared<HybridAmplitudeWorker>(adapter);
   adapter->closeGate();
 
-  for (int i = 0; i < 102; ++i) {
+  for (int i = 0; i < 2; ++i) {
+    worker->enqueue("slow-" + std::to_string(i), "https://example.com", "GET", {}, "", 1000);
+  }
+  assert(waitUntil([&]() { return worker->inFlightCount() == 2 && worker->queueSize() == 0; }));
+
+  for (int i = 2; i < 102; ++i) {
     worker->enqueue("slow-" + std::to_string(i), "https://example.com", "GET", {}, "", 1000);
   }
 

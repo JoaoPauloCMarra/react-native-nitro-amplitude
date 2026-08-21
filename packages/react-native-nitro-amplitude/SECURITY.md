@@ -18,7 +18,7 @@ receive security updates.
 ## Dependency support
 
 - `react-native-nitro-modules` is supported in the range
-  `>=0.36.5 <0.37.0` and moves in lockstep with this package (see
+  `>=0.37.0 <0.38.0` and moves in lockstep with this package (see
   `docs/dependency-policy.md`).
 - Amplitude runtime packages (`@amplitude/analytics-core`,
   `@amplitude/analytics-connector`, `@amplitude/experiment-core`,

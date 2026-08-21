@@ -1,6 +1,6 @@
 # AGENTS.md - react-native-nitro-amplitude
 
-Nitro-powered Amplitude Analytics + Experiment SDK for React Native (Expo 57 / RN 0.86).
+Nitro-powered Amplitude Analytics + Experiment SDK for React Native (RN 0.87 package gate / Expo 57 example).
 
 ## Package
 

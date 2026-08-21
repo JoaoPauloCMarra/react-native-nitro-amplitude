@@ -42,6 +42,19 @@ import { isNative } from "./utils/platform";
 const START_SESSION_EVENT = "session_start";
 const END_SESSION_EVENT = "session_end";
 
+function normalizeAppState(value: unknown): AppStateStatus {
+  switch (value) {
+    case "active":
+    case "background":
+    case "inactive":
+    case "unknown":
+    case "extension":
+      return value;
+    default:
+      return "background";
+  }
+}
+
 type ScheduledDestination = {
   scheduleId?: ReturnType<typeof setTimeout> | null;
   flushId?: ReturnType<typeof setTimeout> | null;
@@ -215,7 +228,7 @@ export class AmplitudeReactNative
       await this.add(new IdentityEventSender()).promise;
 
       // Step 4: Manage session
-      this.appState = AppState.currentState;
+      this.appState = normalizeAppState(AppState.currentState);
       const isNewSession = this.startNewSessionIfNeeded(
         this.currentTimeMillis(),
       );

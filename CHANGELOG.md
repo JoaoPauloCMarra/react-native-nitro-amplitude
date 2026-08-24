@@ -4,7 +4,7 @@ All notable changes to this project are documented in this file.
 
 The format follows Keep a Changelog and the project adheres to SemVer.
 
-## [Unreleased]
+## [0.8.0] - 2026-08-24
 
 ### Breaking changes
 

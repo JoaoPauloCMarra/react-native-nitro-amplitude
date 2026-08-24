@@ -203,7 +203,7 @@ void JsonlSegmentStore::RotateIfNeeded(uint64_t lineLength) {
   segmentDeadBytes_[activeSegment_] = 0;
 }
 
-void JsonlSegmentStore::CompactSegment(uint32_t segment) {
+bool JsonlSegmentStore::CompactSegment(uint32_t segment) {
   std::vector<std::pair<std::string, Entry>> live;
   for (const auto& entry : index_) {
     if (entry.second.segment == segment) {
@@ -212,35 +212,44 @@ void JsonlSegmentStore::CompactSegment(uint32_t segment) {
   }
   const std::string path = SegmentPath(segment);
   if (live.empty()) {
-    fileAdapter_->removeFile(path);
+    if (!fileAdapter_->removeFile(path)) {
+      return false;
+    }
     segmentBytes_[segment] = 0;
     segmentDeadBytes_[segment] = 0;
-    return;
+    return true;
   }
   std::sort(live.begin(), live.end(), [](const auto& left, const auto& right) {
     return left.second.offset < right.second.offset;
   });
   std::string rebuilt;
   std::vector<std::string> unreadable;
-  for (auto& entry : live) {
+  std::vector<std::pair<std::string, Entry>> compacted;
+  compacted.reserve(live.size());
+  for (const auto& entry : live) {
     const auto line =
         fileAdapter_->readRange(path, entry.second.offset, entry.second.length);
-    if (!line.has_value()) {
+    if (!line.has_value() || line->size() != entry.second.length) {
       unreadable.push_back(entry.first);
       continue;
     }
-    entry.second.offset = rebuilt.size();
+    Entry compactedEntry = entry.second;
+    compactedEntry.offset = rebuilt.size();
     rebuilt += line.value();
+    compacted.emplace_back(entry.first, compactedEntry);
+  }
+  if (!fileAdapter_->writeFile(path, rebuilt)) {
+    return false;
+  }
+  for (const auto& entry : compacted) {
     index_[entry.first] = entry.second;
   }
   for (const auto& key : unreadable) {
     index_.erase(key);
   }
-  if (!fileAdapter_->writeFile(path, rebuilt)) {
-    return;
-  }
   segmentBytes_[segment] = rebuilt.size();
   segmentDeadBytes_[segment] = 0;
+  return true;
 }
 
 void JsonlSegmentStore::setDisk(const std::string& key, const std::string& value) {
@@ -276,9 +285,12 @@ void JsonlSegmentStore::deleteDisk(const std::string& key) {
   if (it == index_.end()) {
     return;
   }
+  const Entry deletedEntry = it->second;
   const uint32_t segment = it->second.segment;
   index_.erase(it);
-  CompactSegment(segment);
+  if (!CompactSegment(segment)) {
+    index_[key] = deletedEntry;
+  }
 }
 
 bool JsonlSegmentStore::hasDisk(const std::string& key) {

@@ -2,6 +2,9 @@
 
 #include "../core/PlatformAdapterFactory.hpp"
 
+#include <cmath>
+#include <stdexcept>
+
 namespace margelo::nitro::NitroAmplitude {
 
 HybridAmplitudeContext::HybridAmplitudeContext()
@@ -25,6 +28,30 @@ std::string HybridAmplitudeContext::getApplicationContextJson(
     return "{}";
   }
   return adapter_->getApplicationContextJson(optionsJson);
+}
+
+std::string HybridAmplitudeContext::getLegacySessionDataJson(
+    const std::string&) {
+  return "{}";
+}
+
+std::vector<std::string> HybridAmplitudeContext::getLegacyEventsJson(
+    const std::string&,
+    const std::string&) {
+  return {};
+}
+
+void HybridAmplitudeContext::removeLegacyEvent(
+    const std::string&,
+    const std::string&,
+    double eventId) {
+  const double int64Limit = std::ldexp(1.0, 63);
+  if (!std::isfinite(eventId) ||
+      std::trunc(eventId) != eventId ||
+      eventId < -int64Limit ||
+      eventId >= int64Limit) {
+    throw std::runtime_error("NitroAmplitude: Invalid eventId");
+  }
 }
 
 } // namespace margelo::nitro::NitroAmplitude

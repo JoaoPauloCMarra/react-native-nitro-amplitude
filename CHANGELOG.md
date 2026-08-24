@@ -8,30 +8,29 @@ The format follows Keep a Changelog and the project adheres to SemVer.
 
 ### Breaking changes
 
-- Removed the no-op legacy migration methods `getLegacySessionDataJson`,
-  `getLegacyEventsJson`, and `removeLegacyEvent` from the
-  `AmplitudeContext` HybridObject. These stubs returned empty data and had
-  no production callers. The `migrateLegacyData` option remains accepted as a
-  no-op compatibility option; legacy Amplitude SDK data was never imported.
-  Migrate that data before switching SDKs if it is required.
-- Removed the unused batch storage API `setBatch`/`getBatch` from the
-  `AmplitudeStorage` HybridObject and the `getBatchValues` helper and
-  `BATCH_MISSING_SENTINEL` export from `react-native-nitro-amplitude`.
-  Migrate by reading and writing keys individually with `get`/`set` or by
-  using `removeBatch` for bulk cleanup.
+- None when upgrading from `0.7.x`. Direct upgrades from `0.6.x` still require
+  the Nitro 0.37 native rebuild described in the `0.7.0` entry.
 
 ### Changed
 
 - Analytics event persistence is now coalesced: tracked events are batched
-  in memory and written to native disk after a short debounce or an explicit
-  `flush()`. Durable reads stay read-your-writes consistent and write ordering
-  is preserved.
+  in memory and written to native disk after a short debounce. Pending writes
+  are also flushed when the app becomes inactive or enters the background, and
+  explicit `flush()` and `shutdown()` calls remain durability boundaries.
+  Durable reads stay read-your-writes consistent and write ordering is
+  preserved.
+- Restored the deprecated `AmplitudeContext` legacy session/event methods and
+  the `AmplitudeStorage.setBatch`/`getBatch` ABI wrappers for source and native
+  compatibility. They do not import legacy Amplitude SQLite data;
+  `migrateLegacyData` remains an accepted no-op.
 - Experiment fetch retries now apply ±20% jitter to backoff delays.
 - The iOS HTTP transport now reuses one shared `NSURLSession` instead of
   creating and invalidating a session per request.
 
 ### Fixed
 
+- JSONL compaction keeps the previous durable data when an atomic replacement
+  write fails and retries the operation later.
 - The iOS podspec no longer compiles the C++ test binary
   (`HybridAmplitudeStorageTest.cpp`, which contains its own `main`) into
   the app pod.
@@ -50,22 +49,18 @@ The format follows Keep a Changelog and the project adheres to SemVer.
   native bindings.
 - Updated the Amplitude analytics and experiment runtime dependencies to their
   current compatible patch releases.
-- The standalone package development and type baseline is now React Native
-  0.87.0. The Expo SDK 57 example remains on its supported React Native 0.86.2
-  baseline.
+- The package and Expo SDK 57 example use the React Native 0.86.2 baseline.
 - Normalized `AppState.currentState` at the React Native boundary so the
-  package remains type-safe under React Native 0.87's Strict TypeScript API.
+  package remains type-safe under React Native's Strict TypeScript API.
 
 ## [0.6.0] - 2026-08-12
 
 ### Breaking changes
 
-- None. At the 0.6.0 release, legacy migration methods, `migrateLegacyData`,
-  the `string[]` `AmplitudeStorage.getBatch` contract, and established root
-  exports remained available. The current Unreleased entry records the
-  removal of the no-op native migration methods and batch contract. The new
-  `/network` and `/testing` subpaths are preferred for clearer production
-  bundles but are not mandatory.
+- None. Legacy bridge methods, `migrateLegacyData`, and the `string[]`
+  `AmplitudeStorage.getBatch` contract remained available. The `/network` and
+  `/testing` subpaths are preferred for clearer production bundles but are not
+  mandatory.
 
 ### Changed
 

@@ -969,6 +969,16 @@ export class AmplitudeReactNative
     this.appState = nextAppState;
     if (currentAppState !== nextAppState) {
       const timestamp = this.currentTimeMillis();
+      if (
+        isNative() &&
+        (nextAppState === "inactive" || nextAppState === "background")
+      ) {
+        const { flushPendingDiskWrites } =
+          require("../native/storage") as typeof import("../native/storage");
+        try {
+          flushPendingDiskWrites(this.getStorageErrorHandler());
+        } catch {}
+      }
       if (nextAppState == "active") {
         this.enterForeground(timestamp);
       } else {

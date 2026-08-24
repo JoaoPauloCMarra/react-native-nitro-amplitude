@@ -279,7 +279,23 @@ void testStorage() {
   const auto prefixedKeys = storage->getKeysByPrefix("prefix:", false);
   assert(prefixedKeys.size() == 2);
 
-  storage->removeBatch({"alpha", "beta", "prefix:one", "prefix:two"}, false);
+  storage->setBatch({"batch-a", "batch-b"}, {"5", "6"}, false);
+  assert(storage->getBatch({"batch-a", "batch-b"}, false) ==
+         std::vector<std::string>({"5", "6"}));
+  assert(storage->getBatch({"batch-missing"}, false) ==
+         std::vector<std::string>({"__nitro_amplitude_batch_missing__::v1"}));
+
+  bool batchLengthThrown = false;
+  try {
+    storage->setBatch({"batch-a"}, {}, false);
+  } catch (const std::runtime_error&) {
+    batchLengthThrown = true;
+  }
+  assert(batchLengthThrown);
+
+  storage->removeBatch(
+      {"alpha", "beta", "prefix:one", "prefix:two", "batch-a", "batch-b"},
+      false);
   assert(!storage->has("alpha", false));
   assert(storage->getAllKeys(false).empty());
 
@@ -370,6 +386,32 @@ void testSegmentStoreCompactsSupersededRecords() {
   JsonlSegmentStore reloaded(files, "compact", cap);
   assert(reloaded.getDisk("hot").value_or("") == std::string(40, 'x'));
   assert(reloaded.getAllDiskKeys().size() == 26);
+}
+
+void testSegmentStoreCompactionWriteFailurePreservesData() {
+  auto files = std::make_shared<FakeFileAdapter>();
+  JsonlSegmentStore store(files, "compact-failure", 4096);
+  store.setDisk("keep", "keep-value");
+  store.setDisk("remove", "remove-value");
+
+  files->failWrites = true;
+  store.deleteDisk("remove");
+
+  assert(store.hasDisk("remove"));
+  assert(store.getDisk("remove").value_or("") == "remove-value");
+  assert(store.getDisk("keep").value_or("") == "keep-value");
+
+  JsonlSegmentStore afterFailedDelete(files, "compact-failure", 4096);
+  assert(afterFailedDelete.hasDisk("remove"));
+  assert(afterFailedDelete.getDisk("remove").value_or("") == "remove-value");
+
+  files->failWrites = false;
+  store.deleteDisk("remove");
+
+  assert(!store.hasDisk("remove"));
+  JsonlSegmentStore afterDelete(files, "compact-failure", 4096);
+  assert(!afterDelete.hasDisk("remove"));
+  assert(afterDelete.getDisk("keep").value_or("") == "keep-value");
 }
 
 void testSegmentStoreTruncatedTailRecovery() {
@@ -498,6 +540,17 @@ void testContextFallbacks() {
   auto context = std::make_shared<HybridAmplitudeContext>();
   context->prefetch();
   assert(context->getApplicationContextJson("{}") == "{}");
+  assert(context->getLegacySessionDataJson("default") == "{}");
+  assert(context->getLegacyEventsJson("default", "events").empty());
+  context->removeLegacyEvent("default", "events", 1);
+
+  bool invalidEventIdThrown = false;
+  try {
+    context->removeLegacyEvent("default", "events", 1.5);
+  } catch (const std::runtime_error&) {
+    invalidEventIdThrown = true;
+  }
+  assert(invalidEventIdThrown);
 }
 
 void testContextAdapterContract() {
@@ -863,6 +916,7 @@ int main() {
   testStorageAdapterContract();
   testSegmentStoreRotation();
   testSegmentStoreCompactsSupersededRecords();
+  testSegmentStoreCompactionWriteFailurePreservesData();
   testSegmentStoreTruncatedTailRecovery();
   testSegmentStoreIndexConsistency();
   testSegmentStoreEscapingRoundTrip();

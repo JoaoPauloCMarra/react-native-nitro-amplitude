@@ -42,7 +42,7 @@ private:
   void Load();
   void SetLocked(const std::string& key, const std::string& value);
   void RotateIfNeeded(uint64_t lineLength);
-  void CompactSegment(uint32_t segment);
+  bool CompactSegment(uint32_t segment);
   std::string SegmentPath(uint32_t segment) const;
 
   std::shared_ptr<FileAdapter> fileAdapter_;

@@ -28,6 +28,21 @@ function createStorageHybrid() {
         key.startsWith(prefix),
       );
     }),
+    setBatch: jest.fn((keys: string[], values: string[], persist: boolean) => {
+      if (keys.length !== values.length) {
+        throw new Error("NitroAmplitude: setBatch key/value length mismatch");
+      }
+      keys.forEach((key, index) => {
+        selectStore(persist).set(key, values[index] ?? "");
+      });
+    }),
+    getBatch: jest.fn((keys: string[], persist: boolean) => {
+      return keys.map(
+        (key) =>
+          selectStore(persist).get(key) ??
+          "__nitro_amplitude_batch_missing__::v1",
+      );
+    }),
     removeBatch: jest.fn((keys: string[], persist: boolean) => {
       keys.forEach((key) => selectStore(persist).delete(key));
     }),
@@ -40,6 +55,9 @@ function createContextHybrid() {
     getApplicationContextJson: jest.fn(() =>
       JSON.stringify({ platform: "iOS", version: "1.0.0" }),
     ),
+    getLegacySessionDataJson: jest.fn(() => "{}"),
+    getLegacyEventsJson: jest.fn(() => []),
+    removeLegacyEvent: jest.fn(),
   };
 }
 
@@ -337,7 +355,7 @@ describe("react-native-nitro-amplitude", () => {
     expect(normalized.osName).toBeUndefined();
   });
 
-  it("removed the legacy SQLite migration surface", () => {
+  it("retains deprecated legacy ABI stubs without SQLite migration", () => {
     expect(mockHybridObjects.AmplitudeContext).toBeUndefined();
     const context = getNativeApplicationContext({
       platform: true,
@@ -356,7 +374,19 @@ describe("react-native-nitro-amplitude", () => {
     expect(context).toEqual({ platform: "iOS", version: "1.0.0" });
     expect(
       Object.keys(mockHybridObjects.AmplitudeContext ?? {}).sort(),
-    ).toEqual(["getApplicationContextJson", "prefetch"]);
+    ).toEqual([
+      "getApplicationContextJson",
+      "getLegacyEventsJson",
+      "getLegacySessionDataJson",
+      "prefetch",
+      "removeLegacyEvent",
+    ]);
+    expect(mockHybridObjects.AmplitudeContext?.getLegacySessionDataJson()).toBe(
+      "{}",
+    );
+    expect(mockHybridObjects.AmplitudeContext?.getLegacyEventsJson()).toEqual(
+      [],
+    );
   });
 
   it("clears stale native diagnostics after successful probes", () => {

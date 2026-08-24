@@ -13,4 +13,14 @@ export interface AmplitudeContext extends HybridObject<{
    * platform, and JS consumes it via `JSON.parse` anyway.
    */
   getApplicationContextJson(optionsJson: string): string;
+  /** Deprecated no-op retained for ABI compatibility with the legacy SDK bridge. */
+  getLegacySessionDataJson(instanceName: string): string;
+  /** Deprecated no-op retained for ABI compatibility with the legacy SDK bridge. */
+  getLegacyEventsJson(instanceName: string, eventKind: string): string[];
+  /** Deprecated validation-only no-op retained for ABI compatibility. */
+  removeLegacyEvent(
+    instanceName: string,
+    eventKind: string,
+    eventId: number,
+  ): void;
 }

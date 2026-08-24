@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <cerrno>
 #include <cstring>
+#include <vector>
 
 namespace NitroAmplitude {
 
@@ -118,13 +119,25 @@ public:
   }
 
   bool writeFile(const std::string& path, const std::string& data) override {
-    const int fd = open(path.c_str(), O_WRONLY | O_CREAT | O_TRUNC, kFileMode);
+    std::string temporaryPath = path + ".tmp.XXXXXX";
+    std::vector<char> temporaryPathBuffer(temporaryPath.begin(), temporaryPath.end());
+    temporaryPathBuffer.push_back('\0');
+    const int fd = mkstemp(temporaryPathBuffer.data());
     if (fd < 0) {
       return false;
     }
-    const bool ok = WriteAll(fd, data);
-    close(fd);
-    return ok;
+    bool ok = WriteAll(fd, data);
+    if (ok && fsync(fd) != 0) {
+      ok = false;
+    }
+    if (close(fd) != 0) {
+      ok = false;
+    }
+    if (!ok || rename(temporaryPathBuffer.data(), path.c_str()) != 0) {
+      unlink(temporaryPathBuffer.data());
+      return false;
+    }
+    return true;
   }
 
   bool removeFile(const std::string& path) override {

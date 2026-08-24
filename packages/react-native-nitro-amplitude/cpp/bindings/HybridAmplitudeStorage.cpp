@@ -6,6 +6,10 @@
 
 namespace margelo::nitro::NitroAmplitude {
 
+namespace {
+constexpr auto kBatchMissingSentinel = "__nitro_amplitude_batch_missing__::v1";
+}
+
 HybridAmplitudeStorage::HybridAmplitudeStorage()
     : HybridObject(TAG), HybridAmplitudeStorageSpec() {
   adapter_ = ::NitroAmplitude::getSharedPlatformAdapters().storage;
@@ -104,6 +108,30 @@ std::vector<std::string> HybridAmplitudeStorage::getKeysByPrefix(
     }
   }
   return filtered;
+}
+
+void HybridAmplitudeStorage::setBatch(
+    const std::vector<std::string>& keys,
+    const std::vector<std::string>& values,
+    bool persist) {
+  if (keys.size() != values.size()) {
+    throw std::runtime_error("NitroAmplitude: setBatch key/value length mismatch");
+  }
+  for (size_t i = 0; i < keys.size(); ++i) {
+    set(keys[i], values[i], persist);
+  }
+}
+
+std::vector<std::string> HybridAmplitudeStorage::getBatch(
+    const std::vector<std::string>& keys,
+    bool persist) {
+  std::vector<std::string> values;
+  values.reserve(keys.size());
+  for (const auto& key : keys) {
+    const auto value = get(key, persist);
+    values.push_back(value.value_or(kBatchMissingSentinel));
+  }
+  return values;
 }
 
 size_t HybridAmplitudeStorage::getExternalMemorySize() noexcept {

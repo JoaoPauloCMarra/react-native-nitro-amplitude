@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <exception>
 #include <stdexcept>
 
 namespace margelo::nitro::NitroAmplitude {
@@ -82,7 +83,8 @@ void HybridAmplitudeWorker::enqueue(
     if (queue_.size() >= kMaxQueuedRequests) {
       throw std::runtime_error("NitroAmplitude: queue_full");
     }
-    cancelledRequests_.erase(requestId);
+    request.generation = ++nextGeneration_;
+    activeGenerations_[requestId].push_back(request.generation);
     queue_.push(std::move(request));
     queueSize_ = queue_.size();
     pendingBodyBytes_ += bodyBytes;
@@ -92,7 +94,11 @@ void HybridAmplitudeWorker::enqueue(
 
 void HybridAmplitudeWorker::cancel(const std::string& requestId) {
   std::lock_guard<std::mutex> lock(queueMutex_);
-  cancelledRequests_.insert(requestId);
+  const auto active = activeGenerations_.find(requestId);
+  if (active == activeGenerations_.end() || active->second.empty()) {
+    return;
+  }
+  cancelledGenerations_.insert(active->second.back());
 }
 
 std::function<void()> HybridAmplitudeWorker::addOnComplete(
@@ -149,51 +155,88 @@ void HybridAmplitudeWorker::workerLoop() {
       queueSize_ = queue_.size();
       const size_t bodyBytes = requestBodyBytes(request);
       pendingBodyBytes_ -= std::min(pendingBodyBytes_.load(), bodyBytes);
-      if (!running_ || cancelledRequests_.erase(request.requestId) > 0) {
+      if (!running_ || cancelledGenerations_.erase(request.generation) > 0) {
         notifyCancelled = true;
       } else {
         ++inFlightCount_;
+        inFlightGenerations_.insert(request.generation);
       }
     }
 
     if (notifyCancelled) {
+      {
+        std::lock_guard<std::mutex> lock(queueMutex_);
+        cancelledGenerations_.erase(request.generation);
+        const auto active = activeGenerations_.find(request.requestId);
+        if (active != activeGenerations_.end()) {
+          auto& generations = active->second;
+          generations.erase(
+              std::remove(generations.begin(), generations.end(), request.generation),
+              generations.end());
+          if (generations.empty()) {
+            activeGenerations_.erase(active);
+          }
+        }
+      }
       notifyComplete(request.requestId, 0, "", "cancelled");
       continue;
     }
 
-    if (!adapter_) {
-      --inFlightCount_;
-      notifyComplete(request.requestId, 0, "", "Native adapter unavailable");
-      continue;
-    }
-
-    const auto result = [&request, this]() {
+    ::NitroAmplitude::HttpResult result;
+    try {
+      if (!adapter_) {
+        result.error = "Native adapter unavailable";
+      } else {
 #ifndef NITRO_AMPLITUDE_DISABLE_PLATFORM_ADAPTER
 #if __ANDROID__
-      ::NitroAmplitude::HttpResult androidResult;
-      facebook::jni::ThreadScope::WithClassLoader([&request, this, &androidResult]() {
-        androidResult = adapter_->performHttpRequest(
+        facebook::jni::ThreadScope::WithClassLoader([&request, this, &result]() {
+              result = adapter_->performHttpRequest(
+                  request.url,
+                  request.method,
+                  request.headers,
+                  request.body,
+                  request.timeoutMillis);
+        });
+#else
+        result = adapter_->performHttpRequest(
             request.url,
             request.method,
             request.headers,
             request.body,
             request.timeoutMillis);
-      });
-      return androidResult;
 #endif
+#else
+        result = adapter_->performHttpRequest(
+            request.url,
+            request.method,
+            request.headers,
+            request.body,
+            request.timeoutMillis);
 #endif
-      return adapter_->performHttpRequest(
-          request.url,
-          request.method,
-          request.headers,
-          request.body,
-          request.timeoutMillis);
-    }();
+      }
+    } catch (const std::exception&) {
+      result = ::NitroAmplitude::HttpResult{};
+      result.error = "native_http_exception";
+    } catch (...) {
+      result = ::NitroAmplitude::HttpResult{};
+      result.error = "native_http_exception";
+    }
 
     --inFlightCount_;
     {
       std::lock_guard<std::mutex> lock(queueMutex_);
-      cancelledRequests_.erase(request.requestId);
+      inFlightGenerations_.erase(request.generation);
+      cancelledGenerations_.erase(request.generation);
+      const auto active = activeGenerations_.find(request.requestId);
+      if (active != activeGenerations_.end()) {
+        auto& generations = active->second;
+        generations.erase(
+            std::remove(generations.begin(), generations.end(), request.generation),
+            generations.end());
+        if (generations.empty()) {
+          activeGenerations_.erase(active);
+        }
+      }
     }
     notifyComplete(
         request.requestId,

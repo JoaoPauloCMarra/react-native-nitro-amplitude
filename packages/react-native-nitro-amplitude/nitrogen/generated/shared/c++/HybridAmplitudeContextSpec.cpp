@@ -16,9 +16,6 @@ namespace margelo::nitro::NitroAmplitude {
     registerHybrids(this, [](Prototype& prototype) {
       prototype.registerHybridMethod("prefetch", &HybridAmplitudeContextSpec::prefetch);
       prototype.registerHybridMethod("getApplicationContextJson", &HybridAmplitudeContextSpec::getApplicationContextJson);
-      prototype.registerHybridMethod("getLegacySessionDataJson", &HybridAmplitudeContextSpec::getLegacySessionDataJson);
-      prototype.registerHybridMethod("getLegacyEventsJson", &HybridAmplitudeContextSpec::getLegacyEventsJson);
-      prototype.registerHybridMethod("removeLegacyEvent", &HybridAmplitudeContextSpec::removeLegacyEvent);
     });
   }
 

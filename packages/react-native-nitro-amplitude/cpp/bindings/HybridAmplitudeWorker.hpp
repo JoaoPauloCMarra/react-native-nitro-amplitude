@@ -4,6 +4,7 @@
 #include "../core/HttpAdapter.hpp"
 #include <atomic>
 #include <condition_variable>
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -23,6 +24,7 @@ struct WorkerRequest {
   std::unordered_map<std::string, std::string> headers;
   std::string body;
   int timeoutMillis = 10000;
+  uint64_t generation = 0;
 };
 
 class HybridAmplitudeWorker : public HybridAmplitudeWorkerSpec {
@@ -63,7 +65,10 @@ private:
   std::mutex queueMutex_;
   std::condition_variable queueCv_;
   std::queue<WorkerRequest> queue_;
-  std::unordered_set<std::string> cancelledRequests_;
+  std::unordered_map<std::string, std::vector<uint64_t>> activeGenerations_;
+  std::unordered_set<uint64_t> cancelledGenerations_;
+  std::unordered_set<uint64_t> inFlightGenerations_;
+  uint64_t nextGeneration_ = 0;
   std::atomic<bool> running_{true};
   std::atomic<size_t> queueSize_{0};
   std::atomic<size_t> inFlightCount_{0};

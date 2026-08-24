@@ -43,6 +43,11 @@ export class Backoff {
     }
   }
 
+  private applyJitter(delay: number): number {
+    const factor = 1 + (Math.random() - 0.5) * 0.4;
+    return Math.min(Math.round(delay * factor), this.max);
+  }
+
   private backoff(
     fn: () => Promise<void>,
     attempt: number,
@@ -65,6 +70,6 @@ export class Backoff {
           this.done = true;
         }
       }
-    }, delay);
+    }, this.applyJitter(delay));
   }
 }

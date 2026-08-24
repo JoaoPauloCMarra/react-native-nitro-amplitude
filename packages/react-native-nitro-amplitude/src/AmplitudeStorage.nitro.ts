@@ -11,7 +11,5 @@ export interface AmplitudeStorage extends HybridObject<{
   has(key: string, persist: boolean): boolean;
   getAllKeys(persist: boolean): string[];
   getKeysByPrefix(prefix: string, persist: boolean): string[];
-  setBatch(keys: string[], values: string[], persist: boolean): void;
-  getBatch(keys: string[], persist: boolean): string[];
   removeBatch(keys: string[], persist: boolean): void;
 }

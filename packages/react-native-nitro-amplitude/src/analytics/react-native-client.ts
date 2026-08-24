@@ -59,8 +59,16 @@ type ScheduledDestination = {
   scheduleId?: ReturnType<typeof setTimeout> | null;
   flushId?: ReturnType<typeof setTimeout> | null;
   queue?: unknown[];
+  flush?: (useRetry?: boolean) => Promise<void>;
   resetSchedule?: () => void;
+  scheduleEvents?: (list: unknown[]) => void;
   fulfillRequest?: (list: unknown[], code: number, message: string) => unknown;
+};
+
+type DestinationFlushState = {
+  destination: ScheduledDestination;
+  originalFlush: (useRetry?: boolean) => Promise<void>;
+  chain: Promise<void>;
 };
 
 type FlushOutcome = {
@@ -129,6 +137,13 @@ export class AmplitudeReactNative
   private lastFlushDurationMillis: number | undefined;
   private lastFlushError: string | undefined;
   private lastScreenName: string | undefined;
+  private flushChain: Promise<void> = Promise.resolve();
+  private flushActive = false;
+  private readonly destinationFlushStates = new WeakMap<
+    object,
+    DestinationFlushState
+  >();
+  private destinationFlushStateList: DestinationFlushState[] = [];
   explicitSessionId: number | undefined;
 
   // @ts-ignore
@@ -226,6 +241,7 @@ export class AmplitudeReactNative
       await this.add(new Destination()).promise;
       await this.add(new Context()).promise;
       await this.add(new IdentityEventSender()).promise;
+      this.installDestinationFlushBarriers();
 
       // Step 4: Manage session
       this.appState = normalizeAppState(AppState.currentState);
@@ -289,6 +305,7 @@ export class AmplitudeReactNative
 
     this.cancelDestinationFlushes();
     this.timeline.reset(this);
+    this.destinationFlushStateList = [];
     this.q = [];
     this.dispatchQ = [];
     this.isReady = false;
@@ -410,12 +427,220 @@ export class AmplitudeReactNative
     return this.config?.sessionId;
   }
 
+  private enqueueFlush<T>(operation: () => Promise<T>): Promise<T> {
+    const current = this.flushActive
+      ? this.flushChain.then(operation)
+      : (() => {
+          try {
+            return operation();
+          } catch (error) {
+            return Promise.reject(error);
+          }
+        })();
+    this.flushActive = true;
+    const settled = current.then(
+      () => undefined,
+      () => undefined,
+    );
+    this.flushChain = settled;
+    void settled.then(() => {
+      if (this.flushChain === settled) {
+        this.flushActive = false;
+      }
+    });
+    return current;
+  }
+
+  private async performFlush(): Promise<void> {
+    this.installDestinationFlushBarriers();
+    const drainNativeStorage = () => {
+      if (!isNative()) {
+        return;
+      }
+      const { flushPendingDiskWrites } =
+        require("../native/storage") as typeof import("../native/storage");
+      flushPendingDiskWrites(this.getStorageErrorHandler());
+    };
+
+    drainNativeStorage();
+    let flushError: unknown;
+    try {
+      await super.flush().promise;
+    } catch (error) {
+      flushError = error;
+    }
+
+    try {
+      await this.waitForDestinationFlushes();
+      drainNativeStorage();
+      await this.waitForDestinationFlushes();
+      drainNativeStorage();
+    } catch (error) {
+      flushError ??= error;
+    }
+
+    if (flushError !== undefined) {
+      throw flushError;
+    }
+  }
+
+  private installDestinationFlushBarriers(): void {
+    this.timeline.plugins.forEach((plugin) => {
+      if (plugin.type !== "destination") {
+        return;
+      }
+
+      const destination = plugin as ScheduledDestination;
+      if (
+        typeof destination.flush !== "function" ||
+        this.destinationFlushStates.has(destination)
+      ) {
+        return;
+      }
+
+      const state: DestinationFlushState = {
+        destination,
+        originalFlush: destination.flush.bind(destination),
+        chain: Promise.resolve(),
+      };
+      destination.flush = (useRetry = false) => {
+        const current = state.chain
+          .catch(() => undefined)
+          .then(() => this.runDestinationFlush(state, useRetry));
+        state.chain = current.then(
+          () => undefined,
+          () => undefined,
+        );
+        if (!useRetry) {
+          return current;
+        }
+        return current.catch((error) => {
+          this.config?.loggerProvider?.error(
+            `Automatic destination flush failed: ${String(error)}`,
+          );
+        });
+      };
+      this.destinationFlushStates.set(destination, state);
+      this.destinationFlushStateList.push(state);
+    });
+  }
+
+  private async runDestinationFlush(
+    state: DestinationFlushState,
+    useRetry: boolean,
+  ): Promise<void> {
+    const scheduledFlush =
+      state.destination.flushId ?? state.destination.scheduleId ?? null;
+    let flushError: unknown;
+    try {
+      await state.originalFlush(useRetry);
+    } catch (error) {
+      flushError = error;
+    }
+
+    if (scheduledFlush !== null) {
+      clearTimeout(scheduledFlush);
+    }
+
+    if (flushError !== undefined) {
+      this.recoverDestinationFlush(state.destination);
+    }
+
+    if (isNative()) {
+      const { flushPendingDiskWrites } =
+        require("../native/storage") as typeof import("../native/storage");
+      try {
+        flushPendingDiskWrites(this.getStorageErrorHandler());
+      } catch (error) {
+        flushError ??= error;
+      }
+    }
+
+    if (flushError !== undefined) {
+      throw flushError;
+    }
+  }
+
+  private recoverDestinationFlush(destination: ScheduledDestination): void {
+    let recoveryError: unknown;
+    const flushId = destination.flushId;
+    const scheduleId = destination.scheduleId;
+
+    try {
+      if (flushId !== null && flushId !== undefined) {
+        clearTimeout(flushId);
+      }
+      if (
+        scheduleId !== null &&
+        scheduleId !== undefined &&
+        scheduleId !== flushId
+      ) {
+        clearTimeout(scheduleId);
+      }
+    } catch (error) {
+      recoveryError = error;
+    }
+
+    try {
+      destination.resetSchedule?.();
+    } catch (error) {
+      recoveryError ??= error;
+    }
+
+    destination.scheduleId = null;
+    destination.flushId = null;
+
+    const queue = destination.queue;
+    if (
+      queue &&
+      queue.length > 0 &&
+      typeof destination.scheduleEvents === "function"
+    ) {
+      try {
+        destination.scheduleEvents(queue);
+      } catch (error) {
+        recoveryError ??= error;
+      }
+    }
+
+    if (recoveryError !== undefined) {
+      this.config?.loggerProvider?.error(
+        `Destination flush recovery failed: ${String(recoveryError)}`,
+      );
+    }
+  }
+
+  private getStorageErrorHandler(): ((message: string) => void) | undefined {
+    const logger = this.config?.loggerProvider;
+    return logger ? (message) => logger.error(message) : undefined;
+  }
+
+  private async waitForDestinationFlushes(): Promise<void> {
+    while (this.destinationFlushStateList.length > 0) {
+      const states = [...this.destinationFlushStateList];
+      const chains = states.map((state) => state.chain);
+      await Promise.all(chains);
+      await Promise.resolve();
+      if (states.every((state, index) => state.chain === chains[index])) {
+        return;
+      }
+    }
+  }
+
+  override flush() {
+    return returnWrapper(this.enqueueFlush(() => this.performFlush()));
+  }
+
   async flushWithResult(): Promise<AmplitudeFlushResult> {
+    return this.enqueueFlush(() => this.flushWithResultInternal());
+  }
+
+  private async flushWithResultInternal(): Promise<AmplitudeFlushResult> {
     const queueSize = this.getQueueSize();
     const collector = this.collectFlushOutcomes();
     const startedAt = Date.now();
     try {
-      await this.flush().promise;
+      await this.performFlush();
       const outcomes = collector.finish();
       this.lastFlushTime = Date.now();
       this.lastFlushDurationMillis = this.lastFlushTime - startedAt;
@@ -762,160 +987,58 @@ export class AmplitudeReactNative
   }
 }
 
+const DEBUG_METHOD_STATES = {
+  init: ["config"],
+  add: ["config.apiKey", "timeline.plugins"],
+  remove: ["config.apiKey", "timeline.plugins"],
+  track: ["config.apiKey", "timeline.queue.length"],
+  trackScreenView: ["config.apiKey", "timeline.queue.length"],
+  trackScreenViewOnNavigationStateChange: [
+    "config.apiKey",
+    "timeline.queue.length",
+  ],
+  logEvent: ["config.apiKey", "timeline.queue.length"],
+  identify: ["config.apiKey", "timeline.queue.length"],
+  groupIdentify: ["config.apiKey", "timeline.queue.length"],
+  setGroup: ["config.apiKey", "timeline.queue.length"],
+  revenue: ["config.apiKey", "timeline.queue.length"],
+  flush: ["config.apiKey", "timeline.queue.length"],
+  flushWithResult: ["config.apiKey", "timeline.queue.length"],
+  getUserId: ["config", "config.userId"],
+  setUserId: ["config", "config.userId"],
+  getDeviceId: ["config", "config.deviceId"],
+  setDeviceId: ["config", "config.deviceId"],
+  reset: ["config", "config.userId", "config.deviceId"],
+  getSessionId: ["config"],
+  setSessionId: ["config"],
+  extendSession: ["config"],
+  setOptOut: ["config"],
+  shutdown: ["config", "timeline.plugins"],
+  getDiagnostics: ["config", "timeline.plugins"],
+  healthCheck: ["config", "timeline.plugins"],
+} as const satisfies Record<string, readonly string[]>;
+
+type DebugWrappedMethod = keyof typeof DEBUG_METHOD_STATES &
+  keyof AmplitudeReactNativeClient;
+
+type ClientMethod = (...args: never[]) => unknown;
+
 export const createInstance = (): AmplitudeReactNativeClient => {
   const client = new AmplitudeReactNative();
-  return {
-    init: debugWrapper(
-      client.init.bind(client),
-      "init",
-      getClientLogConfig(client),
-      getClientStates(client, ["config"]),
-    ),
-    add: debugWrapper(
-      client.add.bind(client),
-      "add",
-      getClientLogConfig(client),
-      getClientStates(client, ["config.apiKey", "timeline.plugins"]),
-    ),
-    remove: debugWrapper(
-      client.remove.bind(client),
-      "remove",
-      getClientLogConfig(client),
-      getClientStates(client, ["config.apiKey", "timeline.plugins"]),
-    ),
-    track: debugWrapper(
-      client.track.bind(client),
-      "track",
-      getClientLogConfig(client),
-      getClientStates(client, ["config.apiKey", "timeline.queue.length"]),
-    ),
-    trackScreenView: debugWrapper(
-      client.trackScreenView.bind(client),
-      "trackScreenView",
-      getClientLogConfig(client),
-      getClientStates(client, ["config.apiKey", "timeline.queue.length"]),
-    ),
-    trackScreenViewOnNavigationStateChange: debugWrapper(
-      client.trackScreenViewOnNavigationStateChange.bind(client),
-      "trackScreenViewOnNavigationStateChange",
-      getClientLogConfig(client),
-      getClientStates(client, ["config.apiKey", "timeline.queue.length"]),
-    ),
-    logEvent: debugWrapper(
-      client.logEvent.bind(client),
-      "logEvent",
-      getClientLogConfig(client),
-      getClientStates(client, ["config.apiKey", "timeline.queue.length"]),
-    ),
-    identify: debugWrapper(
-      client.identify.bind(client),
-      "identify",
-      getClientLogConfig(client),
-      getClientStates(client, ["config.apiKey", "timeline.queue.length"]),
-    ),
-    groupIdentify: debugWrapper(
-      client.groupIdentify.bind(client),
-      "groupIdentify",
-      getClientLogConfig(client),
-      getClientStates(client, ["config.apiKey", "timeline.queue.length"]),
-    ),
-    setGroup: debugWrapper(
-      client.setGroup.bind(client),
-      "setGroup",
-      getClientLogConfig(client),
-      getClientStates(client, ["config.apiKey", "timeline.queue.length"]),
-    ),
-    revenue: debugWrapper(
-      client.revenue.bind(client),
-      "revenue",
-      getClientLogConfig(client),
-      getClientStates(client, ["config.apiKey", "timeline.queue.length"]),
-    ),
-    flush: debugWrapper(
-      client.flush.bind(client),
-      "flush",
-      getClientLogConfig(client),
-      getClientStates(client, ["config.apiKey", "timeline.queue.length"]),
-    ),
-    flushWithResult: debugWrapper(
-      client.flushWithResult.bind(client),
-      "flushWithResult",
-      getClientLogConfig(client),
-      getClientStates(client, ["config.apiKey", "timeline.queue.length"]),
-    ),
-    getUserId: debugWrapper(
-      client.getUserId.bind(client),
-      "getUserId",
-      getClientLogConfig(client),
-      getClientStates(client, ["config", "config.userId"]),
-    ),
-    setUserId: debugWrapper(
-      client.setUserId.bind(client),
-      "setUserId",
-      getClientLogConfig(client),
-      getClientStates(client, ["config", "config.userId"]),
-    ),
-    getDeviceId: debugWrapper(
-      client.getDeviceId.bind(client),
-      "getDeviceId",
-      getClientLogConfig(client),
-      getClientStates(client, ["config", "config.deviceId"]),
-    ),
-    setDeviceId: debugWrapper(
-      client.setDeviceId.bind(client),
-      "setDeviceId",
-      getClientLogConfig(client),
-      getClientStates(client, ["config", "config.deviceId"]),
-    ),
-    reset: debugWrapper(
-      client.reset.bind(client),
-      "reset",
-      getClientLogConfig(client),
-      getClientStates(client, ["config", "config.userId", "config.deviceId"]),
-    ),
-    getSessionId: debugWrapper(
-      client.getSessionId.bind(client),
-      "getSessionId",
-      getClientLogConfig(client),
-      getClientStates(client, ["config"]),
-    ),
-    setSessionId: debugWrapper(
-      client.setSessionId.bind(client),
-      "setSessionId",
-      getClientLogConfig(client),
-      getClientStates(client, ["config"]),
-    ),
-    extendSession: debugWrapper(
-      client.extendSession.bind(client),
-      "extendSession",
-      getClientLogConfig(client),
-      getClientStates(client, ["config"]),
-    ),
-    setOptOut: debugWrapper(
-      client.setOptOut.bind(client),
-      "setOptOut",
-      getClientLogConfig(client),
-      getClientStates(client, ["config"]),
-    ),
-    shutdown: debugWrapper(
-      client.shutdown.bind(client),
-      "shutdown",
-      getClientLogConfig(client),
-      getClientStates(client, ["config", "timeline.plugins"]),
-    ),
-    getDiagnostics: debugWrapper(
-      client.getDiagnostics.bind(client),
-      "getDiagnostics",
-      getClientLogConfig(client),
-      getClientStates(client, ["config", "timeline.plugins"]),
-    ),
-    healthCheck: debugWrapper(
-      client.healthCheck.bind(client),
-      "healthCheck",
-      getClientLogConfig(client),
-      getClientStates(client, ["config", "timeline.plugins"]),
-    ),
-  };
+  const logConfig = getClientLogConfig(client);
+  const wrapped = {} as Record<DebugWrappedMethod, ClientMethod>;
+  for (const method of Object.keys(
+    DEBUG_METHOD_STATES,
+  ) as DebugWrappedMethod[]) {
+    const fn = client[method] as ClientMethod;
+    wrapped[method] = debugWrapper(
+      fn.bind(client),
+      method,
+      logConfig,
+      getClientStates(client, [...DEBUG_METHOD_STATES[method]]),
+    );
+  }
+  return wrapped as unknown as AmplitudeReactNativeClient;
 };
 
 export default createInstance();

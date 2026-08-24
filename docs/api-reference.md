@@ -84,8 +84,7 @@ Available on the `react-native-nitro-amplitude/testing` subpath.
 - `LocalStorage` — the durable default session store (Nitro disk on native,
   browser localStorage on web).
 - `MemoryStorage` / `InMemoryStorage` — process-local stores.
-- `NitroExperimentStorage` accepts a namespace; batch reads report missing
-  keys as `null` through `getBatch`.
+- `NitroExperimentStorage` accepts a namespace for isolated variant storage.
 
 ## Nitro helpers
 
@@ -100,6 +99,13 @@ Available on the `react-native-nitro-amplitude/testing` subpath.
 
 See `src/AmplitudeContext.nitro.ts`, `src/AmplitudeStorage.nitro.ts`,
 `src/AmplitudeWorker.nitro.ts`.
+
+## Migration
+
+- The legacy SQLite migration methods were removed from the native ABI.
+- `migrateLegacyData` remains accepted as a no-op compatibility option and does
+  not import legacy Amplitude SDK data. Migrate that data before switching SDKs
+  if it is required.
 
 ## Web differences
 

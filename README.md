@@ -22,6 +22,8 @@ through Nitro, and still works on web through fetch and storage fallbacks.
 bun add react-native-nitro-amplitude react-native-nitro-modules
 ```
 
+## Requirements and compatibility
+
 Compatibility for `0.7.0`:
 
 | Dependency                   | Supported range    | `0.7.0` baseline                                         |
@@ -386,10 +388,16 @@ Native HybridObject types:
 
 - `AmplitudeContext` (context JSON + prefetch, cached by normalized option
   set on both platforms).
-- `AmplitudeStorage` (sync memory/disk KV with a compatible `string[]` batch
-  ABI; `getBatchValues` safely maps missing values to `undefined`).
+- `AmplitudeStorage` (sync memory/disk KV with `removeBatch` for bulk
+  cleanup).
 - `AmplitudeWorker` (bounded queue, 2 concurrent workers, request-scoped
   completion, cancellation of queued requests, queue/in-flight/byte metrics).
+
+## Documentation
+
+- [API reference](docs/api-reference.md) — public exports and behavior.
+- [Dependency policy](docs/dependency-policy.md) — supported Nitro, React
+  Native, and Expo compatibility boundaries.
 
 ## Platform Support
 
@@ -418,9 +426,10 @@ Architecture notes:
   web.
 - Web memory storage is shared across package instances in the same JavaScript
   process and isolated by namespace, matching native memory-storage semantics.
-- Legacy migration methods and `migrateLegacyData` remain accepted for source
-  and native ABI compatibility. The package does not import legacy Amplitude
-  SDK SQLite data; migrate that data before switching SDKs if it is required.
+- Legacy SQLite migration methods were removed from the native ABI. The
+  `migrateLegacyData` option remains accepted as a no-op compatibility option;
+  it does not import legacy Amplitude SDK data. Migrate that data before
+  switching SDKs if it is required.
 - For typed Experiment variant payloads, prefer the typed variant helpers
   exported from the package (`react-native-nitro-amplitude/experiment`) over
   reading the untyped `variant.payload` directly.

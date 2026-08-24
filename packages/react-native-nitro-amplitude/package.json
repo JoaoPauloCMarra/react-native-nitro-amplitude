@@ -53,6 +53,7 @@
     "nitrogen",
     "nitro.json",
     "CHANGELOG.md",
+    "SECURITY.md",
     "*.podspec",
     "app.plugin.js",
     ".watchmanconfig",
@@ -85,7 +86,7 @@
     "check:pack": "node scripts/check-pack-contents.js",
     "prepack": "node scripts/sync-package-docs.js prepare",
     "postpack": "node scripts/sync-package-docs.js cleanup",
-    "prepublishOnly": "bun run clean && bun run codegen && bun run build && bun run test:types"
+    "prepublishOnly": "bun run clean && bun run codegen && bun run build && bun run lint:check && bun run test && bun run test:cpp && bun run test:types"
   },
   "keywords": [
     "react-native",

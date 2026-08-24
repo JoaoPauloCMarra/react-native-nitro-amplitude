@@ -21,8 +21,6 @@ namespace margelo::nitro::NitroAmplitude {
       prototype.registerHybridMethod("has", &HybridAmplitudeStorageSpec::has);
       prototype.registerHybridMethod("getAllKeys", &HybridAmplitudeStorageSpec::getAllKeys);
       prototype.registerHybridMethod("getKeysByPrefix", &HybridAmplitudeStorageSpec::getKeysByPrefix);
-      prototype.registerHybridMethod("setBatch", &HybridAmplitudeStorageSpec::setBatch);
-      prototype.registerHybridMethod("getBatch", &HybridAmplitudeStorageSpec::getBatch);
       prototype.registerHybridMethod("removeBatch", &HybridAmplitudeStorageSpec::removeBatch);
     });
   }

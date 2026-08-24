@@ -42,8 +42,16 @@ export type AmplitudeNetworkTimingBuffer = {
   clear: () => void;
 };
 
+const MAX_DRY_RUN_RECORDS = 200;
+
 const dryRunRequests: DryRunRequest[] = [];
 const dryRunEvents: DryRunEvent[] = [];
+
+function capDryRunRecords<T>(records: T[]): void {
+  if (records.length > MAX_DRY_RUN_RECORDS) {
+    records.splice(0, records.length - MAX_DRY_RUN_RECORDS);
+  }
+}
 
 export function setNetworkEnabled(enabled: boolean): void {
   networkEnabled = enabled;
@@ -253,6 +261,7 @@ export class DryRunHttpClient implements HttpClient {
       timeoutMillis,
       createdAt: Date.now(),
     });
+    capDryRunRecords(dryRunRequests);
     return {
       status: 202,
       body: JSON.stringify({ code: 202, dryRun: true }),
@@ -270,6 +279,7 @@ export class DryRunTransport extends BaseTransport implements Transport {
       payload: { ...payload },
       createdAt: Date.now(),
     });
+    capDryRunRecords(dryRunEvents);
     return this.buildResponse({ code: 202, dryRun: true });
   }
 }

@@ -15,14 +15,6 @@ public:
 
   void prefetch() override;
   std::string getApplicationContextJson(const std::string& optionsJson) override;
-  std::string getLegacySessionDataJson(const std::string& instanceName) override;
-  std::vector<std::string> getLegacyEventsJson(
-      const std::string& instanceName,
-      const std::string& eventKind) override;
-  void removeLegacyEvent(
-      const std::string& instanceName,
-      const std::string& eventKind,
-      double eventId) override;
 
 private:
   std::shared_ptr<::NitroAmplitude::ContextAdapter> adapter_;

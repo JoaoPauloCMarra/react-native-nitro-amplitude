@@ -5,18 +5,43 @@ import android.content.SharedPreferences
 import android.os.Build
 import org.json.JSONObject
 import java.io.BufferedReader
+import java.io.File
 import java.io.InputStreamReader
 import java.net.HttpURLConnection
+import java.net.SocketTimeoutException
 import java.net.URL
 import java.util.Locale
 import java.util.concurrent.Executors
+import java.util.concurrent.ScheduledExecutorService
+import java.util.concurrent.ScheduledThreadPoolExecutor
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 
 object AndroidAmplitudeAdapter {
   private const val DEFAULT_OPTIONS_JSON = "{}"
   private const val MAX_CACHED_CONTEXTS = 8
+  private const val MAX_HTTP_TIMEOUT_MILLIS = 300000
+  private const val LEGACY_DISK_PREFS = "NitroAmplitude"
+  private const val STORAGE_DIRECTORY = "nitro-amplitude"
 
   private var appContext: Context? = null
   private val executor = Executors.newSingleThreadExecutor()
+  private val httpTimeoutExecutor: ScheduledExecutorService =
+    ScheduledThreadPoolExecutor(
+      1,
+      Executors.defaultThreadFactory().let { defaultFactory ->
+        java.util.concurrent.ThreadFactory { runnable ->
+          defaultFactory.newThread(runnable).apply {
+            name = "NitroAmplitudeHttpTimeout"
+            isDaemon = true
+          }
+        }
+      },
+    ).apply {
+      removeOnCancelPolicy = true
+      executeExistingDelayedTasksAfterShutdownPolicy = false
+      continueExistingPeriodicTasksAfterShutdownPolicy = false
+    }
   private val cachedContexts = object : LinkedHashMap<String, String>(16, 0.75f, true) {
     override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, String>): Boolean {
       return size > MAX_CACHED_CONTEXTS
@@ -33,8 +58,8 @@ object AndroidAmplitudeAdapter {
     return appContext ?: throw IllegalStateException("NitroAmplitude: context not initialized")
   }
 
-  private fun prefs(): SharedPreferences {
-    return getContext().getSharedPreferences("NitroAmplitude", Context.MODE_PRIVATE)
+  private fun legacyPrefs(): SharedPreferences {
+    return getContext().getSharedPreferences(LEGACY_DISK_PREFS, Context.MODE_PRIVATE)
   }
 
   @JvmStatic
@@ -84,47 +109,46 @@ object AndroidAmplitudeAdapter {
   }
 
   @JvmStatic
-  fun setDisk(key: String, value: String) {
-    prefs().edit().putString(key, value).apply()
+  fun getStorageDirectory(): String {
+    return File(getContext().filesDir, STORAGE_DIRECTORY).absolutePath
   }
 
   @JvmStatic
-  fun getDisk(key: String): String? = prefs().getString(key, null)
-
-  @JvmStatic
-  fun deleteDisk(key: String) {
-    prefs().edit().remove(key).apply()
+  fun getLegacyDiskEntries(): Array<String> {
+    val entries = legacyPrefs().all
+    val flattened = ArrayList<String>(entries.size * 2)
+    for ((key, value) in entries) {
+      if (value is String) {
+        flattened.add(key)
+        flattened.add(value)
+      }
+    }
+    return flattened.toTypedArray()
   }
 
   @JvmStatic
-  fun hasDisk(key: String): Boolean = prefs().contains(key)
-
-  @JvmStatic
-  fun getAllDiskKeys(): Array<String> = prefs().all.keys.toTypedArray()
+  fun clearLegacyDisk() {
+    legacyPrefs().edit().clear().apply()
+  }
 
   @JvmStatic
   fun performHttpRequest(
     url: String,
     method: String,
-    headersJson: String,
+    headerNames: Array<String>,
+    headerValues: Array<String>,
     body: String,
     timeoutMillis: Int,
   ): Array<String> {
+    val boundedTimeoutMillis = timeoutMillis.coerceIn(1, MAX_HTTP_TIMEOUT_MILLIS)
     val connection = try {
       (URL(url).openConnection() as HttpURLConnection).apply {
         requestMethod = method
-        connectTimeout = timeoutMillis
-        readTimeout = timeoutMillis
+        connectTimeout = boundedTimeoutMillis
+        readTimeout = boundedTimeoutMillis
         doInput = true
-        val headers = try {
-          JSONObject(headersJson)
-        } catch (_: Exception) {
-          JSONObject()
-        }
-        val keys = headers.keys()
-        while (keys.hasNext()) {
-          val key = keys.next()
-          setRequestProperty(key, headers.optString(key))
+        for ((index, name) in headerNames.withIndex()) {
+          setRequestProperty(name, headerValues.getOrElse(index) { "" })
         }
         if (body.isNotEmpty()) {
           doOutput = true
@@ -133,6 +157,12 @@ object AndroidAmplitudeAdapter {
     } catch (error: Exception) {
       return arrayOf("0", "", "network_error")
     }
+
+    val timedOut = AtomicBoolean(false)
+    val timeoutTask = httpTimeoutExecutor.schedule({
+      timedOut.set(true)
+      connection.disconnect()
+    }, boundedTimeoutMillis.toLong(), TimeUnit.MILLISECONDS)
 
     return try {
       if (body.isNotEmpty()) {
@@ -144,9 +174,12 @@ object AndroidAmplitudeAdapter {
         BufferedReader(InputStreamReader(it)).use { reader -> reader.readText() }
       } ?: ""
       arrayOf(status.toString(), responseBody, "")
+    } catch (error: SocketTimeoutException) {
+      arrayOf("0", "", "timeout")
     } catch (error: Exception) {
-      arrayOf("0", "", "network_error")
+      arrayOf("0", "", if (timedOut.get()) "timeout" else "network_error")
     } finally {
+      timeoutTask.cancel(false)
       connection.disconnect()
     }
   }

@@ -13,11 +13,4 @@ export interface AmplitudeContext extends HybridObject<{
    * platform, and JS consumes it via `JSON.parse` anyway.
    */
   getApplicationContextJson(optionsJson: string): string;
-  getLegacySessionDataJson(instanceName: string): string;
-  getLegacyEventsJson(instanceName: string, eventKind: string): string[];
-  removeLegacyEvent(
-    instanceName: string,
-    eventKind: string,
-    eventId: number,
-  ): void;
 }

@@ -7,21 +7,12 @@ import type { AmplitudeWorker } from "../AmplitudeWorker.nitro";
 type PendingRequest = {
   resolve: (response: SimpleResponse) => void;
   reject: (error: Error) => void;
-  timeoutId: ReturnType<typeof setTimeout>;
 };
 
 const DEFAULT_TIMEOUT_MILLIS = 10000;
-const MAX_TIMEOUT_MILLIS = 300000;
 
 function createRequestId(): string {
   return `req_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
-}
-
-function normalizeTimeoutMillis(timeoutMillis: number): number {
-  if (!Number.isFinite(timeoutMillis) || timeoutMillis <= 0) {
-    return DEFAULT_TIMEOUT_MILLIS;
-  }
-  return Math.min(Math.ceil(timeoutMillis), MAX_TIMEOUT_MILLIS);
 }
 
 export class NitroHttpClient implements HttpClient {
@@ -42,7 +33,6 @@ export class NitroHttpClient implements HttpClient {
         return;
       }
       this.pendingRequests.delete(requestId);
-      clearTimeout(pending.timeoutId);
       if (error) {
         pending.reject(
           createAmplitudeError(getAmplitudeErrorCode(new Error(error)), error),
@@ -66,20 +56,8 @@ export class NitroHttpClient implements HttpClient {
     assertNetworkEnabled();
     this.ensureListener();
     const requestId = createRequestId();
-    const normalizedTimeoutMillis = normalizeTimeoutMillis(timeoutMillis);
     return new Promise<SimpleResponse>((resolve, reject) => {
-      const timeoutId = setTimeout(() => {
-        this.pendingRequests.delete(requestId);
-        getAmplitudeWorker().cancel(requestId);
-        reject(
-          createAmplitudeError(
-            "timeout",
-            `Request timed out after ${normalizedTimeoutMillis}ms`,
-          ),
-        );
-      }, normalizedTimeoutMillis + 250);
-
-      this.pendingRequests.set(requestId, { resolve, reject, timeoutId });
+      this.pendingRequests.set(requestId, { resolve, reject });
 
       try {
         getAmplitudeWorker().enqueue(
@@ -88,11 +66,10 @@ export class NitroHttpClient implements HttpClient {
           method,
           headers,
           data ?? "",
-          normalizedTimeoutMillis,
+          timeoutMillis,
         );
       } catch (error) {
         this.pendingRequests.delete(requestId);
-        clearTimeout(timeoutId);
         reject(
           createAmplitudeError(
             getAmplitudeErrorCode(error),

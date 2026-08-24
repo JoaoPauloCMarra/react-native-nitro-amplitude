@@ -4,6 +4,38 @@ All notable changes to this project are documented in this file.
 
 The format follows Keep a Changelog and the project adheres to SemVer.
 
+## [Unreleased]
+
+### Breaking changes
+
+- Removed the no-op legacy migration methods `getLegacySessionDataJson`,
+  `getLegacyEventsJson`, and `removeLegacyEvent` from the
+  `AmplitudeContext` HybridObject. These stubs returned empty data and had
+  no production callers. The `migrateLegacyData` option remains accepted as a
+  no-op compatibility option; legacy Amplitude SDK data was never imported.
+  Migrate that data before switching SDKs if it is required.
+- Removed the unused batch storage API `setBatch`/`getBatch` from the
+  `AmplitudeStorage` HybridObject and the `getBatchValues` helper and
+  `BATCH_MISSING_SENTINEL` export from `react-native-nitro-amplitude`.
+  Migrate by reading and writing keys individually with `get`/`set` or by
+  using `removeBatch` for bulk cleanup.
+
+### Changed
+
+- Analytics event persistence is now coalesced: tracked events are batched
+  in memory and written to native disk after a short debounce or an explicit
+  `flush()`. Durable reads stay read-your-writes consistent and write ordering
+  is preserved.
+- Experiment fetch retries now apply ±20% jitter to backoff delays.
+- The iOS HTTP transport now reuses one shared `NSURLSession` instead of
+  creating and invalidating a session per request.
+
+### Fixed
+
+- The iOS podspec no longer compiles the C++ test binary
+  (`HybridAmplitudeStorageTest.cpp`, which contains its own `main`) into
+  the app pod.
+
 ## 0.7.0 - 2026-08-20
 
 ### Breaking changes
@@ -28,10 +60,12 @@ The format follows Keep a Changelog and the project adheres to SemVer.
 
 ### Breaking changes
 
-- None. Legacy migration methods, `migrateLegacyData`, the `string[]`
-  `AmplitudeStorage.getBatch` contract, and established root exports remain
-  available. The new `/network` and `/testing` subpaths are preferred for
-  clearer production bundles but are not mandatory.
+- None. At the 0.6.0 release, legacy migration methods, `migrateLegacyData`,
+  the `string[]` `AmplitudeStorage.getBatch` contract, and established root
+  exports remained available. The current Unreleased entry records the
+  removal of the no-op native migration methods and batch contract. The new
+  `/network` and `/testing` subpaths are preferred for clearer production
+  bundles but are not mandatory.
 
 ### Changed
 

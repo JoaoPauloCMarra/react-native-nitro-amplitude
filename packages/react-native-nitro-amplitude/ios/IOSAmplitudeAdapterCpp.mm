@@ -2,7 +2,11 @@
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
 
+#include "../cpp/core/PosixFileAdapter.hpp"
+
 #include <memory>
+#include <utility>
+#include <vector>
 
 namespace NitroAmplitude {
 
@@ -34,7 +38,48 @@ static NSString* CanonicalOptions(NSDictionary* options) {
   return [parts componentsJoinedByString:@"&"];
 }
 
-IOSAmplitudeAdapterCpp::IOSAmplitudeAdapterCpp() {}
+IOSAmplitudeAdapterCpp::IOSAmplitudeAdapterCpp() {
+  NSString* applicationSupport =
+      [NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory, NSUserDomainMask, YES) firstObject];
+  if (applicationSupport != nil) {
+    NSString* directory = [applicationSupport stringByAppendingPathComponent:@"nitro-amplitude"];
+    [[NSFileManager defaultManager] createDirectoryAtPath:directory
+                              withIntermediateDirectories:YES
+                                               attributes:nil
+                                                    error:nil];
+    if (directory.UTF8String != nil) {
+      diskStore_ = std::make_shared<JsonlSegmentStore>(
+          std::make_shared<PosixFileAdapter>(), std::string(directory.UTF8String));
+    }
+  }
+  MigrateLegacyDisk();
+}
+
+void IOSAmplitudeAdapterCpp::MigrateLegacyDisk() {
+  if (!NitroDiskDefaultsAreSuite()) {
+    return;
+  }
+  NSDictionary<NSString*, id>* entries = [NitroDiskDefaults() persistentDomainForName:kDiskSuiteName];
+  if (entries.count == 0) {
+    return;
+  }
+  std::vector<std::pair<std::string, std::string>> legacy;
+  legacy.reserve(entries.count);
+  for (NSString* key in entries) {
+    id value = entries[key];
+    if (key.UTF8String != nil && [value isKindOfClass:[NSString class]]) {
+      legacy.emplace_back(std::string(key.UTF8String), std::string([value UTF8String]));
+    }
+  }
+  if (diskStore_ != nullptr && !legacy.empty()) {
+    try {
+      diskStore_->migrateLegacyEntries(legacy);
+    } catch (const std::exception&) {
+      return;
+    }
+  }
+  [NitroDiskDefaults() removePersistentDomainForName:kDiskSuiteName];
+}
 
 void IOSAmplitudeAdapterCpp::prefetchContext() {
   getApplicationContextJson("{}");
@@ -94,12 +139,19 @@ std::string IOSAmplitudeAdapterCpp::getApplicationContextJson(const std::string&
 }
 
 void IOSAmplitudeAdapterCpp::setDisk(const std::string& key, const std::string& value) {
+  if (diskStore_ != nullptr) {
+    diskStore_->setDisk(key, value);
+    return;
+  }
   NSString* nsKey = [NSString stringWithUTF8String:key.c_str()];
   NSString* nsValue = [NSString stringWithUTF8String:value.c_str()];
   [NitroDiskDefaults() setObject:nsValue forKey:nsKey];
 }
 
 std::optional<std::string> IOSAmplitudeAdapterCpp::getDisk(const std::string& key) {
+  if (diskStore_ != nullptr) {
+    return diskStore_->getDisk(key);
+  }
   NSString* nsKey = [NSString stringWithUTF8String:key.c_str()];
   NSString* result = [NitroDiskDefaults() stringForKey:nsKey];
   if (!result) {
@@ -109,16 +161,26 @@ std::optional<std::string> IOSAmplitudeAdapterCpp::getDisk(const std::string& ke
 }
 
 void IOSAmplitudeAdapterCpp::deleteDisk(const std::string& key) {
+  if (diskStore_ != nullptr) {
+    diskStore_->deleteDisk(key);
+    return;
+  }
   NSString* nsKey = [NSString stringWithUTF8String:key.c_str()];
   [NitroDiskDefaults() removeObjectForKey:nsKey];
 }
 
 bool IOSAmplitudeAdapterCpp::hasDisk(const std::string& key) {
+  if (diskStore_ != nullptr) {
+    return diskStore_->hasDisk(key);
+  }
   NSString* nsKey = [NSString stringWithUTF8String:key.c_str()];
   return [NitroDiskDefaults() objectForKey:nsKey] != nil;
 }
 
 std::vector<std::string> IOSAmplitudeAdapterCpp::getAllDiskKeys() {
+  if (diskStore_ != nullptr) {
+    return diskStore_->getAllDiskKeys();
+  }
   NSUserDefaults* defaults = NitroDiskDefaults();
   NSDictionary<NSString*, id>* entries;
   if (NitroDiskDefaultsAreSuite()) {
@@ -146,10 +208,12 @@ HttpResult IOSAmplitudeAdapterCpp::performHttpRequest(
   }
 
   NSTimeInterval timeoutSeconds = timeoutMillis / 1000.0;
-  NSURLSessionConfiguration* configuration = [NSURLSessionConfiguration ephemeralSessionConfiguration];
-  configuration.timeoutIntervalForRequest = timeoutSeconds;
-  configuration.timeoutIntervalForResource = timeoutSeconds;
-  NSURLSession* session = [NSURLSession sessionWithConfiguration:configuration];
+  static NSURLSession* session = []() {
+    NSURLSessionConfiguration* configuration = [NSURLSessionConfiguration ephemeralSessionConfiguration];
+    configuration.timeoutIntervalForRequest = 300.0;
+    configuration.timeoutIntervalForResource = 300.0;
+    return [NSURLSession sessionWithConfiguration:configuration];
+  }();
 
   NSMutableURLRequest* request = [NSMutableURLRequest requestWithURL:nsUrl];
   request.HTTPMethod = [NSString stringWithUTF8String:method.c_str()];
@@ -203,10 +267,8 @@ HttpResult IOSAmplitudeAdapterCpp::performHttpRequest(
   const bool timedOut = dispatch_semaphore_wait(semaphore, deadline) != 0;
   if (timedOut) {
     [task cancel];
-    [session invalidateAndCancel];
     return HttpResult{.error = "timeout"};
   }
-  [session finishTasksAndInvalidate];
   std::lock_guard<std::mutex> lock(sharedResult->mutex);
   return sharedResult->result;
 }

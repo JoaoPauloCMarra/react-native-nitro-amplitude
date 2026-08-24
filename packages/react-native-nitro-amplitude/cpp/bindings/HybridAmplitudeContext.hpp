@@ -4,6 +4,7 @@
 #include "../core/ContextAdapter.hpp"
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace margelo::nitro::NitroAmplitude {
 

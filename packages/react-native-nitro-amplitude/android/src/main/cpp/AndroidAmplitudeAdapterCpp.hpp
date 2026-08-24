@@ -2,6 +2,7 @@
 
 #include "../../cpp/core/ContextAdapter.hpp"
 #include "../../cpp/core/HttpAdapter.hpp"
+#include "../../cpp/core/JsonlSegmentStore.hpp"
 #include "../../cpp/core/StorageAdapter.hpp"
 #include <fbjni/fbjni.h>
 
@@ -40,6 +41,11 @@ public:
       const std::unordered_map<std::string, std::string>& headers,
       const std::string& body,
       int timeoutMillis) override;
+
+private:
+  std::shared_ptr<JsonlSegmentStore> diskStore_;
+
+  void MigrateLegacyDisk();
 };
 
 } // namespace NitroAmplitude

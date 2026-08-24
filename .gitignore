@@ -109,10 +109,13 @@ tmp/
 temp/
 *.tmp
 *.temp
+
+.pack-docs-state/
 .pack-docs-backup/
 
 .agents
 *.md
+!.github/pull_request_template.md
 !README.md
 !AGENTS.md
 !CONTRIBUTING.md

@@ -29,6 +29,9 @@ function createStorageHybrid() {
       );
     }),
     setBatch: jest.fn((keys: string[], values: string[], persist: boolean) => {
+      if (keys.length !== values.length) {
+        throw new Error("NitroAmplitude: setBatch key/value length mismatch");
+      }
       keys.forEach((key, index) => {
         selectStore(persist).set(key, values[index] ?? "");
       });
@@ -52,6 +55,9 @@ function createContextHybrid() {
     getApplicationContextJson: jest.fn(() =>
       JSON.stringify({ platform: "iOS", version: "1.0.0" }),
     ),
+    getLegacySessionDataJson: jest.fn(() => "{}"),
+    getLegacyEventsJson: jest.fn(() => []),
+    removeLegacyEvent: jest.fn(),
   };
 }
 
@@ -121,7 +127,7 @@ jest.mock("react-native", () => ({
 }));
 
 import type { Payload, Response, Transport } from "@amplitude/analytics-core";
-import { Status } from "@amplitude/analytics-core";
+import { Destination, Status } from "@amplitude/analytics-core";
 import { NetworkGuardedFetchTransport } from "../analytics/network-guarded-fetch-transport";
 import {
   clearDryRunTransportRecords,
@@ -157,14 +163,16 @@ import {
 } from "../index";
 import * as AnalyticsCompat from "../analytics";
 import * as ExperimentCompat from "../experiment";
+import { AmplitudeReactNative } from "../analytics/react-native-client";
+import { Backoff } from "../experiment/util/backoff";
 import { getNativeApplicationContext } from "../native/context";
 import { resetHybridInstancesForTests } from "../native/hybrid";
 import {
+  flushPendingDiskWrites,
   NitroAnalyticsStorage,
   NitroExperimentStorage,
   NitroMemoryStorage,
 } from "../native/storage";
-import { getBatchValues } from "../native/storage";
 import {
   NitroAnalyticsStorage as WebAnalyticsStorage,
   NitroExperimentStorage as WebExperimentStorage,
@@ -199,6 +207,7 @@ describe("react-native-nitro-amplitude", () => {
     jest.useRealTimers();
     (jest.requireMock("react-native") as ReactNativeMock).Platform.OS = "ios";
     (globalThis as ConnectorGlobal).analyticsConnectorInstances = undefined;
+    flushPendingDiskWrites();
     mockMemory.clear();
     mockDisk.clear();
     for (const key of Object.keys(mockHybridObjects)) {
@@ -346,7 +355,7 @@ describe("react-native-nitro-amplitude", () => {
     expect(normalized.osName).toBeUndefined();
   });
 
-  it("removed the legacy SQLite migration surface", () => {
+  it("retains deprecated legacy ABI stubs without SQLite migration", () => {
     expect(mockHybridObjects.AmplitudeContext).toBeUndefined();
     const context = getNativeApplicationContext({
       platform: true,
@@ -364,12 +373,20 @@ describe("react-native-nitro-amplitude", () => {
     });
     expect(context).toEqual({ platform: "iOS", version: "1.0.0" });
     expect(
-      (
-        mockHybridObjects.AmplitudeContext as unknown as {
-          getLegacySessionDataJson?: unknown;
-        }
-      ).getLegacySessionDataJson,
-    ).toBeUndefined();
+      Object.keys(mockHybridObjects.AmplitudeContext ?? {}).sort(),
+    ).toEqual([
+      "getApplicationContextJson",
+      "getLegacyEventsJson",
+      "getLegacySessionDataJson",
+      "prefetch",
+      "removeLegacyEvent",
+    ]);
+    expect(mockHybridObjects.AmplitudeContext?.getLegacySessionDataJson()).toBe(
+      "{}",
+    );
+    expect(mockHybridObjects.AmplitudeContext?.getLegacyEventsJson()).toEqual(
+      [],
+    );
   });
 
   it("clears stale native diagnostics after successful probes", () => {
@@ -1314,15 +1331,483 @@ describe("react-native-nitro-amplitude", () => {
     }
   });
 
-  it("decodes real values equal to the old batch sentinel as present", async () => {
-    const storage = new NitroAnalyticsStorage<{ ok: boolean }>("sentinel");
-    await storage.set("collision", { ok: true });
-    const raw = getRawBatchValue("sentinel::collision");
-    expect(raw).toBe('{"ok":true}');
-    const values = getBatchValues(["sentinel::collision"], true);
-    expect(values).toEqual(['{"ok":true}']);
-    const missing = getBatchValues(["sentinel::missing"], true);
-    expect(missing).toEqual([undefined]);
+  it("coalesces analytics disk writes behind a short debounce", async () => {
+    jest.useFakeTimers();
+    try {
+      const storage = new NitroAnalyticsStorage<{ ok: boolean }>("coalesce");
+      await storage.set("events", { ok: true });
+      expect(getRawBatchValue("coalesce::events")).toBeUndefined();
+      expect(await storage.get("events")).toEqual({ ok: true });
+
+      jest.advanceTimersByTime(200);
+
+      expect(getRawBatchValue("coalesce::events")).toBe('{"ok":true}');
+      const reopened = new NitroAnalyticsStorage<{ ok: boolean }>("coalesce");
+      expect(await reopened.get("events")).toEqual({ ok: true });
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it("persists coalesced analytics writes immediately on explicit flush", async () => {
+    const storage = new NitroAnalyticsStorage<{ ok: boolean }>("flush-now");
+    await storage.set("events", { ok: true });
+    expect(getRawBatchValue("flush-now::events")).toBeUndefined();
+    flushPendingDiskWrites();
+    expect(getRawBatchValue("flush-now::events")).toBe('{"ok":true}');
+    expect(mockHybridObjects.AmplitudeStorage?.set).toHaveBeenCalledWith(
+      "flush-now::events",
+      '{"ok":true}',
+      true,
+    );
+  });
+
+  it("persists writes created during the core flush before flush resolves", async () => {
+    const analytics = new AmplitudeReactNative();
+    const storage = new NitroAnalyticsStorage<{ ok: boolean }>("core-flush");
+    const timeline = (
+      analytics as unknown as {
+        timeline: { flush: () => Promise<void> };
+      }
+    ).timeline;
+    timeline.flush = async () => {
+      await storage.set("events", { ok: true });
+    };
+
+    const flushResult = analytics.flush();
+    expect(getRawBatchValue("core-flush::events")).toBeUndefined();
+    await flushResult.promise;
+
+    expect(getRawBatchValue("core-flush::events")).toBe('{"ok":true}');
+  });
+
+  it("serializes overlapping flushes and automatic destination flushes", async () => {
+    const analytics = new AmplitudeReactNative();
+    const storage = new NitroAnalyticsStorage<{ value: string }>(
+      "overlapping-flush",
+    );
+    const timeline = (
+      analytics as unknown as {
+        timeline: {
+          plugins: Array<{
+            type: string;
+            queue: unknown[];
+            flush: (useRetry?: boolean) => Promise<void>;
+          }>;
+        };
+      }
+    ).timeline;
+    let releaseFirstFlush!: () => void;
+    const firstFlushReady = new Promise<void>((resolve) => {
+      releaseFirstFlush = resolve;
+    });
+    let firstFlushStarted!: () => void;
+    const firstFlushStartedPromise = new Promise<void>((resolve) => {
+      firstFlushStarted = resolve;
+    });
+    const flushCalls: boolean[] = [];
+    const destination = {
+      type: "destination",
+      queue: [],
+      flush: jest.fn(async (useRetry = false) => {
+        flushCalls.push(useRetry);
+        if (flushCalls.length === 1) {
+          firstFlushStarted();
+          await firstFlushReady;
+          await storage.set("events", { value: "manual" });
+          return;
+        }
+        await storage.set("events", { value: "automatic" });
+      }),
+    };
+    timeline.plugins = [destination];
+
+    const first = analytics.flush().promise;
+    await firstFlushStartedPromise;
+    const automatic = destination.flush(true);
+    const second = analytics.flush().promise;
+
+    expect(flushCalls).toEqual([false]);
+    releaseFirstFlush();
+
+    await first;
+    await automatic;
+    await second;
+
+    expect(flushCalls).toEqual([false, true, false]);
+    expect(await storage.get("events")).toEqual({ value: "automatic" });
+    expect(getRawBatchValue("overlapping-flush::events")).toBe(
+      '{"value":"automatic"}',
+    );
+  });
+
+  it("does not poison follow-up flushes after a core flush failure", async () => {
+    const analytics = new AmplitudeReactNative();
+    const storage = new NitroAnalyticsStorage<{ value: string }>(
+      "follow-up-flush",
+    );
+    const timeline = (
+      analytics as unknown as {
+        timeline: { flush: jest.Mock<Promise<void>, []> };
+      }
+    ).timeline;
+    timeline.flush = jest
+      .fn<Promise<void>, []>()
+      .mockRejectedValueOnce(new Error("core flush failed"))
+      .mockImplementationOnce(async () => {
+        await storage.set("events", { value: "recovered" });
+      });
+
+    await expect(analytics.flush().promise).rejects.toThrow(
+      "core flush failed",
+    );
+    await expect(analytics.flush().promise).resolves.toBeUndefined();
+    expect(await storage.get("events")).toEqual({ value: "recovered" });
+    expect(getRawBatchValue("follow-up-flush::events")).toBe(
+      '{"value":"recovered"}',
+    );
+  });
+
+  it("recovers Core destination scheduling after repeated flush rejection", async () => {
+    const analytics = new AmplitudeReactNative();
+    try {
+      await analytics.init("destination-recovery-key", undefined, {
+        instanceName: "destination-recovery",
+        flushIntervalMillis: 60_000,
+        migrateLegacyData: false,
+        trackingSessionEvents: false,
+        transportProvider: dryRunTransport,
+      }).promise;
+
+      const timeline = (
+        analytics as unknown as {
+          timeline: { plugins: unknown[] };
+        }
+      ).timeline;
+      const destination = timeline.plugins.find(
+        (plugin): plugin is Destination => plugin instanceof Destination,
+      );
+      expect(destination).toBeDefined();
+      if (!destination) {
+        return;
+      }
+
+      const firstError = new Error("first destination flush failed");
+      const secondError = new Error("second destination flush failed");
+      const send = jest
+        .spyOn(destination, "send")
+        .mockRejectedValueOnce(firstError)
+        .mockRejectedValueOnce(secondError)
+        .mockImplementationOnce(async (list) => {
+          destination.fulfillRequest(list, 200, "sent");
+        });
+      const eventResult = destination.execute({
+        event_type: "destination_recovery_event",
+        device_id: "destination-recovery-device",
+        time: Date.now(),
+      });
+
+      await expect(analytics.flush().promise).rejects.toBe(firstError);
+      expect(destination.flushId).toBeNull();
+      expect(destination.scheduleId).not.toBeNull();
+
+      const secondFlush = analytics.flush().promise;
+      const thirdFlush = analytics.flush().promise;
+      await expect(secondFlush).rejects.toBe(secondError);
+      await expect(thirdFlush).resolves.toBeUndefined();
+      await expect(eventResult).resolves.toMatchObject({ code: 200 });
+
+      expect(destination.flushId).toBeNull();
+      expect(destination.scheduleId).toBeNull();
+      expect(destination.queue).toHaveLength(0);
+      expect(send).toHaveBeenCalledTimes(3);
+    } finally {
+      analytics.shutdown();
+    }
+  });
+
+  it("serializes overlapping flushWithResult calls with writes near completion", async () => {
+    const analytics = new AmplitudeReactNative();
+    const storage = new NitroAnalyticsStorage<{ value: string }>(
+      "overlapping-result-flush",
+    );
+    const timeline = (
+      analytics as unknown as {
+        timeline: { flush: jest.Mock<Promise<void>, []> };
+      }
+    ).timeline;
+    let flushCount = 0;
+    timeline.flush = jest.fn(async () => {
+      flushCount += 1;
+      await storage.set("events", { value: `flush-${flushCount}` });
+      await Promise.resolve();
+      await storage.set("events", { value: `late-${flushCount}` });
+    });
+
+    const first = analytics.flushWithResult();
+    const second = analytics.flushWithResult();
+
+    await expect(first).resolves.toMatchObject({ ok: true });
+    await expect(second).resolves.toMatchObject({ ok: true });
+    expect(timeline.flush).toHaveBeenCalledTimes(2);
+    expect(await storage.get("events")).toEqual({ value: "late-2" });
+    expect(getRawBatchValue("overlapping-result-flush::events")).toBe(
+      '{"value":"late-2"}',
+    );
+  });
+
+  it("reports durable storage failures from flushWithResult and retains the write", async () => {
+    const analytics = new AmplitudeReactNative();
+    const storage = new NitroAnalyticsStorage<{ ok: boolean }>("flush-error");
+    const timeline = (
+      analytics as unknown as {
+        timeline: { flush: () => Promise<void> };
+      }
+    ).timeline;
+    timeline.flush = async () => {
+      await storage.set("events", { ok: true });
+    };
+    await storage.get("missing");
+    mockHybridObjects.AmplitudeStorage?.set.mockImplementationOnce(() => {
+      throw new Error("NitroAmplitude: storage_error");
+    });
+
+    await expect(analytics.flushWithResult()).resolves.toMatchObject({
+      ok: false,
+      reason: "NitroAmplitude: storage_error",
+    });
+    expect(await storage.get("events")).toEqual({ ok: true });
+
+    flushPendingDiskWrites();
+    expect(getRawBatchValue("flush-error::events")).toBe('{"ok":true}');
+  });
+
+  it("preserves write ordering and last-write-wins under coalescing", async () => {
+    jest.useFakeTimers();
+    try {
+      const first = new NitroAnalyticsStorage<{ n: number }>("ordered");
+      const second = new NitroAnalyticsStorage<{ n: number }>("ordered");
+      await first.set("a", { n: 1 });
+      await second.set("b", { n: 2 });
+      await first.set("a", { n: 3 });
+
+      jest.advanceTimersByTime(200);
+
+      expect(
+        mockHybridObjects.AmplitudeStorage?.set.mock.calls.map(
+          (call) => [call[0], call[1]] as const,
+        ),
+      ).toEqual([
+        ["ordered::a", '{"n":3}'],
+        ["ordered::b", '{"n":2}'],
+      ]);
+      expect(getRawBatchValue("ordered::a")).toBe('{"n":3}');
+      expect(getRawBatchValue("ordered::b")).toBe('{"n":2}');
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it("applies controlled jitter and caps the maximum backoff delay", async () => {
+    jest.useFakeTimers();
+    try {
+      for (const [randomValue, expectedDelays] of [
+        [0, [800, 1600, 3200, 6400, 6400]],
+        [1, [1200, 2400, 4800, 8000, 8000]],
+      ] as const) {
+        const randomSpy = jest
+          .spyOn(Math, "random")
+          .mockReturnValue(randomValue);
+        try {
+          const backoff = new Backoff(5, 1000, 8000, 2);
+          const attempts = jest.fn(async () => {
+            throw new Error("offline");
+          });
+          backoff.start(attempts);
+
+          let elapsed = 0;
+          for (const [index, expectedDelay] of expectedDelays.entries()) {
+            await jest.advanceTimersByTimeAsync(expectedDelay);
+            elapsed += expectedDelay;
+            expect(attempts).toHaveBeenCalledTimes(index + 1);
+          }
+          expect(elapsed).toBe(
+            expectedDelays.reduce((total, delay) => total + delay, 0),
+          );
+        } finally {
+          randomSpy.mockRestore();
+          jest.clearAllTimers();
+        }
+      }
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it("retains failed and unattempted disk writes for a later retry", async () => {
+    const first = new NitroAnalyticsStorage<{ n: number }>("retry");
+    const second = new NitroAnalyticsStorage<{ n: number }>("retry");
+    await first.set("first", { n: 1 });
+    await second.set("second", { n: 2 });
+    await first.get("missing");
+
+    const storageSet = mockHybridObjects.AmplitudeStorage?.set;
+    expect(storageSet).toBeDefined();
+    storageSet?.mockImplementationOnce(() => {
+      throw new Error("NitroAmplitude: storage_error");
+    });
+
+    expect(() => flushPendingDiskWrites()).toThrow(
+      "NitroAmplitude: storage_error",
+    );
+    expect(await first.get("first")).toEqual({ n: 1 });
+    expect(await second.get("second")).toEqual({ n: 2 });
+    expect(getRawBatchValue("retry::first")).toBeUndefined();
+    expect(getRawBatchValue("retry::second")).toBeUndefined();
+
+    flushPendingDiskWrites();
+
+    expect(getRawBatchValue("retry::first")).toBe('{"n":1}');
+    expect(getRawBatchValue("retry::second")).toBe('{"n":2}');
+  });
+
+  it("retries a failed timer flush without an uncaught rejection", async () => {
+    jest.useFakeTimers();
+    const consoleError = jest
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    try {
+      const storage = new NitroAnalyticsStorage<{ n: number }>("timer-retry");
+      await storage.get("missing");
+      const storageSet = mockHybridObjects.AmplitudeStorage?.set;
+      storageSet?.mockImplementationOnce(() => {
+        throw new Error("NitroAmplitude: timer_storage_error");
+      });
+
+      await storage.set("value", { n: 1 });
+      jest.advanceTimersByTime(200);
+
+      expect(getRawBatchValue("timer-retry::value")).toBeUndefined();
+      expect(await storage.get("value")).toEqual({ n: 1 });
+
+      jest.advanceTimersToNextTimer();
+      expect(getRawBatchValue("timer-retry::value")).toBe('{"n":1}');
+    } finally {
+      mockHybridObjects.AmplitudeStorage?.set.mockImplementation(
+        (key: string, value: string) => mockDisk.set(key, value),
+      );
+      flushPendingDiskWrites();
+      jest.clearAllTimers();
+      consoleError.mockRestore();
+      jest.useRealTimers();
+    }
+  });
+
+  it("backs off repeated timer flush failures with a bounded delay", async () => {
+    jest.useFakeTimers();
+    const consoleError = jest
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    try {
+      const storage = new NitroAnalyticsStorage<{ n: number }>("timer-backoff");
+      await storage.get("missing");
+      const attemptTimes: number[] = [];
+      mockHybridObjects.AmplitudeStorage?.set.mockImplementation(() => {
+        attemptTimes.push(Date.now());
+        throw new Error("NitroAmplitude: repeated_storage_error");
+      });
+
+      await storage.set("value", { n: 1 });
+      jest.advanceTimersByTime(200);
+      for (let attempt = 0; attempt < 8; attempt += 1) {
+        jest.advanceTimersToNextTimer();
+      }
+
+      const delays = attemptTimes.slice(1).map((time, index) => {
+        return time - attemptTimes[index]!;
+      });
+      expect(attemptTimes.length).toBe(9);
+      expect(delays[0]).toBeGreaterThanOrEqual(200);
+      expect(delays[1]).toBeGreaterThan(delays[0]!);
+      expect(Math.max(...delays)).toBeLessThanOrEqual(5000);
+      expect(await storage.get("value")).toEqual({ n: 1 });
+    } finally {
+      mockHybridObjects.AmplitudeStorage?.set.mockImplementation(
+        (key: string, value: string) => mockDisk.set(key, value),
+      );
+      flushPendingDiskWrites();
+      jest.clearAllTimers();
+      consoleError.mockRestore();
+      jest.useRealTimers();
+    }
+  });
+
+  it("keeps the newest replacement when a timer flush fails", async () => {
+    jest.useFakeTimers();
+    const consoleError = jest
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    try {
+      const storage = new NitroAnalyticsStorage<{ n: number }>(
+        "timer-replacement",
+      );
+      await storage.get("missing");
+      const storageSet = mockHybridObjects.AmplitudeStorage?.set;
+      storageSet?.mockImplementationOnce(() => {
+        void storage.set("value", { n: 2 });
+        throw new Error("NitroAmplitude: replacement_storage_error");
+      });
+
+      await storage.set("value", { n: 1 });
+      jest.advanceTimersByTime(200);
+      expect(await storage.get("value")).toEqual({ n: 2 });
+
+      jest.advanceTimersToNextTimer();
+      expect(getRawBatchValue("timer-replacement::value")).toBe('{"n":2}');
+    } finally {
+      mockHybridObjects.AmplitudeStorage?.set.mockImplementation(
+        (key: string, value: string) => mockDisk.set(key, value),
+      );
+      flushPendingDiskWrites();
+      jest.clearAllTimers();
+      consoleError.mockRestore();
+      jest.useRealTimers();
+    }
+  });
+
+  it("cancels the coalescing timer for explicit flush and reschedules after failure", async () => {
+    jest.useFakeTimers();
+    const consoleError = jest
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    try {
+      const storage = new NitroAnalyticsStorage<{ n: number }>(
+        "explicit-retry",
+      );
+      await storage.get("missing");
+      const storageSet = mockHybridObjects.AmplitudeStorage?.set;
+      storageSet?.mockImplementationOnce(() => {
+        throw new Error("NitroAmplitude: explicit_storage_error");
+      });
+
+      await storage.set("value", { n: 1 });
+      expect(() => flushPendingDiskWrites()).toThrow(
+        "NitroAmplitude: explicit_storage_error",
+      );
+      expect(jest.getTimerCount()).toBe(1);
+
+      flushPendingDiskWrites();
+      expect(jest.getTimerCount()).toBe(0);
+      expect(getRawBatchValue("explicit-retry::value")).toBe('{"n":1}');
+    } finally {
+      mockHybridObjects.AmplitudeStorage?.set.mockImplementation(
+        (key: string, value: string) => mockDisk.set(key, value),
+      );
+      flushPendingDiskWrites();
+      jest.clearAllTimers();
+      consoleError.mockRestore();
+      jest.useRealTimers();
+    }
   });
 
   it("flushes accepted events before shutdown teardown", async () => {

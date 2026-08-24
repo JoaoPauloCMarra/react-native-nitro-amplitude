@@ -1,13 +1,13 @@
 const projectRoot = import.meta.dir + "/..";
 
 const expectedVersions = {
-  expo: "~57.0.15",
-  "expo-asset": "~57.0.13",
-  "expo-build-properties": "~57.0.13",
-  "expo-constants": "~57.0.13",
+  expo: "~57.0.16",
+  "expo-asset": "~57.0.14",
+  "expo-build-properties": "~57.0.14",
+  "expo-constants": "~57.0.14",
   "expo-linking": "~57.0.7",
-  "expo-router": "~57.0.15",
-  "expo-splash-screen": "~57.0.7",
+  "expo-router": "~57.0.16",
+  "expo-splash-screen": "~57.0.8",
   nitrogen: "0.37.0",
   react: "19.2.3",
   "react-dom": "19.2.3",

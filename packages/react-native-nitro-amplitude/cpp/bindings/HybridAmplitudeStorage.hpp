@@ -23,12 +23,12 @@ public:
   bool has(const std::string& key, bool persist) override;
   std::vector<std::string> getAllKeys(bool persist) override;
   std::vector<std::string> getKeysByPrefix(const std::string& prefix, bool persist) override;
+  size_t getExternalMemorySize() noexcept override;
+
   void setBatch(
       const std::vector<std::string>& keys,
       const std::vector<std::string>& values,
       bool persist) override;
-  size_t getExternalMemorySize() noexcept override;
-
   std::vector<std::string> getBatch(
       const std::vector<std::string>& keys,
       bool persist) override;

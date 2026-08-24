@@ -4,7 +4,7 @@
 [![npm downloads](https://img.shields.io/npm/dm/react-native-nitro-amplitude?color=22c55e&label=downloads)](https://www.npmjs.com/package/react-native-nitro-amplitude)
 [![CI](https://github.com/JoaoPauloCMarra/react-native-nitro-amplitude/actions/workflows/ci.yml/badge.svg)](https://github.com/JoaoPauloCMarra/react-native-nitro-amplitude/actions/workflows/ci.yml)
 [![license](https://img.shields.io/npm/l/react-native-nitro-amplitude?color=007ec6)](https://github.com/JoaoPauloCMarra/react-native-nitro-amplitude/blob/main/LICENSE)
-[![React Native](https://img.shields.io/badge/react--native-0.87.0-61dafb)](https://reactnative.dev/docs/0.87/getting-started-without-a-framework)
+[![React Native](https://img.shields.io/badge/react--native-0.86.2-61dafb)](https://reactnative.dev/docs/0.86/getting-started-without-a-framework)
 [![Expo](https://img.shields.io/badge/expo-SDK%2057%20%28RN%200.86.2%29-000020)](https://docs.expo.dev/versions/v57.0.0/)
 [![Nitro Modules](https://img.shields.io/badge/nitro--modules-%3E%3D0.37.0%20%3C0.38.0-black)](https://nitro.margelo.com/)
 [![TypeScript](https://img.shields.io/badge/typescript-6.0-3178c6)](https://www.typescriptlang.org/)
@@ -22,29 +22,33 @@ through Nitro, and still works on web through fetch and storage fallbacks.
 bun add react-native-nitro-amplitude react-native-nitro-modules
 ```
 
-Compatibility for `0.7.0`:
+## Requirements and compatibility
 
-| Dependency                   | Supported range    | `0.7.0` baseline                                         |
-| ---------------------------- | ------------------ | -------------------------------------------------------- |
-| `react`                      | `>=18.2.0`         | `19.2.3`                                                 |
-| `react-native`               | `>=0.75.0`         | `0.87.0` standalone; `0.86.2` in the Expo SDK 57 example |
-| `react-native-nitro-modules` | `>=0.37.0 <0.38.0` | `0.37.0`                                                 |
-| Expo development builds      | SDK 57             | `~57.0.15`                                               |
+Compatibility for `0.8.0`:
 
-The standalone package gate uses React Native `0.87.0` and the Strict
-TypeScript API. The example app uses Expo SDK 57's supported React Native
-`0.86.2` baseline. Do not override the Expo-managed React Native version in an
-Expo app; use the Expo version matched to your SDK.
+| Dependency                   | Supported range    | `0.8.0` baseline                          |
+| ---------------------------- | ------------------ | ----------------------------------------- |
+| `react`                      | `>=18.2.0`         | `19.2.3`                                  |
+| `react-native`               | `>=0.75.0`         | `0.86.2` package and Expo SDK 57 baseline |
+| `react-native-nitro-modules` | `>=0.37.0 <0.38.0` | `0.37.0`                                  |
+| Expo development builds      | SDK 57             | `~57.0.16`                                |
 
-### Upgrade from 0.6.0
+The package gate and example use React Native `0.86.2` with the Strict
+TypeScript API. `check:ci` also compiles the public source against React Native
+`0.87.0`'s Strict TypeScript API; this is a declaration-compatibility check, not
+the runtime baseline. Expo SDK 57 manages React Native `0.86.2`; do not
+override it in an Expo app.
 
-This release has a breaking native peer boundary: `react-native-nitro-amplitude`
-`0.7.0` requires `react-native-nitro-modules` `>=0.37.0 <0.38.0`. Upgrade the
-Nitro package together with this package, then regenerate and rebuild native
-projects so the committed Nitro 0.37.0 bindings are compiled into the app:
+### Upgrade from 0.7.x and earlier
+
+The `0.8.x` line keeps the native peer boundary introduced in `0.7.0`:
+`react-native-nitro-amplitude` requires `react-native-nitro-modules`
+`>=0.37.0 <0.38.0`. Upgrade the Nitro package together with this package, then
+regenerate and rebuild native projects so the committed Nitro 0.37.0 bindings
+are compiled into the app:
 
 ```sh
-bun add react-native-nitro-amplitude@0.7.0 react-native-nitro-modules@0.37.0
+bun add react-native-nitro-amplitude@0.8.0 react-native-nitro-modules@0.37.0
 bunx expo prebuild
 ```
 
@@ -385,11 +389,18 @@ Presets and combined client:
 Native HybridObject types:
 
 - `AmplitudeContext` (context JSON + prefetch, cached by normalized option
-  set on both platforms).
-- `AmplitudeStorage` (sync memory/disk KV with a compatible `string[]` batch
-  ABI; `getBatchValues` safely maps missing values to `undefined`).
+  set on both platforms). Its legacy session/event methods remain as deprecated
+  no-op compatibility stubs; they do not import legacy Amplitude SQLite data.
+- `AmplitudeStorage` (sync memory/disk KV with deprecated `setBatch`/`getBatch`
+  wrappers and `removeBatch` for bulk cleanup).
 - `AmplitudeWorker` (bounded queue, 2 concurrent workers, request-scoped
   completion, cancellation of queued requests, queue/in-flight/byte metrics).
+
+## Documentation
+
+- [API reference](docs/api-reference.md) — public exports and behavior.
+- [Dependency policy](docs/dependency-policy.md) — supported Nitro, React
+  Native, and Expo compatibility boundaries.
 
 ## Platform Support
 
@@ -418,9 +429,14 @@ Architecture notes:
   web.
 - Web memory storage is shared across package instances in the same JavaScript
   process and isolated by namespace, matching native memory-storage semantics.
-- Legacy migration methods and `migrateLegacyData` remain accepted for source
-  and native ABI compatibility. The package does not import legacy Amplitude
-  SDK SQLite data; migrate that data before switching SDKs if it is required.
+- Legacy bridge methods are retained as deprecated no-op compatibility stubs.
+  The `migrateLegacyData` option is also accepted as a no-op; this package does
+  not import legacy Amplitude SDK SQLite data. Migrate that data before
+  switching SDKs if it is required.
+- Native event persistence is coalesced for throughput, but pending writes are
+  flushed when the app becomes inactive or enters the background, and by
+  explicit `flush()` or `shutdown()` calls. Use those methods before a process
+  boundary when the app needs an immediate durability guarantee.
 - For typed Experiment variant payloads, prefer the typed variant helpers
   exported from the package (`react-native-nitro-amplitude/experiment`) over
   reading the untyped `variant.payload` directly.

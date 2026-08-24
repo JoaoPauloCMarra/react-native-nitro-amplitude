@@ -7,6 +7,7 @@ set(CMAKE_CXX_STANDARD 20)
 
 file(GLOB SOURCES
   "../cpp/bindings/*.cpp"
+  "../cpp/core/*.cpp"
   "./src/main/cpp/*.cpp"
 )
 list(FILTER SOURCES EXCLUDE REGEX ".*/[^/]*Test\\.cpp$")

@@ -1,6 +1,9 @@
 #include "AndroidAmplitudeAdapterCpp.hpp"
 
-#include <cstdio>
+#include "../../../cpp/core/PosixFileAdapter.hpp"
+
+#include <exception>
+#include <utility>
 
 namespace NitroAmplitude {
 
@@ -8,31 +11,6 @@ using namespace facebook::jni;
 using JavaStringArray = JArrayClass<jstring>;
 
 namespace {
-
-std::string escapeJsonString(const std::string& value) {
-  std::string escaped = "\"";
-  for (const char character : value) {
-    switch (character) {
-      case '"': escaped += "\\\""; break;
-      case '\\': escaped += "\\\\"; break;
-      case '\b': escaped += "\\b"; break;
-      case '\f': escaped += "\\f"; break;
-      case '\n': escaped += "\\n"; break;
-      case '\r': escaped += "\\r"; break;
-      case '\t': escaped += "\\t"; break;
-      default:
-        if (static_cast<unsigned char>(character) < 0x20) {
-          char buffer[8];
-          std::snprintf(buffer, sizeof(buffer), "\\u%04x", character);
-          escaped += buffer;
-        } else {
-          escaped += character;
-        }
-    }
-  }
-  escaped += "\"";
-  return escaped;
-}
 
 std::vector<std::string> fromJavaStringArray(alias_ref<JavaStringArray> values) {
   if (!values) {
@@ -48,25 +26,53 @@ std::vector<std::string> fromJavaStringArray(alias_ref<JavaStringArray> values) 
   return result;
 }
 
-std::string toJsonObject(const std::unordered_map<std::string, std::string>& entries) {
-  std::string json = "{";
-  bool first = true;
-  for (const auto& entry : entries) {
-    if (!first) {
-      json += ",";
-    }
-    first = false;
-    json += escapeJsonString(entry.first);
-    json += ":";
-    json += escapeJsonString(entry.second);
+local_ref<JavaStringArray> toJavaStringArray(const std::vector<std::string>& values) {
+  auto array = JavaStringArray::newArray(static_cast<jsize>(values.size()));
+  for (size_t i = 0; i < values.size(); ++i) {
+    auto value = make_jstring(values[i]);
+    array->setElement(i, value.get());
   }
-  json += "}";
-  return json;
+  return array;
 }
 
 } // namespace
 
-AndroidAmplitudeAdapterCpp::AndroidAmplitudeAdapterCpp(alias_ref<JObject> /*context*/) {}
+AndroidAmplitudeAdapterCpp::AndroidAmplitudeAdapterCpp(alias_ref<JObject> /*context*/) {
+  static auto directoryMethod = AndroidAmplitudeAdapterJava::javaClassStatic()->getStaticMethod<jstring()>(
+      "getStorageDirectory", "()Ljava/lang/String;");
+  auto directory = directoryMethod(AndroidAmplitudeAdapterJava::javaClassStatic());
+  if (directory != nullptr) {
+    diskStore_ = std::make_shared<JsonlSegmentStore>(
+        std::make_shared<PosixFileAdapter>(), directory->toStdString());
+  }
+  MigrateLegacyDisk();
+}
+
+void AndroidAmplitudeAdapterCpp::MigrateLegacyDisk() {
+  if (diskStore_ == nullptr) {
+    return;
+  }
+  static auto entriesMethod = AndroidAmplitudeAdapterJava::javaClassStatic()->getStaticMethod<JavaStringArray()>(
+      "getLegacyDiskEntries", "()[Ljava/lang/String;");
+  const std::vector<std::string> flattened =
+      fromJavaStringArray(entriesMethod(AndroidAmplitudeAdapterJava::javaClassStatic()));
+  if (flattened.empty() || flattened.size() % 2 != 0) {
+    return;
+  }
+  std::vector<std::pair<std::string, std::string>> legacy;
+  legacy.reserve(flattened.size() / 2);
+  for (size_t i = 0; i + 1 < flattened.size(); i += 2) {
+    legacy.emplace_back(flattened[i], flattened[i + 1]);
+  }
+  try {
+    diskStore_->migrateLegacyEntries(legacy);
+  } catch (const std::exception&) {
+    return;
+  }
+  static auto clearMethod = AndroidAmplitudeAdapterJava::javaClassStatic()->getStaticMethod<void()>(
+      "clearLegacyDisk", "()V");
+  clearMethod(AndroidAmplitudeAdapterJava::javaClassStatic());
+}
 
 void AndroidAmplitudeAdapterCpp::prefetchContext() {
   static auto method = AndroidAmplitudeAdapterJava::javaClassStatic()->getStaticMethod<void()>("prefetchContext");
@@ -81,37 +87,33 @@ std::string AndroidAmplitudeAdapterCpp::getApplicationContextJson(const std::str
 }
 
 void AndroidAmplitudeAdapterCpp::setDisk(const std::string& key, const std::string& value) {
-  static auto method = AndroidAmplitudeAdapterJava::javaClassStatic()->getStaticMethod<void(std::string, std::string)>(
-      "setDisk", "(Ljava/lang/String;Ljava/lang/String;)V");
-  method(AndroidAmplitudeAdapterJava::javaClassStatic(), key, value);
+  if (diskStore_ != nullptr) {
+    diskStore_->setDisk(key, value);
+  }
 }
 
 std::optional<std::string> AndroidAmplitudeAdapterCpp::getDisk(const std::string& key) {
-  static auto method = AndroidAmplitudeAdapterJava::javaClassStatic()->getStaticMethod<jstring(std::string)>(
-      "getDisk", "(Ljava/lang/String;)Ljava/lang/String;");
-  auto result = method(AndroidAmplitudeAdapterJava::javaClassStatic(), key);
-  if (!result) {
+  if (diskStore_ == nullptr) {
     return std::nullopt;
   }
-  return result->toStdString();
+  return diskStore_->getDisk(key);
 }
 
 void AndroidAmplitudeAdapterCpp::deleteDisk(const std::string& key) {
-  static auto method = AndroidAmplitudeAdapterJava::javaClassStatic()->getStaticMethod<void(std::string)>(
-      "deleteDisk", "(Ljava/lang/String;)V");
-  method(AndroidAmplitudeAdapterJava::javaClassStatic(), key);
+  if (diskStore_ != nullptr) {
+    diskStore_->deleteDisk(key);
+  }
 }
 
 bool AndroidAmplitudeAdapterCpp::hasDisk(const std::string& key) {
-  static auto method = AndroidAmplitudeAdapterJava::javaClassStatic()->getStaticMethod<jboolean(std::string)>(
-      "hasDisk", "(Ljava/lang/String;)Z");
-  return method(AndroidAmplitudeAdapterJava::javaClassStatic(), key);
+  return diskStore_ != nullptr && diskStore_->hasDisk(key);
 }
 
 std::vector<std::string> AndroidAmplitudeAdapterCpp::getAllDiskKeys() {
-  static auto method = AndroidAmplitudeAdapterJava::javaClassStatic()->getStaticMethod<JavaStringArray()>(
-      "getAllDiskKeys", "()[Ljava/lang/String;");
-  return fromJavaStringArray(method(AndroidAmplitudeAdapterJava::javaClassStatic()));
+  if (diskStore_ == nullptr) {
+    return {};
+  }
+  return diskStore_->getAllDiskKeys();
 }
 
 HttpResult AndroidAmplitudeAdapterCpp::performHttpRequest(
@@ -121,14 +123,23 @@ HttpResult AndroidAmplitudeAdapterCpp::performHttpRequest(
     const std::string& body,
     int timeoutMillis) {
   static auto requestMethod = AndroidAmplitudeAdapterJava::javaClassStatic()->getStaticMethod<JavaStringArray(
-      std::string, std::string, std::string, std::string, jint)>(
+      std::string, std::string, alias_ref<JavaStringArray>, alias_ref<JavaStringArray>, std::string, jint)>(
       "performHttpRequest",
-      "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;I)[Ljava/lang/String;");
+      "(Ljava/lang/String;Ljava/lang/String;[Ljava/lang/String;[Ljava/lang/String;Ljava/lang/String;I)[Ljava/lang/String;");
+  std::vector<std::string> headerNames;
+  std::vector<std::string> headerValues;
+  headerNames.reserve(headers.size());
+  headerValues.reserve(headers.size());
+  for (const auto& header : headers) {
+    headerNames.push_back(header.first);
+    headerValues.push_back(header.second);
+  }
   const auto result = fromJavaStringArray(requestMethod(
       AndroidAmplitudeAdapterJava::javaClassStatic(),
       url,
       method,
-      toJsonObject(headers),
+      toJavaStringArray(headerNames),
+      toJavaStringArray(headerValues),
       body,
       timeoutMillis));
   HttpResult httpResult;

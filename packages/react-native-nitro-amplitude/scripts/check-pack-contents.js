@@ -1,4 +1,5 @@
 const { execSync } = require("child_process");
+const path = require("path");
 
 function fail(message) {
   console.error(`❌ ${message}`);
@@ -7,6 +8,8 @@ function fail(message) {
 
 const requiredFiles = [
   "README.md",
+  "CHANGELOG.md",
+  "SECURITY.md",
   "LICENSE",
   "app.plugin.js",
   ".watchmanconfig",
@@ -39,6 +42,10 @@ const requiredFiles = [
   "cpp/core/HttpAdapter.hpp",
   "cpp/core/StorageAdapter.hpp",
   "cpp/core/PlatformAdapterFactory.hpp",
+  "cpp/core/FileAdapter.hpp",
+  "cpp/core/JsonlSegmentStore.hpp",
+  "cpp/core/JsonlSegmentStore.cpp",
+  "cpp/core/PosixFileAdapter.hpp",
   "cpp/bindings/HybridAmplitudeContext.cpp",
   "cpp/bindings/HybridAmplitudeStorage.cpp",
   "cpp/bindings/HybridAmplitudeWorker.cpp",
@@ -53,6 +60,15 @@ const requiredFiles = [
   "android/src/main/cpp/AndroidAmplitudeAdapterCpp.hpp",
   "android/src/main/cpp/AndroidAmplitudeAdapterCpp.cpp",
 ];
+
+const docsSyncScript = path.join(__dirname, "sync-package-docs.js");
+
+function runDocsSync(mode) {
+  execSync(`node ${JSON.stringify(docsSyncScript)} ${mode}`, {
+    cwd: path.resolve(__dirname, ".."),
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+}
 
 const forbiddenPatterns = [
   /^src\/__tests__\//,
@@ -83,11 +99,17 @@ function parseBunPackOutput(output) {
 
 let packedFiles;
 try {
-  const output = execSync("bun pm pack --dry-run --ignore-scripts", {
-    encoding: "utf8",
-    stdio: ["pipe", "pipe", "pipe"],
-  });
-  packedFiles = parseBunPackOutput(output);
+  try {
+    runDocsSync("prepare");
+    const output = execSync("bun pm pack --dry-run --ignore-scripts", {
+      cwd: path.resolve(__dirname, ".."),
+      encoding: "utf8",
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    packedFiles = parseBunPackOutput(output);
+  } finally {
+    runDocsSync("cleanup");
+  }
 } catch (error) {
   fail(`bun pm pack --dry-run failed: ${error.message}`);
 }

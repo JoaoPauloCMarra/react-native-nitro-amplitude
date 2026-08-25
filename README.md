@@ -401,6 +401,8 @@ Native HybridObject types:
 - [API reference](docs/api-reference.md) — public exports and behavior.
 - [Dependency policy](docs/dependency-policy.md) — supported Nitro, React
   Native, and Expo compatibility boundaries.
+- [Benchmark methodology](docs/benchmarks.md) — isolated local transport gate
+  and its limits.
 
 ## Platform Support
 

@@ -9,6 +9,14 @@ const fs = require("fs");
 
 const packageRoot = path.join(__dirname, "..");
 const entrypointPath = path.join(packageRoot, "lib", "commonjs", "index.js");
+const packageManifest = require(path.join(packageRoot, "package.json"));
+
+if (packageManifest.name !== "react-native-nitro-amplitude") {
+  console.error(
+    `Benchmark setup failed: expected react-native-nitro-amplitude, got ${packageManifest.name}.`,
+  );
+  process.exit(1);
+}
 
 if (!fs.existsSync(entrypointPath)) {
   console.error("Benchmark setup failed: run `bun run build` first.");
@@ -90,7 +98,16 @@ if (
   process.exit(1);
 }
 
-async function runTimingBenchmark() {
+function percentile(values, percentileValue) {
+  const sorted = [...values].sort((a, b) => a - b);
+  const position = (sorted.length - 1) * percentileValue;
+  const lower = Math.floor(position);
+  const upper = Math.ceil(position);
+  if (lower === upper) return sorted[lower];
+  return sorted[lower] + (sorted[upper] - sorted[lower]) * (position - lower);
+}
+
+async function runTimingSample() {
   const buffer = createNetworkTimingBuffer(25);
   const analyticsTransport = createTimedAnalyticsTransport(
     dryRunTransport,
@@ -120,16 +137,66 @@ async function runTimingBenchmark() {
   if (timings.length !== 20) {
     throw new Error(`expected 20 timing samples, got ${timings.length}`);
   }
-  if (elapsed > 1000) {
-    throw new Error(`dry-run benchmark exceeded 1000ms: ${elapsed.toFixed(1)}ms`);
-  }
+  return elapsed;
 }
 
-prefetchNativeContext();
+async function runTimingBenchmark() {
+  const warmupSamples = 2;
+  const measuredSamples = 8;
+
+  prefetchNativeContext();
+  for (let index = 0; index < warmupSamples; index += 1) {
+    await runTimingSample();
+  }
+
+  const samples = [];
+  for (let index = 0; index < measuredSamples; index += 1) {
+    samples.push(await runTimingSample());
+  }
+
+  const totalMs = samples.reduce((sum, sample) => sum + sample, 0);
+  const result = {
+    package: packageManifest.name,
+    version: packageManifest.version,
+    benchmark: "dry-run-transport",
+    scope: "node",
+    native: false,
+    network: false,
+    operationsPerSample: 20,
+    warmupSamples,
+    measuredSamples,
+    meanMs: totalMs / samples.length,
+    p50Ms: percentile(samples, 0.5),
+    p95Ms: percentile(samples, 0.95),
+    minMs: Math.min(...samples),
+    maxMs: Math.max(...samples),
+    runtime: process.version,
+    platform: process.platform,
+    architecture: process.arch,
+  };
+
+  if (result.p95Ms > 1000) {
+    throw new Error(
+      `dry-run benchmark p95 exceeded 1000ms: ${result.p95Ms.toFixed(1)}ms`,
+    );
+  }
+
+  console.log(`Benchmark package: ${result.package}@${result.version}`);
+  console.log(
+    "Benchmark scope: isolated Node dry-run transport wrappers; no native SDK or network I/O.",
+  );
+  console.log(
+    `Samples: ${result.measuredSamples} measured after ${result.warmupSamples} warmup samples; each sample performs ${result.operationsPerSample} operations.`,
+  );
+  console.log(
+    `Timing: mean=${result.meanMs.toFixed(2)}ms p50=${result.p50Ms.toFixed(2)}ms p95=${result.p95Ms.toFixed(2)}ms`,
+  );
+  console.log(`BENCHMARK_RESULT ${JSON.stringify(result)}`);
+}
 
 runTimingBenchmark()
   .then(() => {
-    console.log("✅ Amplitude benchmark passed.");
+    console.log("✅ Amplitude isolated benchmark passed.");
   })
   .catch((error) => {
     console.error("Benchmark failed.");

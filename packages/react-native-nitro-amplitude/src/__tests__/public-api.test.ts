@@ -4,10 +4,21 @@ const mockHybridObjects: Record<string, Record<string, jest.Mock>> = {};
 
 function createStorageHybrid() {
   const selectStore = (persist: boolean) => (persist ? mockDisk : mockMemory);
+  const set = jest.fn((key: string, value: string, persist: boolean) => {
+    selectStore(persist).set(key, value);
+  });
+  const setBatch = jest.fn(
+    (keys: string[], values: string[], persist: boolean) => {
+      if (keys.length !== values.length) {
+        throw new Error("NitroAmplitude: setBatch key/value length mismatch");
+      }
+      keys.forEach((key, index) => {
+        set(key, values[index] ?? "", persist);
+      });
+    },
+  );
   return {
-    set: jest.fn((key: string, value: string, persist: boolean) => {
-      selectStore(persist).set(key, value);
-    }),
+    set,
     get: jest.fn((key: string, persist: boolean) => {
       return selectStore(persist).get(key);
     }),
@@ -28,14 +39,7 @@ function createStorageHybrid() {
         key.startsWith(prefix),
       );
     }),
-    setBatch: jest.fn((keys: string[], values: string[], persist: boolean) => {
-      if (keys.length !== values.length) {
-        throw new Error("NitroAmplitude: setBatch key/value length mismatch");
-      }
-      keys.forEach((key, index) => {
-        selectStore(persist).set(key, values[index] ?? "");
-      });
-    }),
+    setBatch,
     getBatch: jest.fn((keys: string[], persist: boolean) => {
       return keys.map(
         (key) =>
@@ -1355,6 +1359,14 @@ describe("react-native-nitro-amplitude", () => {
     expect(getRawBatchValue("flush-now::events")).toBeUndefined();
     flushPendingDiskWrites();
     expect(getRawBatchValue("flush-now::events")).toBe('{"ok":true}');
+    expect(mockHybridObjects.AmplitudeStorage?.setBatch).toHaveBeenCalledWith(
+      ["flush-now::events"],
+      ['{"ok":true}'],
+      true,
+    );
+    expect(mockHybridObjects.AmplitudeStorage?.setBatch).toHaveBeenCalledTimes(
+      1,
+    );
     expect(mockHybridObjects.AmplitudeStorage?.set).toHaveBeenCalledWith(
       "flush-now::events",
       '{"ok":true}',
@@ -1568,7 +1580,7 @@ describe("react-native-nitro-amplitude", () => {
       await storage.set("events", { ok: true });
     };
     await storage.get("missing");
-    mockHybridObjects.AmplitudeStorage?.set.mockImplementationOnce(() => {
+    mockHybridObjects.AmplitudeStorage?.setBatch.mockImplementationOnce(() => {
       throw new Error("NitroAmplitude: storage_error");
     });
 
@@ -1582,7 +1594,7 @@ describe("react-native-nitro-amplitude", () => {
     expect(getRawBatchValue("flush-error::events")).toBe('{"ok":true}');
   });
 
-  it("preserves write ordering and last-write-wins under coalescing", async () => {
+  it("uses one setBatch call while preserving write ordering and last-write-wins", async () => {
     jest.useFakeTimers();
     try {
       const first = new NitroAnalyticsStorage<{ n: number }>("ordered");
@@ -1593,6 +1605,14 @@ describe("react-native-nitro-amplitude", () => {
 
       jest.advanceTimersByTime(200);
 
+      expect(
+        mockHybridObjects.AmplitudeStorage?.setBatch,
+      ).toHaveBeenCalledTimes(1);
+      expect(mockHybridObjects.AmplitudeStorage?.setBatch).toHaveBeenCalledWith(
+        ["ordered::a", "ordered::b"],
+        ['{"n":3}', '{"n":2}'],
+        true,
+      );
       expect(
         mockHybridObjects.AmplitudeStorage?.set.mock.calls.map(
           (call) => [call[0], call[1]] as const,
@@ -1651,9 +1671,9 @@ describe("react-native-nitro-amplitude", () => {
     await second.set("second", { n: 2 });
     await first.get("missing");
 
-    const storageSet = mockHybridObjects.AmplitudeStorage?.set;
-    expect(storageSet).toBeDefined();
-    storageSet?.mockImplementationOnce(() => {
+    const storageBatch = mockHybridObjects.AmplitudeStorage?.setBatch;
+    expect(storageBatch).toBeDefined();
+    storageBatch?.mockImplementationOnce(() => {
       throw new Error("NitroAmplitude: storage_error");
     });
 
@@ -1664,9 +1684,11 @@ describe("react-native-nitro-amplitude", () => {
     expect(await second.get("second")).toEqual({ n: 2 });
     expect(getRawBatchValue("retry::first")).toBeUndefined();
     expect(getRawBatchValue("retry::second")).toBeUndefined();
+    expect(storageBatch).toHaveBeenCalledTimes(1);
 
     flushPendingDiskWrites();
 
+    expect(storageBatch).toHaveBeenCalledTimes(2);
     expect(getRawBatchValue("retry::first")).toBe('{"n":1}');
     expect(getRawBatchValue("retry::second")).toBe('{"n":2}');
   });
@@ -1679,8 +1701,8 @@ describe("react-native-nitro-amplitude", () => {
     try {
       const storage = new NitroAnalyticsStorage<{ n: number }>("timer-retry");
       await storage.get("missing");
-      const storageSet = mockHybridObjects.AmplitudeStorage?.set;
-      storageSet?.mockImplementationOnce(() => {
+      const storageBatch = mockHybridObjects.AmplitudeStorage?.setBatch;
+      storageBatch?.mockImplementationOnce(() => {
         throw new Error("NitroAmplitude: timer_storage_error");
       });
 
@@ -1693,9 +1715,6 @@ describe("react-native-nitro-amplitude", () => {
       jest.advanceTimersToNextTimer();
       expect(getRawBatchValue("timer-retry::value")).toBe('{"n":1}');
     } finally {
-      mockHybridObjects.AmplitudeStorage?.set.mockImplementation(
-        (key: string, value: string) => mockDisk.set(key, value),
-      );
       flushPendingDiskWrites();
       jest.clearAllTimers();
       consoleError.mockRestore();
@@ -1712,10 +1731,13 @@ describe("react-native-nitro-amplitude", () => {
       const storage = new NitroAnalyticsStorage<{ n: number }>("timer-backoff");
       await storage.get("missing");
       const attemptTimes: number[] = [];
-      mockHybridObjects.AmplitudeStorage?.set.mockImplementation(() => {
-        attemptTimes.push(Date.now());
-        throw new Error("NitroAmplitude: repeated_storage_error");
-      });
+      const storageBatch = mockHybridObjects.AmplitudeStorage?.setBatch;
+      for (let attempt = 0; attempt < 9; attempt += 1) {
+        storageBatch?.mockImplementationOnce(() => {
+          attemptTimes.push(Date.now());
+          throw new Error("NitroAmplitude: repeated_storage_error");
+        });
+      }
 
       await storage.set("value", { n: 1 });
       jest.advanceTimersByTime(200);
@@ -1732,9 +1754,6 @@ describe("react-native-nitro-amplitude", () => {
       expect(Math.max(...delays)).toBeLessThanOrEqual(5000);
       expect(await storage.get("value")).toEqual({ n: 1 });
     } finally {
-      mockHybridObjects.AmplitudeStorage?.set.mockImplementation(
-        (key: string, value: string) => mockDisk.set(key, value),
-      );
       flushPendingDiskWrites();
       jest.clearAllTimers();
       consoleError.mockRestore();
@@ -1752,8 +1771,8 @@ describe("react-native-nitro-amplitude", () => {
         "timer-replacement",
       );
       await storage.get("missing");
-      const storageSet = mockHybridObjects.AmplitudeStorage?.set;
-      storageSet?.mockImplementationOnce(() => {
+      const storageBatch = mockHybridObjects.AmplitudeStorage?.setBatch;
+      storageBatch?.mockImplementationOnce(() => {
         void storage.set("value", { n: 2 });
         throw new Error("NitroAmplitude: replacement_storage_error");
       });
@@ -1763,11 +1782,9 @@ describe("react-native-nitro-amplitude", () => {
       expect(await storage.get("value")).toEqual({ n: 2 });
 
       jest.advanceTimersToNextTimer();
+      expect(storageBatch).toHaveBeenCalledTimes(2);
       expect(getRawBatchValue("timer-replacement::value")).toBe('{"n":2}');
     } finally {
-      mockHybridObjects.AmplitudeStorage?.set.mockImplementation(
-        (key: string, value: string) => mockDisk.set(key, value),
-      );
       flushPendingDiskWrites();
       jest.clearAllTimers();
       consoleError.mockRestore();
@@ -1785,8 +1802,8 @@ describe("react-native-nitro-amplitude", () => {
         "explicit-retry",
       );
       await storage.get("missing");
-      const storageSet = mockHybridObjects.AmplitudeStorage?.set;
-      storageSet?.mockImplementationOnce(() => {
+      const storageBatch = mockHybridObjects.AmplitudeStorage?.setBatch;
+      storageBatch?.mockImplementationOnce(() => {
         throw new Error("NitroAmplitude: explicit_storage_error");
       });
 
@@ -1798,11 +1815,9 @@ describe("react-native-nitro-amplitude", () => {
 
       flushPendingDiskWrites();
       expect(jest.getTimerCount()).toBe(0);
+      expect(storageBatch).toHaveBeenCalledTimes(2);
       expect(getRawBatchValue("explicit-retry::value")).toBe('{"n":1}');
     } finally {
-      mockHybridObjects.AmplitudeStorage?.set.mockImplementation(
-        (key: string, value: string) => mockDisk.set(key, value),
-      );
       flushPendingDiskWrites();
       jest.clearAllTimers();
       consoleError.mockRestore();

@@ -18,7 +18,8 @@ The format follows Keep a Changelog and the project adheres to SemVer.
   are also flushed when the app becomes inactive or enters the background, and
   explicit `flush()` and `shutdown()` calls remain durability boundaries.
   Durable reads stay read-your-writes consistent and write ordering is
-  preserved.
+  preserved. Each coalesced flush now crosses JSI once through native
+  `setBatch` instead of issuing one native write call per key.
 - Restored the deprecated `AmplitudeContext` legacy session/event methods and
   the `AmplitudeStorage.setBatch`/`getBatch` ABI wrappers for source and native
   compatibility. They do not import legacy Amplitude SQLite data;

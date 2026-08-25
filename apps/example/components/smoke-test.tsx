@@ -28,16 +28,19 @@ import { Button, Card, Colors, StatusRow } from "./shared";
 
 type LogEntry = {
   label: string;
-  status: "pass" | "fail" | "running" | "skipped";
+  status: "pass" | "fail" | "skipped";
   detail?: string;
 };
 
 export function SmokeTestRunner() {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [summary, setSummary] = useState("Not run");
+  const [running, setRunning] = useState(false);
 
   const runAll = useCallback(async () => {
+    if (running) return;
     const next: LogEntry[] = [];
+    setRunning(true);
     setSummary("Running");
 
     const run = async (
@@ -193,7 +196,8 @@ export function SmokeTestRunner() {
         next.length
       } total`,
     );
-  }, []);
+    setRunning(false);
+  }, [running]);
 
   return (
     <Card
@@ -205,6 +209,7 @@ export function SmokeTestRunner() {
       <Button
         testID="smoke-run-all"
         title="Run All"
+        disabled={running}
         onPress={() => {
           void runAll();
         }}

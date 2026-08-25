@@ -85,6 +85,9 @@ Available on the `react-native-nitro-amplitude/testing` subpath.
   browser localStorage on web).
 - `MemoryStorage` / `InMemoryStorage` — process-local stores.
 - `NitroExperimentStorage` accepts a namespace for isolated variant storage.
+- Native durable analytics writes are coalesced for a short debounce. Reads return
+  pending values immediately, and `flush()` / `shutdown()` drain accepted writes
+  before their durability boundary completes.
 
 ## Nitro helpers
 
@@ -102,7 +105,12 @@ See `src/AmplitudeContext.nitro.ts`, `src/AmplitudeStorage.nitro.ts`,
 
 ## Migration
 
-- The legacy SQLite migration methods were removed from the native ABI.
+- The legacy session and event methods remain in the native ABI as deprecated
+  no-op compatibility stubs. They do not import legacy Amplitude SDK SQLite
+  data.
+- `AmplitudeStorage.setBatch` and `getBatch` remain deprecated ABI wrappers.
+  Durable analytics flushes use one `setBatch` call for each pending write batch;
+  public storage adapters continue to expose individual `get`/`set` methods.
 - `migrateLegacyData` remains accepted as a no-op compatibility option and does
   not import legacy Amplitude SDK data. Migrate that data before switching SDKs
   if it is required.

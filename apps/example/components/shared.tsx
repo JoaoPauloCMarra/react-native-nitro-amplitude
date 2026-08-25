@@ -167,59 +167,11 @@ export const Input = ({
       style={styles.textInput}
       value={value}
       onChangeText={onChangeText}
-      onEndEditing={(e) => {
-        onChangeText(e.nativeEvent.text);
-      }}
       placeholder={placeholder}
       placeholderTextColor={Colors.muted}
       selectionColor={Colors.primary}
       {...props}
     />
-  </View>
-);
-
-type BadgeProps = {
-  label: string;
-  color?: string;
-};
-
-export const Badge = ({ label, color = Colors.primary }: BadgeProps) => (
-  <View
-    style={[
-      styles.badge,
-      { borderColor: `${color}55`, backgroundColor: `${color}14` },
-    ]}
-  >
-    <Text style={[styles.badgeText, { color }]}>{label}</Text>
-  </View>
-);
-
-export const Chip = ({
-  label,
-  active = false,
-  color = Colors.primary,
-}: {
-  label: string;
-  active?: boolean;
-  color?: string;
-}) => (
-  <View
-    style={[
-      styles.chip,
-      active
-        ? { backgroundColor: `${color}14`, borderColor: `${color}4f` }
-        : styles.chipInactive,
-    ]}
-  >
-    <View
-      style={[
-        styles.chipDot,
-        { backgroundColor: active ? color : Colors.border },
-      ]}
-    />
-    <Text style={[styles.chipText, { color: active ? color : Colors.muted }]}>
-      {label}
-    </Text>
   </View>
 );
 
@@ -339,7 +291,19 @@ export const Page = ({
   );
 };
 
+const consumerStyles = {
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  flex1: {
+    flex: 1,
+  },
+} as const;
+
 export const styles = StyleSheet.create({
+  ...consumerStyles,
   container: {
     flex: 1,
     backgroundColor: Colors.background,
@@ -483,43 +447,6 @@ export const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: fontSans400,
   },
-  badge: {
-    alignSelf: "flex-start",
-    paddingVertical: 3,
-    paddingHorizontal: 9,
-    borderRadius: 999,
-    borderWidth: 1,
-  },
-  badgeText: {
-    fontSize: 10,
-    fontFamily: fontSans800,
-    textTransform: "uppercase",
-    letterSpacing: 0.6,
-  },
-  chip: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 5,
-    paddingHorizontal: 10,
-    borderRadius: 9,
-    borderWidth: 1,
-    gap: 6,
-  },
-  chipInactive: {
-    backgroundColor: Colors.card,
-    borderColor: Colors.border,
-  },
-  chipDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
-  },
-  chipText: {
-    fontSize: 11,
-    fontFamily: fontSans700,
-    textTransform: "uppercase",
-    letterSpacing: 0.4,
-  },
   statusRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -560,12 +487,6 @@ export const styles = StyleSheet.create({
     lineHeight: 18,
     color: "#cbd5e1",
   },
-  codeText: {
-    fontFamily: fontMono400,
-    fontSize: 12,
-    lineHeight: 18,
-    color: Colors.text,
-  },
   section: {
     gap: 10,
   },
@@ -577,58 +498,4 @@ export const styles = StyleSheet.create({
     letterSpacing: 1,
     marginTop: 4,
   },
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  grid: {
-    flexDirection: "row",
-    alignItems: "center",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  flex1: {
-    flex: 1,
-  },
-  panel: {
-    backgroundColor: Colors.card,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: 12,
-    padding: 12,
-    gap: 8,
-  },
-  panelTitle: {
-    color: Colors.muted,
-    fontFamily: fontSans700,
-    fontSize: 11,
-    textTransform: "uppercase",
-    letterSpacing: 0.8,
-  },
-  panelValue: {
-    color: Colors.text,
-    fontFamily: fontSans800,
-    fontSize: 42,
-    lineHeight: 44,
-    textAlign: "center",
-  },
-  helperText: {
-    color: Colors.muted,
-    fontFamily: fontSans400,
-    fontSize: 12,
-    lineHeight: 18,
-  },
 });
-
-const sharedStyleKeysForLint = [
-  styles.codeText,
-  styles.row,
-  styles.grid,
-  styles.flex1,
-  styles.panel,
-  styles.panelTitle,
-  styles.panelValue,
-  styles.helperText,
-];
-void sharedStyleKeysForLint;

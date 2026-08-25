@@ -95,8 +95,12 @@ function flushPendingDiskWritesInternal(): void {
     while (pendingDiskWrites.size > 0) {
       const writes = Array.from(pendingDiskWrites.entries());
       const storage = getAmplitudeStorage();
+      storage.setBatch(
+        writes.map(([key]) => key),
+        writes.map(([, pending]) => pending.value),
+        true,
+      );
       for (const [key, pending] of writes) {
-        storage.set(key, pending.value, true);
         const current = pendingDiskWrites.get(key);
         if (current?.generation === pending.generation) {
           pendingDiskWrites.delete(key);

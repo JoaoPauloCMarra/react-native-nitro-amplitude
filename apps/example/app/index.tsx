@@ -90,7 +90,7 @@ function formatTiming(totalMillis: number, http?: TimingSample): string {
   const httpMillis = http?.durationMillis;
   const suffix = http?.error
     ? ` error=${http.error}`
-    : http?.status
+    : http?.status !== undefined
       ? ` status=${String(http.status)}`
       : "";
   return `http=${formatMillis(httpMillis)} code=${formatMillis(
@@ -108,7 +108,7 @@ function formatTimingHistory(timings: AmplitudeNetworkTiming[]): string {
     .map((timing, index) => {
       const suffix = timing.error
         ? ` error=${timing.error}`
-        : timing.status
+        : timing.status !== undefined
           ? ` status=${String(timing.status)}`
           : "";
       return `${index + 1}. ${timing.kind} ${timing.method} ${formatMillis(
@@ -147,6 +147,8 @@ export default function HomeScreen() {
     "No requests measured yet",
   );
   const [userId] = useState("demo-user");
+  const [isReady, setIsReady] = useState(false);
+  const [busyAction, setBusyAction] = useState<"flush" | "fetch">();
   const [timingTracker] = useState(() => createTimingTracker(8));
 
   const [experimentClient] = useState(() =>
@@ -172,30 +174,40 @@ export default function HomeScreen() {
   };
 
   useEffect(() => {
+    let cancelled = false;
     prefetchNativeContext();
     void (async () => {
       if (!DRY_RUN && !ANALYTICS_API_KEY) {
-        setStatus(
-          "missing EXPO_PUBLIC_AMPLITUDE_API_KEY in apps/example/.env.local",
-        );
+        if (!cancelled) {
+          setStatus(
+            "missing EXPO_PUBLIC_AMPLITUDE_API_KEY in apps/example/.env.local",
+          );
+        }
         return;
       }
 
+      if (cancelled) return;
       setStatus("initializing analytics");
       await init(ANALYTICS_API_KEY, userId, {
         instanceName: "example",
         trackingSessionEvents: true,
         transportProvider: analyticsTransport,
       }).promise;
+      if (cancelled) return;
       setDeviceId(String(getDeviceId() ?? "(none)"));
       setStatus("analytics ready");
       await experimentClient.start({ user_id: userId });
+      if (cancelled) return;
+      setIsReady(true);
       setStatus("experiment ready");
     })().catch((error: unknown) => {
-      setStatus(`init failed: ${String(error)}`);
+      if (!cancelled) {
+        setStatus(`init failed: ${String(error)}`);
+      }
     });
 
     return () => {
+      cancelled = true;
       experimentClient.stop();
     };
   }, [analyticsTransport, experimentClient, userId]);
@@ -229,6 +241,7 @@ export default function HomeScreen() {
           <Button
             testID="track-event"
             title="Track Event"
+            disabled={!isReady || busyAction !== undefined || !eventName.trim()}
             onPress={() => {
               const startedAt = nowMillis();
               track(eventName, { source: "example", platform: "native" });
@@ -244,6 +257,7 @@ export default function HomeScreen() {
             testID="identify-user"
             title="Identify"
             variant="secondary"
+            disabled={!isReady || busyAction !== undefined}
             onPress={() => {
               const startedAt = nowMillis();
               const update = new Identify();
@@ -261,11 +275,14 @@ export default function HomeScreen() {
         <View style={styles.row}>
           <Button
             testID="flush-events"
-            title="Flush"
+            title={busyAction === "flush" ? "Flushing..." : "Flush"}
             variant="secondary"
+            disabled={!isReady || busyAction !== undefined}
             onPress={() => {
               timingTracker.clearLatest("analytics");
               const startedAt = nowMillis();
+              setBusyAction("flush");
+              setStatus("flushing analytics");
               void flushWithResult()
                 .then((result) => {
                   const totalDuration = elapsedSince(startedAt);
@@ -290,6 +307,9 @@ export default function HomeScreen() {
                   );
                   setStatus(`flush failed: ${String(error)}`);
                   refreshTimingHistory();
+                })
+                .finally(() => {
+                  setBusyAction(undefined);
                 });
             }}
             style={styles.flex1}
@@ -298,6 +318,7 @@ export default function HomeScreen() {
             testID="read-diagnostics"
             title="Diagnostics"
             variant="secondary"
+            disabled={!isReady || busyAction !== undefined}
             onPress={() => {
               const startedAt = nowMillis();
               const diagnostics = getDiagnostics();
@@ -334,10 +355,12 @@ export default function HomeScreen() {
         <View style={styles.row}>
           <Button
             testID="fetch-variants"
-            title="Fetch"
+            title={busyAction === "fetch" ? "Fetching..." : "Fetch"}
+            disabled={!isReady || busyAction !== undefined || !flagKey.trim()}
             onPress={() => {
               timingTracker.clearLatest("experiment");
               const startedAt = nowMillis();
+              setBusyAction("fetch");
               setStatus(`fetching ${flagKey}`);
               setExperimentResult(`Fetching ${flagKey}`);
               void experimentClient
@@ -379,6 +402,9 @@ export default function HomeScreen() {
                   );
                   setStatus(`fetch failed: ${String(error)}`);
                   refreshTimingHistory();
+                })
+                .finally(() => {
+                  setBusyAction(undefined);
                 });
             }}
             style={styles.flex1}
@@ -387,6 +413,7 @@ export default function HomeScreen() {
             testID="read-variant"
             title="Read Variant"
             variant="secondary"
+            disabled={!isReady || busyAction !== undefined || !flagKey.trim()}
             onPress={() => {
               const startedAt = nowMillis();
               const resolved = experimentClient.variantWithMetadata(flagKey);
@@ -408,6 +435,7 @@ export default function HomeScreen() {
             testID="send-exposure"
             title="Expose"
             variant="secondary"
+            disabled={!isReady || busyAction !== undefined || !flagKey.trim()}
             onPress={() => {
               const startedAt = nowMillis();
               experimentClient.exposure(flagKey);

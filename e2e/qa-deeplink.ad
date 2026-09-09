@@ -1,0 +1,8 @@
+open "nitroamplitude://e2e"
+scroll top
+wait text "dry-run fixture"
+open "com.nitroamplitude.example" "nitroamplitude://e2e" --relaunch
+wait "stable"
+wait id="e2e-screen"
+wait text "e2e-ready"
+close

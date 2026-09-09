@@ -191,8 +191,9 @@ export function SmokeTestRunner() {
     const passed = next.filter((entry) => entry.status === "pass").length;
     const failed = next.filter((entry) => entry.status === "fail").length;
     const skipped = next.filter((entry) => entry.status === "skipped").length;
+    const completionLabel = failed === 0 ? "Complete: PASS" : "Complete: FAIL";
     setSummary(
-      `${passed} passed · ${failed} failed · ${skipped} skipped · ${
+      `${completionLabel}: ${passed} passed · ${failed} failed · ${skipped} skipped · ${
         next.length
       } total`,
     );

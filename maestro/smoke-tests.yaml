@@ -1,17 +1,30 @@
 appId: com.nitroamplitude.example
 name: "Nitro Amplitude Smoke"
 ---
-- clearState
-- launchApp
+- extendedWaitUntil:
+    visible:
+      id: "runtime-mode"
+      text: "dry-run fixture"
+    timeout: 120000
 - extendedWaitUntil:
     visible: "Smoke Test"
-    timeout: 120000
-- tapOn: "Run All"
+    timeout: 30000
+- scrollUntilVisible:
+    element:
+      id: "smoke-run-all"
+    direction: DOWN
+    timeout: 30000
+- extendedWaitUntil:
+    visible:
+      id: "smoke-run-all"
+    timeout: 30000
+- tapOn:
+    id: "smoke-run-all"
 - extendedWaitUntil:
     visible:
       id: "smoke-summary"
-      text: ".*0 failed.*"
-    timeout: 30000
+      text: "Complete: PASS: .*0 failed.*"
+    timeout: 120000
 - extendedWaitUntil:
     visible:
       id: "smoke-summary"

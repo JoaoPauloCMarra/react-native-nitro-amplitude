@@ -1,0 +1,41 @@
+open "nitroamplitude://e2e"
+scroll top
+wait text "dry-run fixture"
+open "com.nitroamplitude.example" "nitroamplitude://e2e" --relaunch
+wait id="e2e-screen"
+wait text "e2e-ready"
+wait id="e2e-lab"
+wait text "ok:ready"
+press id="e2e-opt-out-run"
+wait text "ok:opt-out-reset"
+press id="e2e-revenue-run"
+wait text "ok:revenue"
+press id="e2e-group-run"
+wait text "ok:group"
+press id="e2e-screen-run"
+wait text "ok:screen"
+press id="e2e-health-run"
+wait text "ok:health=true:safe=true:full=true"
+press id="e2e-records-run"
+wait text "ok:events=record-probe"
+press id="e2e-identify-run"
+wait text "ok:identified"
+press id="e2e-flush-run"
+wait text "ok:flush=ok"
+scroll down
+press id="e2e-variant-run"
+scroll top
+wait text "ok:flag=on"
+scroll down
+press id="e2e-client-run"
+scroll top
+wait text "ok:user=e2e-combined:dry=1"
+scroll down
+press id="e2e-run-stress"
+scroll top
+wait text "ok:tracks=50:ms="
+scroll down
+wait id="smoke-run-all"
+press id="smoke-run-all"
+wait text "Complete: PASS"
+close

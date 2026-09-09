@@ -4,6 +4,24 @@ All notable changes to this project are documented in this file.
 
 The format follows Keep a Changelog and the project adheres to SemVer.
 
+## [0.8.1] - 2026-09-09
+
+### Breaking changes
+
+- None.
+
+### Fixed
+
+- Apply the Kotlin Android plugin only when the Gradle Kotlin extension is
+  absent, so AGP 9 consumers that already ship built-in Kotlin can configure
+  the library.
+
+### Changed
+
+- Raised `@amplitude/analytics-core` to `2.55.0` after reviewing the
+  published tarball: the only runtime change is an optional diagnostics
+  storage constructor argument. Public analytics APIs are unchanged.
+
 ## [0.8.0] - 2026-08-25
 
 ### Breaking changes

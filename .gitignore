@@ -111,6 +111,7 @@ temp/
 *.temp
 
 .pack-docs-state/
+/.agent-device/
 .pack-docs-backup/
 
 .agents

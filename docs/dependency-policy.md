@@ -1,24 +1,25 @@
-# Amplitude Dependency Lockstep Policy
+# Amplitude Dependency Compatibility Policy
 
 This package replaces `amplitude-rn-analytics` and `amplitude-rn-experiment`
-and therefore owns a set of Amplitude runtime dependencies. The following
-packages must move **together in a single release**:
+and owns the following Amplitude runtime dependency set. Review and test the
+set together when changing any member; an unchanged compatible dependency
+does not require an artificial version bump.
 
-| Package | Role | Lockstep rule |
+| Package | Recorded manifest spec | Role |
 | --- | --- | --- |
-| `@amplitude/analytics-core` | Analytics client core | Exact-pinned (`2.54.2`). A bump is a release decision because it changes the analytics contract this package wraps. |
-| `@amplitude/analytics-connector` | Analytics/Experiment identity bridge | Must be upgraded in the same release as `@amplitude/analytics-core` and `@amplitude/experiment-core` because it is the shared bridge between them. |
-| `@amplitude/experiment-core` | Experiment evaluation core | Must be upgraded in the same release as `@amplitude/analytics-connector`; its transport and storage contracts are surfaced by this package. |
-| `@amplitude/ua-parser-js` | Web user-agent parsing | Upgrades are independent of the analytics/experiment pair but are still recorded in the same release so the packaged contract is reproducible. |
+| `@amplitude/analytics-core` | `2.55.0` | Analytics client core; exact-pinned because its contract is wrapped by this package. |
+| `@amplitude/analytics-connector` | `^1.6.7` | Shared Analytics/Experiment identity bridge. |
+| `@amplitude/experiment-core` | `^0.13.5` | Experiment evaluation, transport, and storage contracts. |
+| `@amplitude/ua-parser-js` | `^0.7.33` | Web user-agent parsing. |
 
 `react-native-nitro-modules` (peer range `>=0.37.0 <0.38.0`) is the native
-ABI dependency and must move together with `nitrogen` 0.37.0 and this
-package's generated bindings; see the root `scripts/verify-core-versions.ts`
-for the recorded set.
+ABI dependency. Its development pin and `nitrogen` are both `0.37.1`;
+regenerate and verify bindings whenever those pins change.
 
 ## Enforcement
 
-`bun run verify:core-versions` fails the quality gate when any recorded
-Amplitude dependency spec in `packages/react-native-nitro-amplitude/package.json`
-drifts from the table above. A dependency upgrade is not release-ready until
-that check is updated in the same change and the package gate passes.
+`bun run verify:core-versions` checks the recorded manifest specs against
+`scripts/verify-core-versions.ts`. It does not prove runtime compatibility
+or require every member to change version in each release. Update the guard
+and this table together when a spec changes. Run the package quality gate
+and local platform smoke tests before declaring the dependency set ready.

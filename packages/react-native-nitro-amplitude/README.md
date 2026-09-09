@@ -4,8 +4,8 @@
 [![npm downloads](https://img.shields.io/npm/dm/react-native-nitro-amplitude?color=22c55e&label=downloads)](https://www.npmjs.com/package/react-native-nitro-amplitude)
 [![CI](https://github.com/JoaoPauloCMarra/react-native-nitro-amplitude/actions/workflows/ci.yml/badge.svg)](https://github.com/JoaoPauloCMarra/react-native-nitro-amplitude/actions/workflows/ci.yml)
 [![license](https://img.shields.io/npm/l/react-native-nitro-amplitude?color=007ec6)](https://github.com/JoaoPauloCMarra/react-native-nitro-amplitude/blob/main/LICENSE)
-[![React Native](https://img.shields.io/badge/react--native-0.86.2-61dafb)](https://reactnative.dev/docs/0.86/getting-started-without-a-framework)
-[![Expo](https://img.shields.io/badge/expo-SDK%2057%20%28RN%200.86.2%29-000020)](https://docs.expo.dev/versions/v57.0.0/)
+[![React Native](https://img.shields.io/badge/react--native-0.86.3-61dafb)](https://reactnative.dev/docs/0.86/getting-started-without-a-framework)
+[![Expo](https://img.shields.io/badge/expo-SDK%2057%20%28RN%200.86.3%29-000020)](https://docs.expo.dev/versions/v57.0.0/)
 [![Nitro Modules](https://img.shields.io/badge/nitro--modules-%3E%3D0.37.0%20%3C0.38.0-black)](https://nitro.margelo.com/)
 [![TypeScript](https://img.shields.io/badge/typescript-6.0-3178c6)](https://www.typescriptlang.org/)
 
@@ -24,19 +24,19 @@ bun add react-native-nitro-amplitude react-native-nitro-modules
 
 ## Requirements and compatibility
 
-Compatibility for `0.8.0`:
+Compatibility for `0.8.1`:
 
-| Dependency                   | Supported range    | `0.8.0` baseline                          |
+| Dependency                   | Supported range    | `0.8.1` baseline                          |
 | ---------------------------- | ------------------ | ----------------------------------------- |
 | `react`                      | `>=18.2.0`         | `19.2.3`                                  |
-| `react-native`               | `>=0.75.0`         | `0.86.2` package and Expo SDK 57 baseline |
-| `react-native-nitro-modules` | `>=0.37.0 <0.38.0` | `0.37.0`                                  |
-| Expo development builds      | SDK 57             | `~57.0.16`                                |
+| `react-native`               | `>=0.75.0`         | `0.86.3` package and Expo SDK 57 baseline |
+| `react-native-nitro-modules` | `>=0.37.0 <0.38.0` | `0.37.1`                                  |
+| Expo development builds      | SDK 57             | `~57.0.21`                                |
 
-The package gate and example use React Native `0.86.2` with the Strict
+The package gate and example use React Native `0.86.3` with the Strict
 TypeScript API. `check:ci` also compiles the public source against React Native
 `0.87.0`'s Strict TypeScript API; this is a declaration-compatibility check, not
-the runtime baseline. Expo SDK 57 manages React Native `0.86.2`; do not
+the runtime baseline. Expo SDK 57 manages React Native `0.86.3`; do not
 override it in an Expo app.
 
 ### Upgrade from 0.7.x and earlier
@@ -44,11 +44,11 @@ override it in an Expo app.
 The `0.8.x` line keeps the native peer boundary introduced in `0.7.0`:
 `react-native-nitro-amplitude` requires `react-native-nitro-modules`
 `>=0.37.0 <0.38.0`. Upgrade the Nitro package together with this package, then
-regenerate and rebuild native projects so the committed Nitro 0.37.0 bindings
+regenerate and rebuild native projects so the committed Nitro 0.37.1 bindings
 are compiled into the app:
 
 ```sh
-bun add react-native-nitro-amplitude@0.8.0 react-native-nitro-modules@0.37.0
+bun add react-native-nitro-amplitude@0.8.1 react-native-nitro-modules@0.37.1
 bunx expo prebuild
 ```
 
@@ -467,6 +467,21 @@ bun run example:ios
 
 Run native example builds locally before release when changing plugin, native,
 Nitro, or packaging files. GitHub CI does not build the Android or iOS example.
+
+For deterministic smoke checks, start Metro with `bun run example:start:fixture`
+in one terminal, launch the installed example, then run
+`bun run example:smoke:fixture` in another. The flow requires the rendered
+`dry-run fixture` marker before performing analytics actions; setting an
+environment variable only for Maestro does not change an existing bundle.
+
+The optional Agent Device E2E flows use the same fixture-only setup. With the
+installed example showing `dry-run fixture`, run
+`EXPO_PUBLIC_AMPLITUDE_DRY_RUN=1 bun run example:e2e:android` or
+`EXPO_PUBLIC_AMPLITUDE_DRY_RUN=1 bun run example:e2e:ios`.
+The flows open the guarded E2E route and check the marker before restarting
+the fixture and exercising its APIs. Unexpected health, transport, flush,
+or variant results fail the run. These flows do not validate live Amplitude
+credentials or production delivery.
 
 ## License
 

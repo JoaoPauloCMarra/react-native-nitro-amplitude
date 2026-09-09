@@ -19,6 +19,7 @@ import {
   createTimedHttpClient,
   DryRunTransport,
 } from "react-native-nitro-amplitude/network";
+import { E2eGate } from "../components/e2e-gate";
 import {
   Button,
   Card,
@@ -33,13 +34,13 @@ import {
 import { SmokeTestRunner } from "../components/smoke-test";
 import type { AmplitudeNetworkTiming } from "react-native-nitro-amplitude/network";
 
-const ANALYTICS_API_KEY = process.env.EXPO_PUBLIC_AMPLITUDE_API_KEY ?? "";
-const EXPERIMENT_API_KEY =
-  process.env.EXPO_PUBLIC_AMPLITUDE_EXPERIMENT_KEY &&
-  process.env.EXPO_PUBLIC_AMPLITUDE_EXPERIMENT_KEY.length > 0
-    ? process.env.EXPO_PUBLIC_AMPLITUDE_EXPERIMENT_KEY
-    : ANALYTICS_API_KEY;
 const DRY_RUN = process.env.EXPO_PUBLIC_AMPLITUDE_DRY_RUN === "1";
+const ANALYTICS_API_KEY = DRY_RUN
+  ? "nitro-amplitude-dry-run-analytics-key"
+  : (process.env.EXPO_PUBLIC_AMPLITUDE_API_KEY ?? "");
+const EXPERIMENT_API_KEY = DRY_RUN
+  ? "nitro-amplitude-dry-run-experiment-key"
+  : process.env.EXPO_PUBLIC_AMPLITUDE_EXPERIMENT_KEY || ANALYTICS_API_KEY;
 
 const fixtureHttpClient = {
   async request(requestUrl: string) {
@@ -217,6 +218,16 @@ export default function HomeScreen() {
       title="Nitro Amplitude"
       subtitle="Analytics + Experiment powered by Nitro C++"
     >
+      <E2eGate />
+      {DRY_RUN ? (
+        <Card title="Runtime Mode" indicatorColor={Colors.primary}>
+          <StatusRow
+            testID="runtime-mode"
+            label="Mode"
+            value="dry-run fixture"
+          />
+        </Card>
+      ) : null}
       <SmokeTestRunner />
 
       <Card title="Runtime Status" indicatorColor={Colors.primary}>

@@ -4,6 +4,17 @@ All notable changes to this project are documented in this file.
 
 The format follows Keep a Changelog and the project adheres to SemVer.
 
+## [0.8.2] - 2026-09-10
+
+### Breaking changes
+
+- None.
+
+### Fixed
+
+- iOS builds using static frameworks and source-built React Native now resolve
+  Folly and React Native headers when compiling the Nitro Swift/C++ bridge.
+
 ## [0.8.1] - 2026-09-09
 
 ### Breaking changes

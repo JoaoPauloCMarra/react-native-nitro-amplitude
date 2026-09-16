@@ -780,7 +780,11 @@ export class ExperimentClient implements Client {
       await this.storeVariants(variants, sequenceNumber, options);
       return variants;
     } catch (e: unknown) {
-      if (retry && this.shouldRetryFetch(e)) {
+      if (
+        retry &&
+        sequenceNumber === this.fetchSequenceNumber &&
+        this.shouldRetryFetch(e)
+      ) {
         this.startRetries(user, options);
       }
       throw e;

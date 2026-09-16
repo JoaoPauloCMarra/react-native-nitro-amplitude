@@ -6,6 +6,40 @@ jest.mock("../native/context", () => ({
 
 import { ExperimentClient } from "../experiment/experimentClient";
 
+test("a failed request cannot restart old-user retries after clear", async () => {
+  jest.useFakeTimers();
+  let rejectRequest: ((error: Error) => void) | undefined;
+  const request = jest.fn(
+    () =>
+      new Promise<{ status: number; body: string }>((_resolve, reject) => {
+        rejectRequest = reject;
+      }),
+  );
+  const client = new ExperimentClient("test-deployment-key", {
+    retryFetchOnFailure: true,
+    automaticExposureTracking: false,
+    fetchOnStart: false,
+    pollOnStart: false,
+    httpClient: { request },
+  });
+  try {
+    await client.cacheReady();
+    const fetch = client.fetchOrThrow({ user_id: "user-a" });
+    for (let step = 0; step < 20; step += 1) await Promise.resolve();
+    expect(rejectRequest).toBeDefined();
+    client.clear();
+    rejectRequest?.(new Error("offline"));
+    await expect(fetch).rejects.toThrow("offline");
+    jest.advanceTimersByTime(60_000);
+    for (let step = 0; step < 20; step += 1) await Promise.resolve();
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(client.hasCachedVariant("flag")).toBe(false);
+  } finally {
+    client.stop();
+    jest.useRealTimers();
+  }
+});
+
 test("a failed storage write does not block the next assignment", async () => {
   let writes = 0;
   let stored = "{}";

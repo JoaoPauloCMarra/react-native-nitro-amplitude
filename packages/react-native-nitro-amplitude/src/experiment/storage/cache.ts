@@ -131,6 +131,7 @@ export class LoadStoreCache<V> {
   private readonly storage: Storage;
   private readonly transformer?: (value: unknown) => V | undefined;
   private cache: Record<string, V> = {};
+  private pendingStore: Promise<void> = Promise.resolve();
 
   constructor(
     namespace: string,
@@ -218,7 +219,10 @@ export class LoadStoreCache<V> {
   }
 
   public async store(values: Record<string, V> = this.cache): Promise<void> {
-    await this.storage.put(this.namespace, JSON.stringify(values));
+    const serialized = JSON.stringify(values);
+    const write = () => this.storage.put(this.namespace, serialized);
+    this.pendingStore = this.pendingStore.then(write, write);
+    await this.pendingStore;
   }
 }
 

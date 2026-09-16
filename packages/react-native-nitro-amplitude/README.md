@@ -24,9 +24,9 @@ bun add react-native-nitro-amplitude react-native-nitro-modules
 
 ## Requirements and compatibility
 
-Compatibility for `0.8.2`:
+Compatibility for `0.8.3`:
 
-| Dependency                   | Supported range    | `0.8.2` baseline                          |
+| Dependency                   | Supported range    | `0.8.3` baseline                          |
 | ---------------------------- | ------------------ | ----------------------------------------- |
 | `react`                      | `>=18.2.0`         | `19.2.3`                                  |
 | `react-native`               | `>=0.75.0`         | `0.86.3` package and Expo SDK 57 baseline |
@@ -48,7 +48,7 @@ regenerate and rebuild native projects so the committed Nitro 0.37.1 bindings
 are compiled into the app:
 
 ```sh
-bun add react-native-nitro-amplitude@0.8.2 react-native-nitro-modules@0.37.1
+bun add react-native-nitro-amplitude@0.8.3 react-native-nitro-modules@0.37.1
 bunx expo prebuild
 ```
 
@@ -206,6 +206,12 @@ Compatibility import:
 ```ts
 import { Experiment } from "react-native-nitro-amplitude/experiment";
 ```
+
+Explicit user properties passed to `fetch` or `fetchOrThrow` take precedence
+over properties supplied by an analytics user provider. Call `setUser({})` and
+`clear()` on logout before fetching assignments for another account. Clearing
+invalidates outstanding fetches, stops retries, and orders the empty storage
+write after earlier writes; it does not cancel HTTP transport already in progress.
 
 ## Persistent Storage
 

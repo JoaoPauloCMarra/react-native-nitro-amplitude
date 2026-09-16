@@ -415,6 +415,9 @@ export class ExperimentClient implements Client {
    * Clear all variants in the cache and storage.
    */
   public clear(): void {
+    this.storedFetchSequenceNumber = ++this.fetchSequenceNumber;
+    this.inFlightFetches.clear();
+    this.stopRetries();
     this.variants.clear();
     void this.variants.store().catch((e) => this.logger.warn(e));
   }
@@ -813,7 +816,9 @@ export class ExperimentClient implements Client {
         throw error;
       })
       .finally(() => {
-        this.inFlightFetches.delete(key);
+        if (this.inFlightFetches.get(key) === fetch) {
+          this.inFlightFetches.delete(key);
+        }
       });
     this.inFlightFetches.set(key, fetch);
     return await fetch;
@@ -887,8 +892,8 @@ export class ExperimentClient implements Client {
     for (const key in failedFlagKeys) {
       this.variants.remove(key);
     }
-    await this.variants.store();
     this.storedFetchSequenceNumber = sequenceNumber;
+    await this.variants.store();
     this.logger.debug("[Experiment] Stored variants: ", variants);
   }
 
@@ -937,8 +942,8 @@ export class ExperimentClient implements Client {
     providedUser: ExperimentUser,
   ): ExperimentUser {
     const mergedUserProperties = {
-      ...user?.user_properties,
       ...providedUser?.user_properties,
+      ...user?.user_properties,
     };
     return {
       library: `experiment-nitro-ts/${PACKAGE_VERSION}`,

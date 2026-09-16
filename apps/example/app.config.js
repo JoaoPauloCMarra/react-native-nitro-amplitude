@@ -36,6 +36,9 @@ module.exports = {
         {
           "android": {
             "usePrecompiledHeaders": true
+          },
+          "ios": {
+            "enableSceneSupport": true
           }
         }
       ],

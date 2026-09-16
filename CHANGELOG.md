@@ -4,6 +4,19 @@ All notable changes to this project are documented in this file.
 
 The format follows Keep a Changelog and the project adheres to SemVer.
 
+## [0.8.3] - 2026-09-16
+
+### Breaking changes
+
+- None.
+
+### Fixed
+
+- Explicit experiment user properties now override stale analytics-provider properties.
+- Clearing experiment assignments invalidates outstanding fetches and retries without deduplicating or removing a newer request.
+- Assignment response ordering remains valid when clearing during a pending storage write.
+- Experiment cache writes remain ordered with asynchronous storage adapters, including clears after older writes and recovery after storage failures.
+
 ## [0.8.2] - 2026-09-10
 
 ### Breaking changes

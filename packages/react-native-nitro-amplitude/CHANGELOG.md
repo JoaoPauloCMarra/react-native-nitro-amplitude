@@ -13,7 +13,7 @@ The format follows Keep a Changelog and the project adheres to SemVer.
 ### Fixed
 
 - Explicit experiment user properties now override stale analytics-provider properties.
-- Clearing experiment assignments invalidates outstanding fetches and retries without deduplicating or removing a newer request.
+- Changing users or clearing experiment assignments invalidates outstanding fetches and retries without deduplicating or removing a newer request.
 - Assignment response ordering remains valid when clearing during a pending storage write.
 - Experiment cache writes remain ordered with asynchronous storage adapters, including clears after older writes and recovery after storage failures.
 

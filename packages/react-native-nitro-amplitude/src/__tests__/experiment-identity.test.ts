@@ -6,15 +6,25 @@ jest.mock("../native/context", () => ({
 
 import { ExperimentClient } from "../experiment/experimentClient";
 
-test("a failed request cannot restart old-user retries after clear", async () => {
+test("equivalent user maps preserve retries across partial fetches", async () => {
   jest.useFakeTimers();
-  let rejectRequest: ((error: Error) => void) | undefined;
-  const request = jest.fn(
-    () =>
-      new Promise<{ status: number; body: string }>((_resolve, reject) => {
-        rejectRequest = reject;
-      }),
-  );
+  let rejectFirst: ((error: Error) => void) | undefined;
+  const request = jest
+    .fn<Promise<{ status: number; body: string }>, []>()
+    .mockImplementationOnce(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectFirst = reject;
+        }),
+    )
+    .mockResolvedValueOnce({
+      status: 200,
+      body: '{"b":{"key":"on","value":"on"}}',
+    })
+    .mockResolvedValue({
+      status: 200,
+      body: '{"a":{"key":"on","value":"on"}}',
+    });
   const client = new ExperimentClient("test-deployment-key", {
     retryFetchOnFailure: true,
     automaticExposureTracking: false,
@@ -24,21 +34,66 @@ test("a failed request cannot restart old-user retries after clear", async () =>
   });
   try {
     await client.cacheReady();
-    const fetch = client.fetchOrThrow({ user_id: "user-a" });
+    const first = client.fetchOrThrow(
+      { user_id: "user-a", user_properties: { country: "US", email: "x" } },
+      { flagKeys: ["a"] },
+    );
     for (let step = 0; step < 20; step += 1) await Promise.resolve();
-    expect(rejectRequest).toBeDefined();
-    client.clear();
-    rejectRequest?.(new Error("offline"));
-    await expect(fetch).rejects.toThrow("offline");
+    expect(rejectFirst).toBeDefined();
+    await client.fetchOrThrow(
+      { user_properties: { email: "x", country: "US" }, user_id: "user-a" },
+      { flagKeys: ["b"] },
+    );
+    rejectFirst?.(new Error("offline"));
+    await expect(first).rejects.toThrow("offline");
     jest.advanceTimersByTime(60_000);
-    for (let step = 0; step < 20; step += 1) await Promise.resolve();
-    expect(request).toHaveBeenCalledTimes(1);
-    expect(client.hasCachedVariant("flag")).toBe(false);
+    for (let step = 0; step < 40; step += 1) await Promise.resolve();
+    expect(request).toHaveBeenCalledTimes(3);
+    expect(client.variant("a").value).toBe("on");
+    expect(client.variant("b").value).toBe("on");
   } finally {
     client.stop();
     jest.useRealTimers();
   }
 });
+
+test.each(["clear", "user change"])(
+  "a failed request cannot restart old-user retries after %s",
+  async (action) => {
+    jest.useFakeTimers();
+    let rejectRequest: ((error: Error) => void) | undefined;
+    const request = jest.fn(
+      () =>
+        new Promise<{ status: number; body: string }>((_resolve, reject) => {
+          rejectRequest = reject;
+        }),
+    );
+    const client = new ExperimentClient("test-deployment-key", {
+      retryFetchOnFailure: true,
+      automaticExposureTracking: false,
+      fetchOnStart: false,
+      pollOnStart: false,
+      httpClient: { request },
+    });
+    try {
+      await client.cacheReady();
+      const fetch = client.fetchOrThrow({ user_id: "user-a" });
+      for (let step = 0; step < 20; step += 1) await Promise.resolve();
+      expect(rejectRequest).toBeDefined();
+      if (action === "clear") client.clear();
+      else client.setUser({ user_id: "user-b" });
+      rejectRequest?.(new Error("offline"));
+      await expect(fetch).rejects.toThrow("offline");
+      jest.advanceTimersByTime(60_000);
+      for (let step = 0; step < 20; step += 1) await Promise.resolve();
+      expect(request).toHaveBeenCalledTimes(1);
+      expect(client.hasCachedVariant("flag")).toBe(false);
+    } finally {
+      client.stop();
+      jest.useRealTimers();
+    }
+  },
+);
 
 test("a failed storage write does not block the next assignment", async () => {
   let writes = 0;
@@ -160,41 +215,45 @@ test("explicit current-user properties win over stale analytics context", async 
   }
 });
 
-test("clearing assignments fences an outstanding response", async () => {
-  let finish:
-    ((response: { status: number; body: string }) => void) | undefined;
-  const client = new ExperimentClient("test-deployment-key", {
-    retryFetchOnFailure: false,
-    automaticExposureTracking: false,
-    fetchOnStart: false,
-    pollOnStart: false,
-    httpClient: {
-      request: () =>
-        new Promise((resolve) => {
-          finish = resolve;
-        }),
-    },
-  });
-  try {
-    await client.cacheReady();
-    const request = client.fetchOrThrow({ user_id: "user-a" });
-    for (let step = 0; step < 20; step += 1) await Promise.resolve();
-    expect(finish).toBeDefined();
-    client.clear();
-    finish?.({
-      status: 200,
-      body: JSON.stringify({
-        "enable-balance-assessment": { key: "on", value: "on" },
-      }),
+test.each(["clear", "user change"])(
+  "%s fences an outstanding response",
+  async (action) => {
+    let finish:
+      ((response: { status: number; body: string }) => void) | undefined;
+    const client = new ExperimentClient("test-deployment-key", {
+      retryFetchOnFailure: false,
+      automaticExposureTracking: false,
+      fetchOnStart: false,
+      pollOnStart: false,
+      httpClient: {
+        request: () =>
+          new Promise((resolve) => {
+            finish = resolve;
+          }),
+      },
     });
-    await request;
-    expect(client.variant("enable-balance-assessment", "off").value).toBe(
-      "off",
-    );
-  } finally {
-    client.stop();
-  }
-});
+    try {
+      await client.cacheReady();
+      const request = client.fetchOrThrow({ user_id: "user-a" });
+      for (let step = 0; step < 20; step += 1) await Promise.resolve();
+      expect(finish).toBeDefined();
+      if (action === "clear") client.clear();
+      else client.setUser({ user_id: "user-b" });
+      finish?.({
+        status: 200,
+        body: JSON.stringify({
+          "enable-balance-assessment": { key: "on", value: "on" },
+        }),
+      });
+      await request;
+      expect(client.variant("enable-balance-assessment", "off").value).toBe(
+        "off",
+      );
+    } finally {
+      client.stop();
+    }
+  },
+);
 
 test("a cleared request cannot replace or deduplicate the next identity request", async () => {
   const pending: ((response: { status: number; body: string }) => void)[] = [];
@@ -257,11 +316,17 @@ test("clearing during storage prevents earlier responses from restoring assignme
   });
   try {
     await client.cacheReady();
-    const first = client.fetchOrThrow({ user_id: "user-a" });
-    const second = client.fetchOrThrow({ user_id: "user-b" });
+    const first = client.fetchOrThrow(
+      { user_id: "user-a" },
+      { flagKeys: ["first"] },
+    );
+    const second = client.fetchOrThrow(
+      { user_id: "user-a" },
+      { flagKeys: ["flag"] },
+    );
     for (let step = 0; step < 20; step += 1) await Promise.resolve();
     expect(pending).toHaveLength(2);
-    pending[0]?.({ status: 200, body: '{"flag":{"key":"on","value":"on"}}' });
+    pending[0]?.({ status: 200, body: '{"first":{"key":"on","value":"on"}}' });
     for (let step = 0; step < 20; step += 1) await Promise.resolve();
     expect(finishStorage).toBeDefined();
     client.clear();

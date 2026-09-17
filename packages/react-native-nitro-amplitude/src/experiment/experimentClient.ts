@@ -60,6 +60,20 @@ const fetchBackoffMaxMillis = 10000;
 const fetchBackoffScalar = 1.5;
 const flagPollerIntervalMillis = 60000;
 
+function serializeUser(user: ExperimentUser): string {
+  return JSON.stringify(user, (_key, value: unknown) => {
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      const record = value as Record<string, unknown>;
+      return Object.fromEntries(
+        Object.keys(record)
+          .sort()
+          .map((key) => [key, record[key]]),
+      );
+    }
+    return value;
+  });
+}
+
 /**
  * The default {@link Client} used to fetch variations from Experiment's
  * servers.
@@ -89,6 +103,7 @@ export class ExperimentClient implements Client {
   private readonly initialFlags: EvaluationFlag[] | undefined;
   private fetchSequenceNumber = 0;
   private storedFetchSequenceNumber = 0;
+  private fetchGeneration = 0;
   private readonly fetchVariantsOptions: SingleValueStoreCache<GetVariantsOptions>;
   private readonly stopCallbacks = new Set<() => void>();
   private readonly inFlightFetches = new Map<string, Promise<Variants>>();
@@ -415,9 +430,7 @@ export class ExperimentClient implements Client {
    * Clear all variants in the cache and storage.
    */
   public clear(): void {
-    this.storedFetchSequenceNumber = ++this.fetchSequenceNumber;
-    this.inFlightFetches.clear();
-    this.stopRetries();
+    this.invalidateFetches();
     this.variants.clear();
     void this.variants.store().catch((e) => this.logger.warn(e));
   }
@@ -457,16 +470,16 @@ export class ExperimentClient implements Client {
    * @param user the user to set within the experiment client.
    */
   public setUser(user: ExperimentUser): void {
-    if (!user) {
-      this.user = {};
-      return;
+    const nextUser = {
+      ...user,
+      ...(user?.user_properties
+        ? { user_properties: { ...user.user_properties } }
+        : {}),
+    };
+    if (serializeUser(this.user) !== serializeUser(nextUser)) {
+      this.invalidateFetches();
     }
-    if (this.user?.user_properties) {
-      const userPropertiesCopy = { ...user.user_properties };
-      this.user = { ...user, user_properties: userPropertiesCopy };
-    } else {
-      this.user = { ...user };
-    }
+    this.user = nextUser;
   }
 
   /**
@@ -754,6 +767,13 @@ export class ExperimentClient implements Client {
     return defaultSourceVariant;
   }
 
+  private invalidateFetches(): void {
+    this.fetchGeneration += 1;
+    this.storedFetchSequenceNumber = ++this.fetchSequenceNumber;
+    this.inFlightFetches.clear();
+    this.stopRetries();
+  }
+
   private async fetchInternal(
     user: ExperimentUser,
     timeoutMillis: number,
@@ -773,6 +793,7 @@ export class ExperimentClient implements Client {
       this.stopRetries();
     }
 
+    const generation = this.fetchGeneration;
     const sequenceNumber = ++this.fetchSequenceNumber;
 
     try {
@@ -782,7 +803,7 @@ export class ExperimentClient implements Client {
     } catch (e: unknown) {
       if (
         retry &&
-        sequenceNumber === this.fetchSequenceNumber &&
+        generation === this.fetchGeneration &&
         this.shouldRetryFetch(e)
       ) {
         this.startRetries(user, options);

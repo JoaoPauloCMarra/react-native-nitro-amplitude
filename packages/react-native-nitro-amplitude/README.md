@@ -208,7 +208,9 @@ import { Experiment } from "react-native-nitro-amplitude/experiment";
 ```
 
 Explicit user properties passed to `fetch` or `fetchOrThrow` take precedence
-over properties supplied by an analytics user provider. Call `setUser({})` and
+over properties supplied by an analytics user provider. Changing the explicit
+user invalidates outstanding fetches and retries for the previous user. Separate
+flag-key fetches for the same user can still retry. Call `setUser({})` and
 `clear()` on logout before fetching assignments for another account. Clearing
 invalidates outstanding fetches, stops retries, and orders the empty storage
 write after earlier writes; it does not cancel HTTP transport already in progress.

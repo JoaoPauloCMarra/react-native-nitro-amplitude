@@ -4,6 +4,22 @@ All notable changes to this project are documented in this file.
 
 The format follows Keep a Changelog and the project adheres to SemVer.
 
+## [0.8.4] - 2026-09-18
+
+### Breaking changes
+
+- None.
+
+### Added
+
+- Hidden example identity lab at `nitroamplitude://e2e-identity` for dry-run
+  `reset` / `identify` / `setUserId` coverage.
+
+### Changed
+
+- The example Expo pin follows SDK 57.0.24 (`expo-doctor` / `expo install --check`).
+  React Native stays `0.86.3`.
+
 ## [0.8.3] - 2026-09-16
 
 ### Breaking changes

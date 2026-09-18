@@ -1,7 +1,33 @@
-import { View } from "react-native";
+import { Pressable, Text, View } from "react-native";
+import { Link, type Href } from "expo-router";
 import { AmplitudeE2eLab } from "../components/e2e-lab";
-import { Page, StatusRow } from "../components/shared";
+import { Colors, Page, StatusRow } from "../components/shared";
 import { SmokeTestRunner } from "../components/smoke-test";
+
+function LabLink({
+  href,
+  testID,
+  label,
+}: {
+  href: string;
+  testID: string;
+  label: string;
+}) {
+  return (
+    <Link href={href as Href} asChild>
+      <Pressable
+        testID={testID}
+        accessibilityRole="link"
+        accessibilityLabel={label}
+        style={{ paddingVertical: 8 }}
+      >
+        <Text style={{ color: Colors.primary, fontWeight: "600" }}>
+          {label}
+        </Text>
+      </Pressable>
+    </Link>
+  );
+}
 
 export default function AmplitudeE2eScreen() {
   if (process.env.EXPO_PUBLIC_AMPLITUDE_DRY_RUN !== "1") {
@@ -24,6 +50,11 @@ export default function AmplitudeE2eScreen() {
           testID="e2e-deeplink"
           label="link"
           value="nitroamplitude://e2e"
+        />
+        <LabLink
+          href="/e2e-identity"
+          testID="open-e2e-identity"
+          label="Identity lab"
         />
         <AmplitudeE2eLab />
         <SmokeTestRunner />

@@ -31,7 +31,7 @@ Compatibility for `0.8.3`:
 | `react`                      | `>=18.2.0`         | `19.2.3`                                  |
 | `react-native`               | `>=0.75.0`         | `0.86.3` package and Expo SDK 57 baseline |
 | `react-native-nitro-modules` | `>=0.37.0 <0.38.0` | `0.37.1`                                  |
-| Expo development builds      | SDK 57             | `~57.0.21`                                |
+| Expo development builds      | SDK 57             | `~57.0.24`                                |
 
 The package gate and example use React Native `0.86.3` with the Strict
 TypeScript API. `check:ci` also compiles the public source against React Native

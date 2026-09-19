@@ -61,6 +61,8 @@ projects; apps must not call `setContext` manually.
 - `bun run check` (lint, format, typecheck, test:types, test, test:cpp)
 - `bun run release:preflight` (+ benchmark, example checks, pack audit)
 - Example prebuild + Android/iOS launch when native code changes
+- PR body is the current version's CHANGELOG section. The GitHub release
+  description must match it. Do not add Summary, Test plan, or extra sections.
 
 ## Known gaps
 

@@ -43,6 +43,8 @@ private:
   void SetLocked(const std::string& key, const std::string& value);
   void RotateIfNeeded(uint64_t lineLength);
   bool CompactSegment(uint32_t segment);
+  void MaybeCompact(uint32_t segment);
+  bool AppendTombstoneLocked(const std::string& key);
   std::string SegmentPath(uint32_t segment) const;
 
   std::shared_ptr<FileAdapter> fileAdapter_;

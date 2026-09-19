@@ -291,7 +291,8 @@ subpath and remain available from the root for compatibility.
   failing module does not hide the others.
 - `workerMetrics`: current `queueSize`, `inFlightCount`, and
   `pendingBodyBytes` from the native HTTP worker (bounded queue of 100
-  requests, 2 concurrent workers).
+  requests, 2 concurrent workers). POST/PUT bodies of at least 1 KiB to
+  `*.amplitude.com` are gzip-compressed on the worker thread.
 - `networkTimings`: the bounded list of recent analytics and experiment
   request timings.
 - Flush and fetch metadata plus `diagnosticFailures`.
@@ -413,6 +414,8 @@ Native HybridObject types:
 - [API reference](docs/api-reference.md) — public exports and behavior.
 - [Dependency policy](docs/dependency-policy.md) — supported Nitro, React
   Native, and Expo compatibility boundaries.
+- [Native libraries](docs/native-libraries.md) — gzip transport and JSONL
+  tombstones; rejected encode/queue replacements.
 - [Benchmark methodology](docs/benchmarks.md) — isolated local transport gate
   and its limits.
 

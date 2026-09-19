@@ -66,6 +66,7 @@ projects; apps must not call `setContext` manually.
 
 - Legacy Amplitude SDK SQLite migration was removed; the package does not
   import data written by the legacy Amplitude SDK.
+- Default Amplitude HTTP endpoints gzip JSON bodies ≥ 1 KiB (`Content-Encoding: gzip`). Custom `serverUrl` hosts stay uncompressed. JSONL deletes use tombstones; see `docs/native-libraries.md`.
 - Web uses browser fetch and storage fallbacks without native Nitro bindings.
 - Smoke flows run deterministically in dry-run fixture mode; real-network
   example flows require keys from `apps/example/.env.local`.

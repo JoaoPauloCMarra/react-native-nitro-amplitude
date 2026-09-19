@@ -105,6 +105,7 @@ const contextSource = path.join(cppDir, "bindings", "HybridAmplitudeContext.cpp"
 const storageSource = path.join(cppDir, "bindings", "HybridAmplitudeStorage.cpp");
 const workerSource = path.join(cppDir, "bindings", "HybridAmplitudeWorker.cpp");
 const segmentStoreSource = path.join(cppDir, "core", "JsonlSegmentStore.cpp");
+const gzipSource = path.join(cppDir, "core", "Gzip.cpp");
 const contextSpec = path.join(generatedDir, "HybridAmplitudeContextSpec.cpp");
 const storageSpec = path.join(generatedDir, "HybridAmplitudeStorageSpec.cpp");
 const workerSpec = path.join(generatedDir, "HybridAmplitudeWorkerSpec.cpp");
@@ -254,11 +255,13 @@ try {
     storageSource,
     workerSource,
     segmentStoreSource,
+    gzipSource,
     contextSpec,
     storageSpec,
     workerSpec,
     "-o",
     outputFile,
+    "-lz",
     ...linkFlags,
   ]);
 

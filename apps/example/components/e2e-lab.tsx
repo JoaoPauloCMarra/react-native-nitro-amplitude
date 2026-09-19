@@ -36,7 +36,10 @@ const DEMO_FLAG_BODY = JSON.stringify({
 
 const fixtureHttpClient = {
   async request(requestUrl: string) {
-    if (requestUrl.includes("/sdk/v2/flags") && !requestUrl.includes("vardata")) {
+    if (
+      requestUrl.includes("/sdk/v2/flags") &&
+      !requestUrl.includes("vardata")
+    ) {
       return { status: 200, body: "[]" };
     }
     return { status: 200, body: DEMO_FLAG_BODY };

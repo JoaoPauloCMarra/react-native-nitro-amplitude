@@ -61,11 +61,14 @@ projects; apps must not call `setContext` manually.
 - `bun run check` (lint, format, typecheck, test:types, test, test:cpp)
 - `bun run release:preflight` (+ benchmark, example checks, pack audit)
 - Example prebuild + Android/iOS launch when native code changes
+- PR body is the current version's CHANGELOG section. The GitHub release
+  description must match it. Do not add Summary, Test plan, or extra sections.
 
 ## Known gaps
 
 - Legacy Amplitude SDK SQLite migration was removed; the package does not
   import data written by the legacy Amplitude SDK.
+- Default Amplitude HTTP endpoints gzip JSON bodies ≥ 1 KiB (`Content-Encoding: gzip`). Custom `serverUrl` hosts stay uncompressed. JSONL deletes use tombstones; see `docs/native-libraries.md`.
 - Web uses browser fetch and storage fallbacks without native Nitro bindings.
 - Smoke flows run deterministically in dry-run fixture mode; real-network
   example flows require keys from `apps/example/.env.local`.

@@ -11,6 +11,7 @@ namespace {
 
 constexpr char kSegmentPrefix[] = "segment-";
 constexpr char kSegmentSuffix[] = ".jsonl";
+constexpr char kTombstoneKey[] = "\x7f" "DEL";
 
 void EscapeInto(const std::string& value, std::string& out) {
   out.reserve(out.size() + value.size());
@@ -130,7 +131,11 @@ void JsonlSegmentStore::Load() {
       if (tab != std::string::npos && tab < newline &&
           UnescapeInto(content.value().substr(offset, tab - offset), key) &&
           UnescapeInto(content.value().substr(tab + 1, newline - tab - 1), value)) {
-        index_[key] = Entry{id, static_cast<uint64_t>(offset), static_cast<uint32_t>(length)};
+        if (key == kTombstoneKey) {
+          index_.erase(value);
+        } else {
+          index_[key] = Entry{id, static_cast<uint64_t>(offset), static_cast<uint32_t>(length)};
+        }
       }
       offset = newline + 1;
     }
@@ -173,7 +178,7 @@ void JsonlSegmentStore::SetLocked(const std::string& key, const std::string& val
     segmentDeadBytes_[previousSegment] += existing->second.length;
     index_.erase(existing);
     if (previousSegment != activeSegment_) {
-      CompactSegment(previousSegment);
+      MaybeCompact(previousSegment);
     }
   }
 
@@ -201,6 +206,30 @@ void JsonlSegmentStore::RotateIfNeeded(uint64_t lineLength) {
   activeSegment_ += 1;
   segmentBytes_[activeSegment_] = 0;
   segmentDeadBytes_[activeSegment_] = 0;
+}
+
+void JsonlSegmentStore::MaybeCompact(uint32_t segment) {
+  const uint64_t bytes = segmentBytes_[segment];
+  const uint64_t dead = segmentDeadBytes_[segment];
+  if (bytes == 0 || dead * 2 < bytes) {
+    return;
+  }
+  CompactSegment(segment);
+}
+
+bool JsonlSegmentStore::AppendTombstoneLocked(const std::string& key) {
+  std::string line;
+  EscapeInto(kTombstoneKey, line);
+  line += '\t';
+  EscapeInto(key, line);
+  line += '\n';
+  RotateIfNeeded(line.size());
+  if (!fileAdapter_->appendFile(SegmentPath(activeSegment_), line)) {
+    return false;
+  }
+  segmentBytes_[activeSegment_] += line.size();
+  segmentDeadBytes_[activeSegment_] += line.size();
+  return true;
 }
 
 bool JsonlSegmentStore::CompactSegment(uint32_t segment) {
@@ -286,11 +315,12 @@ void JsonlSegmentStore::deleteDisk(const std::string& key) {
     return;
   }
   const Entry deletedEntry = it->second;
-  const uint32_t segment = it->second.segment;
-  index_.erase(it);
-  if (!CompactSegment(segment)) {
-    index_[key] = deletedEntry;
+  if (!AppendTombstoneLocked(key)) {
+    return;
   }
+  index_.erase(key);
+  segmentDeadBytes_[deletedEntry.segment] += deletedEntry.length;
+  MaybeCompact(deletedEntry.segment);
 }
 
 bool JsonlSegmentStore::hasDisk(const std::string& key) {

@@ -4,6 +4,28 @@ All notable changes to this project are documented in this file.
 
 The format follows Keep a Changelog and the project adheres to SemVer.
 
+## [0.8.4] - 2026-09-18
+
+### Breaking changes
+
+- None.
+
+### Added
+
+- Hidden example identity lab at `nitroamplitude://e2e-identity` for dry-run
+  `reset` / `identify` / `setUserId` coverage.
+
+### Changed
+
+- The example Expo pin follows SDK 57.0.24 (`expo-doctor` / `expo install --check`).
+  React Native stays `0.86.3`.
+- The example iOS host uses a `SceneDelegate` so the app can present a window on
+  iOS 27 physical devices.
+- Native HTTP worker gzips JSON bodies ≥ 1 KiB to `*.amplitude.com` with
+  `Content-Encoding: gzip`. JSONL deletes append tombstones and compact only
+  when a segment is more than 50% dead. See
+  [docs/native-libraries.md](../../docs/native-libraries.md).
+
 ## [0.8.3] - 2026-09-16
 
 ### Breaking changes

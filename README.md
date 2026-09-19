@@ -24,14 +24,14 @@ bun add react-native-nitro-amplitude react-native-nitro-modules
 
 ## Requirements and compatibility
 
-Compatibility for `0.8.3`:
+Compatibility for `0.8.4`:
 
-| Dependency                   | Supported range    | `0.8.3` baseline                          |
+| Dependency                   | Supported range    | `0.8.4` baseline                          |
 | ---------------------------- | ------------------ | ----------------------------------------- |
 | `react`                      | `>=18.2.0`         | `19.2.3`                                  |
 | `react-native`               | `>=0.75.0`         | `0.86.3` package and Expo SDK 57 baseline |
 | `react-native-nitro-modules` | `>=0.37.0 <0.38.0` | `0.37.1`                                  |
-| Expo development builds      | SDK 57             | `~57.0.21`                                |
+| Expo development builds      | SDK 57             | `~57.0.24`                                |
 
 The package gate and example use React Native `0.86.3` with the Strict
 TypeScript API. `check:ci` also compiles the public source against React Native
@@ -48,7 +48,7 @@ regenerate and rebuild native projects so the committed Nitro 0.37.1 bindings
 are compiled into the app:
 
 ```sh
-bun add react-native-nitro-amplitude@0.8.3 react-native-nitro-modules@0.37.1
+bun add react-native-nitro-amplitude@0.8.4 react-native-nitro-modules@0.37.1
 bunx expo prebuild
 ```
 
@@ -291,7 +291,8 @@ subpath and remain available from the root for compatibility.
   failing module does not hide the others.
 - `workerMetrics`: current `queueSize`, `inFlightCount`, and
   `pendingBodyBytes` from the native HTTP worker (bounded queue of 100
-  requests, 2 concurrent workers).
+  requests, 2 concurrent workers). POST/PUT bodies of at least 1 KiB to
+  `*.amplitude.com` are gzip-compressed on the worker thread.
 - `networkTimings`: the bounded list of recent analytics and experiment
   request timings.
 - Flush and fetch metadata plus `diagnosticFailures`.
@@ -413,6 +414,8 @@ Native HybridObject types:
 - [API reference](docs/api-reference.md) — public exports and behavior.
 - [Dependency policy](docs/dependency-policy.md) — supported Nitro, React
   Native, and Expo compatibility boundaries.
+- [Native libraries](docs/native-libraries.md) — gzip transport and JSONL
+  tombstones; rejected encode/queue replacements.
 - [Benchmark methodology](docs/benchmarks.md) — isolated local transport gate
   and its limits.
 

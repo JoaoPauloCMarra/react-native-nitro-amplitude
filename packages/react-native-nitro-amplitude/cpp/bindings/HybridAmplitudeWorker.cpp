@@ -1,5 +1,6 @@
 #include "HybridAmplitudeWorker.hpp"
 
+#include "../core/Gzip.hpp"
 #include "../core/PlatformAdapterFactory.hpp"
 
 #include <algorithm>
@@ -187,30 +188,43 @@ void HybridAmplitudeWorker::workerLoop() {
       if (!adapter_) {
         result.error = "Native adapter unavailable";
       } else {
+        std::unordered_map<std::string, std::string> headers = request.headers;
+        std::string body = request.body;
+        if (::NitroAmplitude::shouldGzipAmplitudeRequest(
+                request.url,
+                request.method,
+                headers,
+                body
+            )) {
+          if (auto compressed = ::NitroAmplitude::gzipCompress(body)) {
+            body = std::move(*compressed);
+            headers["Content-Encoding"] = "gzip";
+          }
+        }
 #ifndef NITRO_AMPLITUDE_DISABLE_PLATFORM_ADAPTER
 #if __ANDROID__
-        facebook::jni::ThreadScope::WithClassLoader([&request, this, &result]() {
+        facebook::jni::ThreadScope::WithClassLoader([&request, &headers, &body, this, &result]() {
               result = adapter_->performHttpRequest(
                   request.url,
                   request.method,
-                  request.headers,
-                  request.body,
+                  headers,
+                  body,
                   request.timeoutMillis);
         });
 #else
         result = adapter_->performHttpRequest(
             request.url,
             request.method,
-            request.headers,
-            request.body,
+            headers,
+            body,
             request.timeoutMillis);
 #endif
 #else
         result = adapter_->performHttpRequest(
             request.url,
             request.method,
-            request.headers,
-            request.body,
+            headers,
+            body,
             request.timeoutMillis);
 #endif
       }

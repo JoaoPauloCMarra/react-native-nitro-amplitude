@@ -32,6 +32,9 @@ before tearing the client down; events tracked after shutdown are not sent.
 
 ## Diagnostics
 
+Native HTTP POSTs/PUTs of at least 1 KiB to `*.amplitude.com` send
+`Content-Encoding: gzip`. Custom server URLs stay uncompressed.
+
 - `getDiagnostics()` — analytics state plus native readiness per capability
   (`contextAvailable`, `storageAvailable`, `workerAvailable`,
   `nativeAvailable`), `networkEnabled`, `diagnosticFailures`, bounded

@@ -7,6 +7,7 @@
 #include "../../cpp/core/ContextAdapter.hpp"
 #include "../../cpp/core/FileAdapter.hpp"
 #include "../../cpp/core/HttpAdapter.hpp"
+#include "../../cpp/core/Gzip.hpp"
 #include "../../cpp/core/JsonlSegmentStore.hpp"
 #include "../../cpp/core/StorageAdapter.hpp"
 
@@ -394,7 +395,7 @@ void testSegmentStoreCompactionWriteFailurePreservesData() {
   store.setDisk("keep", "keep-value");
   store.setDisk("remove", "remove-value");
 
-  files->failWrites = true;
+  files->failAppends = true;
   store.deleteDisk("remove");
 
   assert(store.hasDisk("remove"));
@@ -405,7 +406,7 @@ void testSegmentStoreCompactionWriteFailurePreservesData() {
   assert(afterFailedDelete.hasDisk("remove"));
   assert(afterFailedDelete.getDisk("remove").value_or("") == "remove-value");
 
-  files->failWrites = false;
+  files->failAppends = false;
   store.deleteDisk("remove");
 
   assert(!store.hasDisk("remove"));
@@ -911,6 +912,53 @@ void testWorkerQueueSizeMetrics() {
   assert(waitUntil([&]() { return worker->pendingBodyBytes() == 0 && worker->inFlightCount() == 0; }));
 }
 
+void testGzipAmplitudePayloads() {
+  const std::string large(2048, 'a');
+  assert(!::NitroAmplitude::shouldGzipAmplitudeRequest(
+      "https://example.com",
+      "POST",
+      {},
+      large));
+  assert(!::NitroAmplitude::shouldGzipAmplitudeRequest(
+      "https://api2.amplitude.com/2/httpapi",
+      "GET",
+      {},
+      large));
+  assert(!::NitroAmplitude::shouldGzipAmplitudeRequest(
+      "https://api2.amplitude.com/2/httpapi",
+      "POST",
+      {},
+      "tiny"));
+  assert(::NitroAmplitude::shouldGzipAmplitudeRequest(
+      "https://api2.amplitude.com/2/httpapi",
+      "POST",
+      {},
+      large));
+  std::unordered_map<std::string, std::string> encoded{{"Content-Encoding", "br"}};
+  assert(!::NitroAmplitude::shouldGzipAmplitudeRequest(
+      "https://api2.amplitude.com/2/httpapi",
+      "POST",
+      encoded,
+      large));
+  const auto compressed = ::NitroAmplitude::gzipCompress(large);
+  assert(compressed.has_value());
+  assert(compressed->size() < large.size());
+}
+
+void testSegmentStoreTombstoneReload() {
+  auto files = std::make_shared<FakeFileAdapter>();
+  {
+    JsonlSegmentStore store(files, "tombstone", 4096);
+    store.setDisk("keep", "keep-value");
+    store.setDisk("remove", "remove-value");
+    store.deleteDisk("remove");
+    assert(!store.hasDisk("remove"));
+  }
+  JsonlSegmentStore reloaded(files, "tombstone", 4096);
+  assert(!reloaded.hasDisk("remove"));
+  assert(reloaded.getDisk("keep").value_or("") == "keep-value");
+}
+
 int main() {
   testStorage();
   testStorageAdapterContract();
@@ -922,6 +970,8 @@ int main() {
   testSegmentStoreEscapingRoundTrip();
   testSegmentStoreMigration();
   testSegmentStoreWriteFailure();
+  testSegmentStoreTombstoneReload();
+  testGzipAmplitudePayloads();
   testContextFallbacks();
   testContextAdapterContract();
   testWorkerFallbacks();

@@ -30,6 +30,8 @@ Pod::Spec.new do |s|
     ].join(" ")
   }
 
+  s.libraries = "z"
+
   s.dependency "React-Core"
   
   load 'nitrogen/generated/ios/NitroAmplitude+autolinking.rb'

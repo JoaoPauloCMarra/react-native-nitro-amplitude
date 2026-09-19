@@ -30,15 +30,19 @@ const DRY_RUN = process.env.EXPO_PUBLIC_AMPLITUDE_DRY_RUN === "1";
 const ANALYTICS_API_KEY = "nitro-amplitude-dry-run-analytics-key";
 const EXPERIMENT_API_KEY = "nitro-amplitude-dry-run-experiment-key";
 
+const DEMO_FLAG_BODY = JSON.stringify({
+  "demo-flag": { key: "on", value: "on" },
+});
+
 const fixtureHttpClient = {
   async request(requestUrl: string) {
-    if (requestUrl.includes("/sdk/v2/flags")) {
+    if (
+      requestUrl.includes("/sdk/v2/flags") &&
+      !requestUrl.includes("vardata")
+    ) {
       return { status: 200, body: "[]" };
     }
-    return {
-      status: 200,
-      body: JSON.stringify({ "demo-flag": { key: "on", value: "on" } }),
-    };
+    return { status: 200, body: DEMO_FLAG_BODY };
   },
 };
 
@@ -298,16 +302,23 @@ export function AmplitudeE2eLab() {
                 .then((result) => {
                   const resolved =
                     experimentClient.variantWithMetadata("demo-flag");
-                  setVariantStatus(
+                  const value = resolved.variant?.value;
+                  if (
                     result.fetched &&
-                      result.flagKeys.includes("demo-flag") &&
-                      resolved.variant?.value === "on"
-                      ? "ok:flag=on"
-                      : "fail:flag",
+                    result.flagKeys.includes("demo-flag") &&
+                    value === "on"
+                  ) {
+                    setVariantStatus("ok:flag=on");
+                    return;
+                  }
+                  setVariantStatus(
+                    `fail:flag:fetched=${result.fetched}:keys=${result.flagKeys.join(",") || "none"}:value=${String(value ?? "undef")}:reason=${result.failureReason?.slice(0, 40) ?? "none"}`,
                   );
                 })
-                .catch(() => {
-                  setVariantStatus("fail:flag");
+                .catch((error: unknown) => {
+                  setVariantStatus(
+                    `fail:flag=${error instanceof Error ? error.message.slice(0, 40) : "error"}`,
+                  );
                 });
             }}
             style={styles.flex1}

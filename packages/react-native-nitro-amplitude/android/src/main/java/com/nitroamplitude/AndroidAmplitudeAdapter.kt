@@ -137,7 +137,7 @@ object AndroidAmplitudeAdapter {
     method: String,
     headerNames: Array<String>,
     headerValues: Array<String>,
-    body: String,
+    body: ByteArray,
     timeoutMillis: Int,
   ): Array<String> {
     val boundedTimeoutMillis = timeoutMillis.coerceIn(1, MAX_HTTP_TIMEOUT_MILLIS)
@@ -166,7 +166,7 @@ object AndroidAmplitudeAdapter {
 
     return try {
       if (body.isNotEmpty()) {
-        connection.outputStream.use { stream -> stream.write(body.toByteArray()) }
+        connection.outputStream.use { stream -> stream.write(body) }
       }
       val status = connection.responseCode
       val stream = if (status >= 400) connection.errorStream else connection.inputStream

@@ -82,7 +82,7 @@
     "react-dom": "19.2.3",
     "react-native": "0.86.3",
     "react-native-nitro-modules": "0.37.1",
-    "expo": "~57.0.24",
+    "expo": "~57.0.25",
     "expo-asset": "~57.0.18",
     "expo-constants": "~57.0.19",
     "@types/react": "~19.2.18"

@@ -4,6 +4,17 @@ All notable changes to this project are documented in this file.
 
 The format follows Keep a Changelog and the project adheres to SemVer.
 
+## [0.8.5] - 2026-09-24
+
+### Breaking changes
+
+- None.
+
+### Fixed
+
+- Android sends gzipped Amplitude request bodies through JNI as bytes, preserving
+  the compressed payload and avoiding a native crash when sending larger events.
+
 ## [0.8.4] - 2026-09-18
 
 ### Breaking changes

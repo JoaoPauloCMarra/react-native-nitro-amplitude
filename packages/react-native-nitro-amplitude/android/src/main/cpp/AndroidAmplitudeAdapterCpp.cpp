@@ -123,9 +123,9 @@ HttpResult AndroidAmplitudeAdapterCpp::performHttpRequest(
     const std::string& body,
     int timeoutMillis) {
   static auto requestMethod = AndroidAmplitudeAdapterJava::javaClassStatic()->getStaticMethod<JavaStringArray(
-      std::string, std::string, alias_ref<JavaStringArray>, alias_ref<JavaStringArray>, std::string, jint)>(
+      std::string, std::string, alias_ref<JavaStringArray>, alias_ref<JavaStringArray>, alias_ref<JArrayByte>, jint)>(
       "performHttpRequest",
-      "(Ljava/lang/String;Ljava/lang/String;[Ljava/lang/String;[Ljava/lang/String;Ljava/lang/String;I)[Ljava/lang/String;");
+      "(Ljava/lang/String;Ljava/lang/String;[Ljava/lang/String;[Ljava/lang/String;[BI)[Ljava/lang/String;");
   std::vector<std::string> headerNames;
   std::vector<std::string> headerValues;
   headerNames.reserve(headers.size());
@@ -134,13 +134,17 @@ HttpResult AndroidAmplitudeAdapterCpp::performHttpRequest(
     headerNames.push_back(header.first);
     headerValues.push_back(header.second);
   }
+  auto bodyBytes = JArrayByte::newArray(static_cast<jsize>(body.size()));
+  if (!body.empty()) {
+    bodyBytes->setRegion(0, body.size(), reinterpret_cast<const jbyte*>(body.data()));
+  }
   const auto result = fromJavaStringArray(requestMethod(
       AndroidAmplitudeAdapterJava::javaClassStatic(),
       url,
       method,
       toJavaStringArray(headerNames),
       toJavaStringArray(headerValues),
-      body,
+      bodyBytes,
       timeoutMillis));
   HttpResult httpResult;
   if (result.size() >= 3) {

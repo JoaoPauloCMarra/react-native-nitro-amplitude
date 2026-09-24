@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { View } from "react-native";
+import { Platform, View } from "react-native";
 import {
   Experiment,
   Identify,
@@ -220,8 +220,22 @@ export function AmplitudeE2eLab() {
                 .then((result) => {
                   const safe = getSafeDiagnostics();
                   const full = getDiagnostics();
+                  const diagnosticsReady = safe.initialized && full.initialized;
+                  if (Platform.OS === "web") {
+                    const nativeUnsupported =
+                      !result.ok &&
+                      !result.nativeAvailable &&
+                      !result.diskStorageWritable &&
+                      !result.workerReady;
+                    setHealthStatus(
+                      diagnosticsReady && nativeUnsupported
+                        ? "ok:health=unsupported:safe=true:full=true"
+                        : "fail:health",
+                    );
+                    return;
+                  }
                   setHealthStatus(
-                    result.ok && safe.initialized && full.initialized
+                    result.ok && diagnosticsReady
                       ? "ok:health=true:safe=true:full=true"
                       : "fail:health",
                   );

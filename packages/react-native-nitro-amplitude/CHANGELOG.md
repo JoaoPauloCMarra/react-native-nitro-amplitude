@@ -4,6 +4,22 @@ All notable changes to this project are documented in this file.
 
 The format follows Keep a Changelog and the project adheres to SemVer.
 
+## [0.8.6] - 2026-09-24
+
+### Breaking changes
+
+- None.
+
+### Changed
+
+- Updated Amplitude Analytics core to `2.58.0`, Analytics connector to `^1.6.8`,
+  and Experiment core to `^0.13.6` while retaining the existing public API.
+
+### Fixed
+
+- Adapted the Analytics configuration types to the broader upstream storage
+  provider contract without changing the event storage behavior.
+
 ## [0.8.5] - 2026-09-24
 
 ### Breaking changes

@@ -10,17 +10,29 @@ press id="e2e-opt-out-run"
 wait text "ok:opt-out-reset"
 press id="e2e-revenue-run"
 wait text "ok:revenue"
+scroll down
 press id="e2e-group-run"
+scroll top
 wait text "ok:group"
+scroll down
 press id="e2e-screen-run"
+scroll top
 wait text "ok:screen"
+scroll down
 press id="e2e-health-run"
+scroll top
 wait text "ok:health=true:safe=true:full=true"
+scroll down
 press id="e2e-records-run"
+scroll top
 wait text "ok:events=record-probe"
+scroll down
 press id="e2e-identify-run"
+scroll top
 wait text "ok:identified"
+scroll down
 press id="e2e-flush-run"
+scroll top
 wait text "ok:flush=ok"
 scroll down
 press id="e2e-variant-run"

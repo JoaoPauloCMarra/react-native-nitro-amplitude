@@ -20,9 +20,9 @@ const expectedVersions = {
   "react-native-reanimated": "4.5.1",
   "react-native-worklets": "0.10.1",
   "babel-preset-expo": "~57.0.7",
-  "@amplitude/analytics-core": "2.55.0",
-  "@amplitude/analytics-connector": "^1.6.7",
-  "@amplitude/experiment-core": "^0.13.5",
+  "@amplitude/analytics-core": "2.58.0",
+  "@amplitude/analytics-connector": "^1.6.8",
+  "@amplitude/experiment-core": "^0.13.6",
   "@amplitude/ua-parser-js": "^0.7.33",
 } as const;
 

@@ -40,6 +40,12 @@ function getDefaultTransport(): Transport {
   return new NetworkGuardedFetchTransport();
 }
 
+function asEventStorage(
+  storage?: ReactNativeOptions["storageProvider"],
+): Storage<Event[]> | undefined {
+  return storage as Storage<Event[]> | undefined;
+}
+
 export const getDefaultConfig = () => {
   const cookieStorage = new LocalStorage<UserSession>();
   const trackingOptions: Required<ReactNativeTrackingOptions> = {
@@ -106,6 +112,7 @@ export class ReactNativeConfig extends Config implements IReactNativeConfig {
           : LogLevel.None,
       ...options,
       apiKey,
+      storageProvider: asEventStorage(options?.storageProvider),
       transportProvider: createDiagnosticAnalyticsTransport(
         options?.transportProvider ?? defaultConfig.transportProvider,
       ),
@@ -352,7 +359,7 @@ export const createEventsStorage = async (
   // Otherwise storageProvider is overriden
   if (!hasStorageProviderProperty || overrides.storageProvider) {
     for (const storage of [
-      overrides?.storageProvider,
+      asEventStorage(overrides?.storageProvider),
       hasStorageProviderProperty ? undefined : baseConfig.storageProvider,
       new LocalStorage<Event[]>(),
     ]) {

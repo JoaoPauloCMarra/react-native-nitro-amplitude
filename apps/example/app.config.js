@@ -10,20 +10,7 @@ module.exports = {
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.nitroamplitude.example",
-      "icon": "./assets/icon.png",
-      "infoPlist": {
-        "UIApplicationSceneManifest": {
-          "UIApplicationSupportsMultipleScenes": false,
-          "UISceneConfigurations": {
-            "UIWindowSceneSessionRoleApplication": [
-              {
-                "UISceneConfigurationName": "Default Configuration",
-                "UISceneDelegateClassName": "$(PRODUCT_MODULE_NAME).SceneDelegate"
-              }
-            ]
-          }
-        }
-      }
+      "icon": "./assets/icon.png"
     },
     "android": {
       "package": "com.nitroamplitude.example",
@@ -36,7 +23,6 @@ module.exports = {
     },
     "plugins": [
       "expo-router",
-      "./plugins/with-ios-scene-lifecycle",
       [
         "expo-splash-screen",
         {
@@ -48,6 +34,9 @@ module.exports = {
       [
         "expo-build-properties",
         {
+          "ios": {
+            "enableSceneSupport": true
+          },
           "android": {
             "usePrecompiledHeaders": true
           }

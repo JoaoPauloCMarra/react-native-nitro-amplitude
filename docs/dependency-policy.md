@@ -7,9 +7,9 @@ does not require an artificial version bump.
 
 | Package | Recorded manifest spec | Role |
 | --- | --- | --- |
-| `@amplitude/analytics-core` | `2.55.0` | Analytics client core; exact-pinned because its contract is wrapped by this package. |
-| `@amplitude/analytics-connector` | `^1.6.7` | Shared Analytics/Experiment identity bridge. |
-| `@amplitude/experiment-core` | `^0.13.5` | Experiment evaluation, transport, and storage contracts. |
+| `@amplitude/analytics-core` | `2.58.0` | Analytics client core; exact-pinned because its contract is wrapped by this package. |
+| `@amplitude/analytics-connector` | `^1.6.8` | Shared Analytics/Experiment identity bridge. |
+| `@amplitude/experiment-core` | `^0.13.6` | Experiment evaluation, transport, and storage contracts. |
 | `@amplitude/ua-parser-js` | `^0.7.33` | Web user-agent parsing. |
 
 `react-native-nitro-modules` (peer range `>=0.37.0 <0.38.0`) is the native

@@ -914,7 +914,7 @@ export class ExperimentClient implements Client {
       this.variants.put(key, variant);
     }
 
-    for (const key in failedFlagKeys) {
+    for (const key of failedFlagKeys) {
       this.variants.remove(key);
     }
     this.storedFetchSequenceNumber = sequenceNumber;

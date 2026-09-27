@@ -89,8 +89,11 @@ class FakeFileAdapter : public FileAdapter {
 public:
   std::map<std::string, std::string> files;
   bool failAppends = false;
+  bool partialAppends = false;
   bool failWrites = false;
+  bool failNextWrite = false;
   bool failReads = false;
+  size_t writeAttempts = 0;
 
   bool ensureDirectory(const std::string&) override {
     return true;
@@ -139,12 +142,19 @@ public:
     if (failAppends) {
       return false;
     }
+    if (partialAppends) {
+      files[path] += data.substr(0, data.size() / 2);
+      partialAppends = false;
+      return false;
+    }
     files[path] += data;
     return true;
   }
 
   bool writeFile(const std::string& path, const std::string& data) override {
-    if (failWrites) {
+    ++writeAttempts;
+    if (failWrites || failNextWrite) {
+      failNextWrite = false;
       return false;
     }
     files[path] = data;
@@ -535,6 +545,124 @@ void testSegmentStoreWriteFailure() {
   assert(!store.hasDisk("bad"));
   store.setDisk("good", "3");
   assert(store.hasDisk("good"));
+}
+
+void testSegmentStoreRotatedOverwriteFailurePreservesValue() {
+  auto files = std::make_shared<FakeFileAdapter>();
+  JsonlSegmentStore store(files, "rotated-overwrite", 64);
+  store.setDisk("target", "old");
+  store.setDisk("keep", "also-old");
+  store.setDisk("rotate", std::string(64, 'x'));
+  assert(files->listFiles("rotated-overwrite").size() >= 2);
+
+  files->failAppends = true;
+  bool thrown = false;
+  try {
+    store.setDisk("target", "new");
+  } catch (const std::runtime_error&) {
+    thrown = true;
+  }
+  assert(thrown);
+  assert(store.getDisk("target").value_or("") == "old");
+  assert(store.getDisk("keep").value_or("") == "also-old");
+
+  JsonlSegmentStore reloaded(files, "rotated-overwrite", 64);
+  assert(reloaded.getDisk("target").value_or("") == "old");
+  assert(reloaded.getDisk("keep").value_or("") == "also-old");
+}
+
+void testSegmentStoreLastLiveOverwriteFailurePreservesValue() {
+  auto files = std::make_shared<FakeFileAdapter>();
+  JsonlSegmentStore store(files, "last-live-overwrite", 32);
+  store.setDisk("target", "old");
+  store.setDisk("rotate", std::string(32, 'x'));
+  assert(files->listFiles("last-live-overwrite").size() >= 2);
+
+  files->failAppends = true;
+  bool thrown = false;
+  try {
+    store.setDisk("target", "new");
+  } catch (const std::runtime_error&) {
+    thrown = true;
+  }
+  assert(thrown);
+  assert(store.getDisk("target").value_or("") == "old");
+
+  JsonlSegmentStore reloaded(files, "last-live-overwrite", 32);
+  assert(reloaded.getDisk("target").value_or("") == "old");
+}
+
+void testSegmentStoreTornOverwriteAppendRecovery() {
+  auto files = std::make_shared<FakeFileAdapter>();
+  JsonlSegmentStore store(files, "torn-overwrite", 4096);
+  store.setDisk("target", "old");
+
+  files->partialAppends = true;
+  bool thrown = false;
+  try {
+    store.setDisk("target", "new");
+  } catch (const std::runtime_error&) {
+    thrown = true;
+  }
+  assert(thrown);
+  assert(store.getDisk("target").value_or("") == "old");
+
+  store.setDisk("after-failure", "works");
+  assert(store.getDisk("target").value_or("") == "old");
+  assert(store.getDisk("after-failure").value_or("") == "works");
+
+  JsonlSegmentStore reloaded(files, "torn-overwrite", 4096);
+  assert(reloaded.getDisk("target").value_or("") == "old");
+  assert(reloaded.getDisk("after-failure").value_or("") == "works");
+}
+
+void testSegmentStoreFailedTornTailTrimRetiresSegment() {
+  auto files = std::make_shared<FakeFileAdapter>();
+  JsonlSegmentStore store(files, "failed-tail-trim", 4096);
+  store.setDisk("target", "old");
+
+  files->partialAppends = true;
+  bool thrown = false;
+  try {
+    store.setDisk("target", "new");
+  } catch (const std::runtime_error&) {
+    thrown = true;
+  }
+  assert(thrown);
+  assert(store.getDisk("target").value_or("") == "old");
+
+  // Loading recovers the complete prefix, but the damaged tail cannot be
+  // trimmed once. Future records must use a fresh segment rather than append
+  // at the prefix offset inside the physical file.
+  files->failNextWrite = true;
+  JsonlSegmentStore recovered(files, "failed-tail-trim", 4096);
+  assert(recovered.getDisk("target").value_or("") == "old");
+  recovered.setDisk("fresh", "value");
+  assert(recovered.getDisk("target").value_or("") == "old");
+  assert(recovered.getDisk("fresh").value_or("") == "value");
+
+  JsonlSegmentStore reloaded(files, "failed-tail-trim", 4096);
+  assert(reloaded.getDisk("target").value_or("") == "old");
+  assert(reloaded.getDisk("fresh").value_or("") == "value");
+}
+
+void testSegmentStoreOverwriteCompactionFailurePreservesValues() {
+  auto files = std::make_shared<FakeFileAdapter>();
+  JsonlSegmentStore store(files, "overwrite-compact-failure", 12);
+  store.setDisk("aa", "11");
+  store.setDisk("bb", "22");
+  store.setDisk("rotate", std::string(20, 'x'));
+  assert(files->listFiles("overwrite-compact-failure").size() >= 2);
+
+  files->failWrites = true;
+  store.setDisk("aa", "33");
+  assert(files->writeAttempts == 1);
+  assert(store.getDisk("aa").value_or("") == "33");
+  assert(store.getDisk("bb").value_or("") == "22");
+
+  JsonlSegmentStore reloaded(files, "overwrite-compact-failure", 12);
+  assert(reloaded.getDisk("aa").value_or("") == "33");
+  assert(reloaded.getDisk("bb").value_or("") == "22");
 }
 
 void testContextFallbacks() {
@@ -945,6 +1073,37 @@ void testGzipAmplitudePayloads() {
   assert(compressed->size() < large.size());
 }
 
+void testGzipAmplitudeAuthorityValidation() {
+  const std::string large(1024, 'a');
+  const auto shouldGzip = [&large](const std::string& url) {
+    return ::NitroAmplitude::shouldGzipAmplitudeRequest(url, "POST", {}, large);
+  };
+
+  assert(shouldGzip("https://api2.amplitude.com/2/httpapi"));
+  assert(shouldGzip("https://api.eu.amplitude.com/2/httpapi"));
+  assert(shouldGzip("https://api2.amplitude.com:443/2/httpapi"));
+  assert(shouldGzip("HTTPS://API2.AMPLITUDE.COM/2/HTTPAPI"));
+
+  assert(!shouldGzip("https://api.my-amplitude.com/2/httpapi"));
+  assert(!shouldGzip("https://custom.test/amplitude.com"));
+  assert(!shouldGzip("https://api2.amplitude.com.evil.test/2/httpapi"));
+  assert(!shouldGzip("https://api2.amplitude.com@evil.test/2/httpapi"));
+  assert(!shouldGzip("https://evil.test@api2.amplitude.com/2/httpapi"));
+  assert(!shouldGzip("https:///2/httpapi"));
+  assert(!shouldGzip("https://api2.amplitude.com:bad/2/httpapi"));
+  assert(!shouldGzip("https://api2.amplitude.com:65536/2/httpapi"));
+  assert(!shouldGzip("api2.amplitude.com/2/httpapi"));
+
+  assert(!::NitroAmplitude::shouldGzipAmplitudeRequest(
+      "https://api2.amplitude.com/2/httpapi", "POST", {}, std::string(1023, 'a')));
+  assert(::NitroAmplitude::shouldGzipAmplitudeRequest(
+      "https://api2.amplitude.com/2/httpapi", "pOsT", {}, large));
+  assert(::NitroAmplitude::shouldGzipAmplitudeRequest(
+      "https://api2.amplitude.com/2/httpapi", "PUT", {}, large));
+  assert(!::NitroAmplitude::shouldGzipAmplitudeRequest(
+      "https://api2.amplitude.com/2/httpapi", "PATCH", {}, large));
+}
+
 void testSegmentStoreTombstoneReload() {
   auto files = std::make_shared<FakeFileAdapter>();
   {
@@ -970,8 +1129,14 @@ int main() {
   testSegmentStoreEscapingRoundTrip();
   testSegmentStoreMigration();
   testSegmentStoreWriteFailure();
+  testSegmentStoreRotatedOverwriteFailurePreservesValue();
+  testSegmentStoreLastLiveOverwriteFailurePreservesValue();
+  testSegmentStoreTornOverwriteAppendRecovery();
+  testSegmentStoreFailedTornTailTrimRetiresSegment();
+  testSegmentStoreOverwriteCompactionFailurePreservesValues();
   testSegmentStoreTombstoneReload();
   testGzipAmplitudePayloads();
+  testGzipAmplitudeAuthorityValidation();
   testContextFallbacks();
   testContextAdapterContract();
   testWorkerFallbacks();

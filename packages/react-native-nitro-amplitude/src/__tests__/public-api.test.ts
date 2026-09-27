@@ -1335,6 +1335,301 @@ describe("react-native-nitro-amplitude", () => {
     }
   });
 
+  it("keeps browser string storage authoritative after persistence failures", async () => {
+    const values = new Map<string, string>();
+    const originalStorageDescriptor = Object.getOwnPropertyDescriptor(
+      globalThis,
+      "localStorage",
+    );
+    const platform = (jest.requireMock("react-native") as ReactNativeMock)
+      .Platform;
+    const originalPlatform = platform.OS;
+    let failSet = false;
+    let failRemove = false;
+    let failEnumeration = false;
+    let throwStorageGetter = false;
+    const browserStorage = {
+      get length() {
+        if (failEnumeration) throw new Error("storage enumeration failed");
+        return values.size;
+      },
+      key: (index: number) => Array.from(values.keys())[index] ?? null,
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        if (failSet) throw new Error("quota exceeded");
+        values.set(key, value);
+      },
+      removeItem: (key: string) => {
+        if (failRemove) throw new Error("storage unavailable");
+        values.delete(key);
+      },
+    };
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      get: () => {
+        if (throwStorageGetter) throw new Error("storage getter failed");
+        return browserStorage;
+      },
+    });
+    platform.OS = "web";
+
+    try {
+      const web = new WebAnalyticsStorage<{ value: string }>("audit-web");
+      const webObserver = new WebAnalyticsStorage<{ value: string }>(
+        "audit-web",
+      );
+      const experiment = new WebExperimentStorage("audit-experiment");
+      const experimentObserver = new WebExperimentStorage("audit-experiment");
+      const local = new LocalStorage<{ value: string }>();
+      const localObserver = new LocalStorage<{ value: string }>();
+      const otherNamespace = new WebAnalyticsStorage<{ value: string }>(
+        "audit-web-peer",
+      );
+
+      await web.set("success", { value: "web" });
+      await experiment.put("success", "experiment");
+      await local.set("success", { value: "local" });
+      expect(values.get("audit-web::success")).toBe('{"value":"web"}');
+      expect(values.get("audit-experiment::success")).toBe("experiment");
+      expect(values.get("nitro-amplitude::local::success")).toBe(
+        '{"value":"local"}',
+      );
+      values.set("audit-web::stale", '{"value":"old"}');
+      values.set("audit-experiment::stale", "old");
+      values.set("nitro-amplitude::local::stale", '{"value":"old"}');
+      failSet = true;
+      await web.set("stale", { value: "new-web" });
+      await experiment.put("stale", "new-experiment");
+      await local.set("stale", { value: "new-local" });
+      expect(await webObserver.get("stale")).toEqual({ value: "new-web" });
+      expect(await experimentObserver.get("stale")).toBe("new-experiment");
+      expect(await localObserver.get("stale")).toEqual({ value: "new-local" });
+
+      throwStorageGetter = true;
+      expect(await webObserver.getRaw("stale")).toBe('{"value":"new-web"}');
+      expect(await experimentObserver.get("stale")).toBe("new-experiment");
+      expect(await localObserver.getRaw("stale")).toBe('{"value":"new-local"}');
+      expect(
+        await new WebAnalyticsStorage("audit-getter-only").get("missing"),
+      ).toBeUndefined();
+      expect(
+        await new WebExperimentStorage("audit-getter-only").get("missing"),
+      ).toBeNull();
+      expect(
+        await new LocalStorage().get("getter-only-missing"),
+      ).toBeUndefined();
+      values.set("audit-web::reset-blocked", '{"value":"old"}');
+      values.set("audit-web-peer::outside", '{"value":"peer"}');
+      await web.reset();
+      await web.set("after-reset", { value: "fresh" });
+      expect(await webObserver.get("after-reset")).toEqual({ value: "fresh" });
+      throwStorageGetter = false;
+      failSet = false;
+      await web.set("after-reset", { value: "fresh-persisted" });
+      expect(await webObserver.get("reset-blocked")).toBeUndefined();
+      expect(await webObserver.get("after-reset")).toEqual({
+        value: "fresh-persisted",
+      });
+      expect(await otherNamespace.get("outside")).toEqual({ value: "peer" });
+
+      values.set("audit-experiment::reset-enumeration", "old");
+      failEnumeration = true;
+      await experiment.reset();
+      failEnumeration = false;
+      expect(await experimentObserver.get("reset-enumeration")).toBeNull();
+      await experiment.put("after-enumeration-reset", "fresh");
+      expect(await experimentObserver.get("after-enumeration-reset")).toBe(
+        "fresh",
+      );
+
+      await web.set("stale", { value: "recovered-web" });
+      await experiment.put("stale", "recovered-experiment");
+      await local.set("stale", { value: "recovered-local" });
+      values.set("audit-web::stale", '{"value":"external-web"}');
+      values.set("audit-experiment::stale", "external-experiment");
+      values.set("nitro-amplitude::local::stale", '{"value":"external-local"}');
+      expect(await webObserver.get("stale")).toEqual({ value: "external-web" });
+      expect(await experimentObserver.get("stale")).toBe("external-experiment");
+      expect(await localObserver.get("stale")).toEqual({
+        value: "external-local",
+      });
+
+      values.set("audit-web::remove", '{"value":"old"}');
+      values.set("audit-experiment::remove", "old");
+      values.set("nitro-amplitude::local::remove", '{"value":"old"}');
+      failRemove = true;
+      await web.remove("remove");
+      await experiment.delete("remove");
+      await local.remove("remove");
+      expect(await webObserver.get("remove")).toBeUndefined();
+      expect(await experimentObserver.get("remove")).toBeNull();
+      expect(await localObserver.get("remove")).toBeUndefined();
+
+      values.set("audit-web::reset-one", '{"value":"one"}');
+      values.set("audit-web::reset-two", '{"value":"two"}');
+      values.set("audit-experiment::reset", "experiment-reset");
+      values.set("nitro-amplitude::local::reset", '{"value":"local-reset"}');
+      values.set("audit-web-peer::keep", '{"value":"peer"}');
+      values.set("unrelated-app-key", "keep");
+      await web.reset();
+      await experiment.reset();
+      await local.reset();
+      expect(await webObserver.get("reset-one")).toBeUndefined();
+      expect(await webObserver.get("reset-two")).toBeUndefined();
+      expect(await experimentObserver.get("reset")).toBeNull();
+      expect(await localObserver.get("reset")).toBeUndefined();
+      expect(await otherNamespace.get("keep")).toEqual({ value: "peer" });
+      expect(values.get("unrelated-app-key")).toBe("keep");
+
+      failRemove = false;
+      await web.remove("remove");
+      await experiment.delete("remove");
+      await local.remove("remove");
+      await web.reset();
+      await experiment.reset();
+      await local.reset();
+      expect(values.has("audit-web::remove")).toBe(false);
+      expect(values.has("audit-experiment::remove")).toBe(false);
+      expect(values.has("nitro-amplitude::local::remove")).toBe(false);
+      expect(values.has("audit-web::reset-one")).toBe(false);
+      expect(values.has("audit-web::reset-two")).toBe(false);
+      expect(values.has("audit-experiment::reset")).toBe(false);
+      expect(values.has("nitro-amplitude::local::reset")).toBe(false);
+      expect(await otherNamespace.get("keep")).toEqual({ value: "peer" });
+    } finally {
+      platform.OS = originalPlatform;
+      if (originalStorageDescriptor) {
+        Object.defineProperty(
+          globalThis,
+          "localStorage",
+          originalStorageDescriptor,
+        );
+      } else {
+        Reflect.deleteProperty(globalThis, "localStorage");
+      }
+    }
+  });
+
+  it("uses last successful browser writes only when durable reads fail", async () => {
+    const values = new Map<string, string>();
+    const originalStorageDescriptor = Object.getOwnPropertyDescriptor(
+      globalThis,
+      "localStorage",
+    );
+    const platform = (jest.requireMock("react-native") as ReactNativeMock)
+      .Platform;
+    const originalPlatform = platform.OS;
+    let failRead = false;
+    const browserStorage = {
+      get length() {
+        return values.size;
+      },
+      key: (index: number) => Array.from(values.keys())[index] ?? null,
+      getItem: (key: string) => {
+        if (failRead) throw new Error("storage read failed");
+        return values.get(key) ?? null;
+      },
+      setItem: (key: string, value: string) => values.set(key, value),
+      removeItem: (key: string) => values.delete(key),
+    };
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      value: browserStorage,
+    });
+    platform.OS = "web";
+
+    try {
+      const web = new WebAnalyticsStorage<{ value: string }>("last-known-web");
+      const webObserver = new WebAnalyticsStorage<{ value: string }>(
+        "last-known-web",
+      );
+      const experiment = new WebExperimentStorage("last-known-experiment");
+      const experimentObserver = new WebExperimentStorage(
+        "last-known-experiment",
+      );
+      const local = new LocalStorage<{ value: string }>();
+      const localObserver = new LocalStorage<{ value: string }>();
+
+      await web.set("key", { value: "web" });
+      await experiment.put("key", "experiment");
+      await local.set("key", { value: "local" });
+      failRead = true;
+
+      expect(await webObserver.get("key")).toEqual({ value: "web" });
+      expect(await experimentObserver.get("key")).toBe("experiment");
+      expect(await localObserver.get("key")).toEqual({ value: "local" });
+    } finally {
+      platform.OS = originalPlatform;
+      if (originalStorageDescriptor) {
+        Object.defineProperty(
+          globalThis,
+          "localStorage",
+          originalStorageDescriptor,
+        );
+      } else {
+        Reflect.deleteProperty(globalThis, "localStorage");
+      }
+    }
+  });
+
+  it("keeps a namespace reset effective when browser enumeration is denied", async () => {
+    const values = new Map<string, string>([
+      ["audit-reset::stale", '{"value":"stale"}'],
+      ["audit-reset-peer::keep", '{"value":"peer"}'],
+    ]);
+    const originalStorageDescriptor = Object.getOwnPropertyDescriptor(
+      globalThis,
+      "localStorage",
+    );
+    const platform = (jest.requireMock("react-native") as ReactNativeMock)
+      .Platform;
+    const originalPlatform = platform.OS;
+    let failEnumeration = true;
+    const browserStorage = {
+      get length() {
+        if (failEnumeration) throw new Error("storage enumeration failed");
+        return values.size;
+      },
+      key: (index: number) => Array.from(values.keys())[index] ?? null,
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => values.set(key, value),
+      removeItem: (key: string) => values.delete(key),
+    };
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      value: browserStorage,
+    });
+    platform.OS = "web";
+
+    try {
+      const owner = new WebAnalyticsStorage<{ value: string }>("audit-reset");
+      const observer = new WebAnalyticsStorage<{ value: string }>(
+        "audit-reset",
+      );
+      const peer = new WebAnalyticsStorage<{ value: string }>(
+        "audit-reset-peer",
+      );
+
+      await owner.reset();
+      failEnumeration = false;
+      expect(await observer.get("stale")).toBeUndefined();
+      await owner.set("fresh", { value: "fresh" });
+      expect(await observer.get("fresh")).toEqual({ value: "fresh" });
+      expect(await peer.get("keep")).toEqual({ value: "peer" });
+    } finally {
+      platform.OS = originalPlatform;
+      if (originalStorageDescriptor) {
+        Object.defineProperty(
+          globalThis,
+          "localStorage",
+          originalStorageDescriptor,
+        );
+      } else {
+        Reflect.deleteProperty(globalThis, "localStorage");
+      }
+    }
+  });
+
   it("coalesces analytics disk writes behind a short debounce", async () => {
     jest.useFakeTimers();
     try {

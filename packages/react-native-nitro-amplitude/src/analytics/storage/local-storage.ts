@@ -1,4 +1,5 @@
 import { Storage, getGlobalScope } from "@amplitude/analytics-core";
+import { BrowserStringStorage } from "../../native/browser-string-storage";
 import { isNative } from "../utils/platform";
 
 export class MemoryStorage<T> implements Storage<T> {
@@ -73,47 +74,18 @@ export class MemoryStorage<T> implements Storage<T> {
 }
 
 class BrowserLocalStorage<T> implements Storage<T> {
-  private static readonly memory = new Map<string, string>();
-  private static readonly keyPrefix = "nitro-amplitude::local::";
-
-  private static namespaceKey(key: string): string {
-    return `${BrowserLocalStorage.keyPrefix}${key}`;
-  }
+  private readonly storage = new BrowserStringStorage("nitro-amplitude::local");
 
   private getRawValue(key: string): string | undefined {
-    const storageKey = BrowserLocalStorage.namespaceKey(key);
-    try {
-      if (typeof localStorage !== "undefined") {
-        return localStorage.getItem(storageKey) ?? undefined;
-      }
-    } catch {
-      //
-    }
-    return BrowserLocalStorage.memory.get(storageKey);
+    return this.storage.get(key);
   }
 
   private setRawValue(key: string, value: string): void {
-    const storageKey = BrowserLocalStorage.namespaceKey(key);
-    BrowserLocalStorage.memory.set(storageKey, value);
-    try {
-      if (typeof localStorage !== "undefined") {
-        localStorage.setItem(storageKey, value);
-      }
-    } catch {
-      //
-    }
+    this.storage.set(key, value);
   }
 
   private removeRawValue(key: string): void {
-    const storageKey = BrowserLocalStorage.namespaceKey(key);
-    BrowserLocalStorage.memory.delete(storageKey);
-    try {
-      if (typeof localStorage !== "undefined") {
-        localStorage.removeItem(storageKey);
-      }
-    } catch {
-      //
-    }
+    this.storage.remove(key);
   }
 
   async isEnabled(): Promise<boolean> {
@@ -149,24 +121,7 @@ class BrowserLocalStorage<T> implements Storage<T> {
   }
 
   async reset(): Promise<void> {
-    const prefix = BrowserLocalStorage.keyPrefix;
-    for (const key of BrowserLocalStorage.memory.keys()) {
-      if (key.startsWith(prefix)) {
-        BrowserLocalStorage.memory.delete(key);
-      }
-    }
-    try {
-      if (typeof localStorage !== "undefined") {
-        for (let index = localStorage.length - 1; index >= 0; index--) {
-          const key = localStorage.key(index);
-          if (key?.startsWith(prefix)) {
-            localStorage.removeItem(key);
-          }
-        }
-      }
-    } catch {
-      //
-    }
+    this.storage.reset();
   }
 }
 

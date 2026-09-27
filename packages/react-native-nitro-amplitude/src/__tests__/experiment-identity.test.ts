@@ -57,6 +57,40 @@ test("equivalent user maps preserve retries across partial fetches", async () =>
   }
 });
 
+test("successful partial fetch removes only omitted requested numeric flags", async () => {
+  const request = jest
+    .fn<Promise<{ status: number; body: string }>, []>()
+    .mockResolvedValueOnce({
+      status: 200,
+      body: JSON.stringify({
+        "2": { key: "on", value: "on" },
+        "42": { key: "on", value: "on" },
+      }),
+    })
+    .mockResolvedValueOnce({ status: 200, body: "{}" });
+  const client = new ExperimentClient("test-deployment-key", {
+    retryFetchOnFailure: false,
+    automaticExposureTracking: false,
+    fetchOnStart: false,
+    pollOnStart: false,
+    httpClient: { request },
+  });
+  try {
+    await client.cacheReady();
+    const user = { user_id: "numeric-flags-user" };
+    await client.fetchOrThrow(user);
+    expect(client.hasCachedVariant("2")).toBe(true);
+    expect(client.hasCachedVariant("42")).toBe(true);
+
+    await client.fetchOrThrow(user, { flagKeys: ["42"] });
+
+    expect(client.hasCachedVariant("2")).toBe(true);
+    expect(client.hasCachedVariant("42")).toBe(false);
+  } finally {
+    client.stop();
+  }
+});
+
 test.each(["clear", "user change"])(
   "a failed request cannot restart old-user retries after %s",
   async (action) => {

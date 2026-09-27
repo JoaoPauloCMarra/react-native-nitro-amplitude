@@ -30,6 +30,91 @@ bool hasHeader(
     return false;
 }
 
+bool isAmplitudeAuthority(std::string_view url) {
+    const size_t schemeEnd = url.find("://");
+    if (schemeEnd == std::string_view::npos) {
+        return false;
+    }
+
+    const std::string scheme = toLower(url.substr(0, schemeEnd));
+    if (scheme != "http" && scheme != "https") {
+        return false;
+    }
+
+    const size_t authorityStart = schemeEnd + 3;
+    const size_t authorityEnd = url.find_first_of("/?#", authorityStart);
+    const std::string_view authority = url.substr(
+        authorityStart,
+        authorityEnd == std::string_view::npos
+            ? std::string_view::npos
+            : authorityEnd - authorityStart);
+    if (authority.empty() || authority.find('@') != std::string_view::npos) {
+        return false;
+    }
+
+    const size_t colon = authority.find(':');
+    const std::string_view host = authority.substr(0, colon);
+    if (host.empty() || (colon != std::string_view::npos &&
+        authority.find(':', colon + 1) != std::string_view::npos)) {
+        return false;
+    }
+
+    if (colon != std::string_view::npos) {
+        const std::string_view port = authority.substr(colon + 1);
+        if (port.empty()) {
+            return false;
+        }
+        uint32_t portNumber = 0;
+        for (const char character : port) {
+            if (character < '0' || character > '9') {
+                return false;
+            }
+            portNumber = portNumber * 10 + static_cast<uint32_t>(character - '0');
+            if (portNumber > 65535) {
+                return false;
+            }
+        }
+        if (portNumber == 0) {
+            return false;
+        }
+    }
+
+    const std::string loweredHost = toLower(host);
+    if (loweredHost.size() > 253) {
+        return false;
+    }
+    size_t labelStart = 0;
+    while (labelStart < loweredHost.size()) {
+        const size_t dot = loweredHost.find('.', labelStart);
+        const size_t labelEnd = dot == std::string::npos ? loweredHost.size() : dot;
+        const size_t labelLength = labelEnd - labelStart;
+        if (labelLength == 0 || labelLength > 63 ||
+            loweredHost[labelStart] == '-' || loweredHost[labelEnd - 1] == '-') {
+            return false;
+        }
+        for (size_t i = labelStart; i < labelEnd; ++i) {
+            const char character = loweredHost[i];
+            if (!((character >= 'a' && character <= 'z') ||
+                  (character >= '0' && character <= '9') || character == '-')) {
+                return false;
+            }
+        }
+        if (dot == std::string::npos) {
+            break;
+        }
+        labelStart = dot + 1;
+    }
+
+    constexpr std::string_view amplitudeDomain = "amplitude.com";
+    return loweredHost == amplitudeDomain ||
+        (loweredHost.size() > amplitudeDomain.size() &&
+         loweredHost.compare(
+             loweredHost.size() - amplitudeDomain.size(),
+             amplitudeDomain.size(),
+             amplitudeDomain) == 0 &&
+         loweredHost[loweredHost.size() - amplitudeDomain.size() - 1] == '.');
+}
+
 } // namespace
 
 std::optional<std::string> gzipCompress(const std::string& input) {
@@ -80,7 +165,7 @@ bool shouldGzipAmplitudeRequest(
     if (body.size() < kMinGzipBodyBytes) {
         return false;
     }
-    if (url.find("amplitude.com") == std::string::npos) {
+    if (!isAmplitudeAuthority(url)) {
         return false;
     }
     if (hasHeader(headers, "Content-Encoding")) {

@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
+#include <limits>
 #include <stdexcept>
 
 namespace NitroAmplitude {
@@ -114,6 +115,7 @@ void JsonlSegmentStore::Load() {
     }
   }
   std::sort(segmentIds.begin(), segmentIds.end());
+  bool failedToTrimTail = false;
   for (const uint32_t id : segmentIds) {
     const std::string path = SegmentPath(id);
     const auto content = fileAdapter_->readFile(path);
@@ -140,11 +142,26 @@ void JsonlSegmentStore::Load() {
       offset = newline + 1;
     }
     if (completeBytes < content.value().size()) {
-      fileAdapter_->writeFile(path, content.value().substr(0, completeBytes));
+      if (!fileAdapter_->writeFile(path, content.value().substr(0, completeBytes))) {
+        failedToTrimTail = true;
+      }
     }
     segmentBytes_[id] = completeBytes;
     if (id > activeSegment_) {
       activeSegment_ = id;
+    }
+  }
+  if (failedToTrimTail) {
+    const uint32_t highestListedSegment = segmentIds.back();
+    if (highestListedSegment == std::numeric_limits<uint32_t>::max()) {
+      // Keep recovered values readable, but do not risk appending to the
+      // untrimmed physical tail when no higher segment ID is available.
+      activeSegment_ = highestListedSegment;
+      appendsDisabled_ = true;
+    } else {
+      activeSegment_ = highestListedSegment + 1;
+      segmentBytes_[activeSegment_] = 0;
+      segmentDeadBytes_[activeSegment_] = 0;
     }
   }
   std::unordered_map<uint32_t, uint64_t> liveBytes;
@@ -166,30 +183,50 @@ std::string JsonlSegmentStore::SegmentPath(uint32_t segment) const {
 }
 
 void JsonlSegmentStore::SetLocked(const std::string& key, const std::string& value) {
+  if (appendsDisabled_) {
+    throw std::runtime_error("NitroAmplitude: segment storage append unavailable");
+  }
+
   std::string line;
   EscapeInto(key, line);
   line += '\t';
   EscapeInto(value, line);
   line += '\n';
 
-  const auto existing = index_.find(key);
-  if (existing != index_.end()) {
-    const uint32_t previousSegment = existing->second.segment;
-    segmentDeadBytes_[previousSegment] += existing->second.length;
-    index_.erase(existing);
-    if (previousSegment != activeSegment_) {
-      MaybeCompact(previousSegment);
-    }
-  }
-
   RotateIfNeeded(line.size());
+  if (appendsDisabled_) {
+    throw std::runtime_error("NitroAmplitude: segment storage append unavailable");
+  }
 
   if (!fileAdapter_->appendFile(SegmentPath(activeSegment_), line)) {
+    AbandonActiveSegmentAfterAppendFailure();
     throw std::runtime_error("NitroAmplitude: segment storage append failed");
   }
+
   const uint64_t offset = segmentBytes_[activeSegment_];
+  const auto existing = index_.find(key);
+  const std::optional<Entry> previous = existing == index_.end()
+      ? std::nullopt
+      : std::optional<Entry>(existing->second);
   index_[key] = Entry{activeSegment_, offset, static_cast<uint32_t>(line.size())};
   segmentBytes_[activeSegment_] = offset + line.size();
+
+  if (previous.has_value()) {
+    segmentDeadBytes_[previous->segment] += previous->length;
+    if (previous->segment != activeSegment_) {
+      MaybeCompact(previous->segment);
+    }
+  }
+}
+
+void JsonlSegmentStore::AbandonActiveSegmentAfterAppendFailure() {
+  if (activeSegment_ == std::numeric_limits<uint32_t>::max()) {
+    appendsDisabled_ = true;
+    return;
+  }
+  ++activeSegment_;
+  segmentBytes_[activeSegment_] = 0;
+  segmentDeadBytes_[activeSegment_] = 0;
 }
 
 void JsonlSegmentStore::RotateIfNeeded(uint64_t lineLength) {
@@ -202,6 +239,10 @@ void JsonlSegmentStore::RotateIfNeeded(uint64_t lineLength) {
     if (segmentBytes_[activeSegment_] + lineLength <= maxSegmentBytes_) {
       return;
     }
+  }
+  if (activeSegment_ == std::numeric_limits<uint32_t>::max()) {
+    appendsDisabled_ = true;
+    return;
   }
   activeSegment_ += 1;
   segmentBytes_[activeSegment_] = 0;
@@ -218,13 +259,21 @@ void JsonlSegmentStore::MaybeCompact(uint32_t segment) {
 }
 
 bool JsonlSegmentStore::AppendTombstoneLocked(const std::string& key) {
+  if (appendsDisabled_) {
+    return false;
+  }
+
   std::string line;
   EscapeInto(kTombstoneKey, line);
   line += '\t';
   EscapeInto(key, line);
   line += '\n';
   RotateIfNeeded(line.size());
+  if (appendsDisabled_) {
+    return false;
+  }
   if (!fileAdapter_->appendFile(SegmentPath(activeSegment_), line)) {
+    AbandonActiveSegmentAfterAppendFailure();
     return false;
   }
   segmentBytes_[activeSegment_] += line.size();

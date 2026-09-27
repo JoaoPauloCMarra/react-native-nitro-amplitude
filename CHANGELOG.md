@@ -4,6 +4,19 @@ All notable changes to this project are documented in this file.
 
 The format follows Keep a Changelog and the project adheres to SemVer.
 
+## [0.8.7] - 2026-09-27
+
+### Breaking changes
+
+- None.
+
+### Fixed
+
+- Native JSONL overwrites retain the prior value when appending fails, including rotated segments and torn writes. Compaction follows a successful replacement append.
+- Browser storage preserves in-process fallback writes, removals, and resets when localStorage is unavailable or denies access.
+- Partial Experiment fetches remove missing requested flags by their actual keys, including numeric string keys, while retaining unrequested flags.
+- Native gzip selection matches only the exact Amplitude domain or its subdomains, excluding lookalike hosts and domain text in paths or queries.
+
 ## [0.8.6] - 2026-09-24
 
 ### Breaking changes

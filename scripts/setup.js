@@ -51,46 +51,68 @@ function ensureDir(dirPath) {
   }
 }
 
-async function main() {
-  console.log("");
-  log("🚀 Setting up react-native-nitro-amplitude...");
-  console.log("");
+async function main(dependencies = {}) {
+  const output = dependencies.console || console;
+  const report = dependencies.log || log;
+  const hasCommand = dependencies.commandExists || commandExists;
+  const runCommand = dependencies.execCommand || execCommand;
 
-  if (!commandExists("bun")) {
-    log("Bun not found. Please install bun first:", "yellow");
-    log("  • macOS/Linux: curl -fsSL https://bun.sh/install | bash", "cyan");
-    log('  • Windows: powershell -c "irm bun.sh/install.ps1 | iex"', "cyan");
-    log("  • Or visit: https://bun.sh/docs/installation", "cyan");
-    process.exit(1);
+  output.log("");
+  report("🚀 Setting up react-native-nitro-amplitude...");
+  output.log("");
+
+  if (!hasCommand("bun")) {
+    report("Bun not found. Please install bun first:", "yellow");
+    report("  • macOS/Linux: curl -fsSL https://bun.sh/install | bash", "cyan");
+    report('  • Windows: powershell -c "irm bun.sh/install.ps1 | iex"', "cyan");
+    report("  • Or visit: https://bun.sh/docs/installation", "cyan");
+    return 1;
   }
 
-  log("📦 Installing dependencies...");
-  if (!execCommand("bun install")) {
-    log("Failed to install dependencies", "red");
-    process.exit(1);
+  report("📦 Installing dependencies...");
+  if (!runCommand("bun install")) {
+    report("Failed to install dependencies", "red");
+    return 1;
   }
 
-  log("⚡ Generating Nitro bindings...");
+  report("⚡ Generating Nitro bindings...");
   const packageDir = path.join(
     projectRoot,
-    "packages/react-native-nitro-amplitude"
+    "packages/react-native-nitro-amplitude",
   );
-  execCommand("bun run codegen", { cwd: packageDir });
+  if (!runCommand("bun run codegen", { cwd: packageDir })) {
+    report("Failed to generate Nitro bindings", "red");
+    return 1;
+  }
 
-  log("🔨 Building library...");
-  execCommand("bun run build", { cwd: packageDir });
+  report("🔨 Building library...");
+  if (!runCommand("bun run build", { cwd: packageDir })) {
+    report("Failed to build library", "red");
+    return 1;
+  }
 
-  console.log("");
-  log("✅ Setup complete!");
-  console.log("");
-  console.log("Next steps:");
-  console.log("  1. cd apps/example");
-  console.log("  2. bun run prebuild");
-  console.log("  3. bun run ios  # or bun run android");
-  console.log("");
+  output.log("");
+  report("✅ Setup complete!");
+  output.log("");
+  output.log("Next steps:");
+  output.log("  1. cd apps/example");
+  output.log("  2. bun run prebuild");
+  output.log("  3. bun run ios  # or bun run android");
+  output.log("");
+  return 0;
 }
 
-main().catch((error) => {
-  log(`Setup failed: ${error.message}`, "red");
-  process.exit(1);
-});
+if (require.main === module) {
+  main()
+    .then((status) => {
+      if (status !== 0) {
+        process.exitCode = status;
+      }
+    })
+    .catch((error) => {
+      log(`Setup failed: ${error.message}`, "red");
+      process.exitCode = 1;
+    });
+}
+
+module.exports = { main };

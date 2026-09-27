@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdint>
 #include <zlib.h>
 
 namespace NitroAmplitude {
@@ -64,12 +65,12 @@ bool isAmplitudeAuthority(std::string_view url) {
         if (port.empty()) {
             return false;
         }
-        uint32_t portNumber = 0;
+        std::uint32_t portNumber = 0;
         for (const char character : port) {
             if (character < '0' || character > '9') {
                 return false;
             }
-            portNumber = portNumber * 10 + static_cast<uint32_t>(character - '0');
+            portNumber = portNumber * 10 + static_cast<std::uint32_t>(character - '0');
             if (portNumber > 65535) {
                 return false;
             }

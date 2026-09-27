@@ -41,6 +41,7 @@ private:
 
   void Load();
   void SetLocked(const std::string& key, const std::string& value);
+  void AbandonActiveSegmentAfterAppendFailure();
   void RotateIfNeeded(uint64_t lineLength);
   bool CompactSegment(uint32_t segment);
   void MaybeCompact(uint32_t segment);
@@ -55,6 +56,7 @@ private:
   std::unordered_map<uint32_t, uint64_t> segmentBytes_;
   std::unordered_map<uint32_t, uint64_t> segmentDeadBytes_;
   uint32_t activeSegment_ = 0;
+  bool appendsDisabled_ = false;
 };
 
 } // namespace NitroAmplitude

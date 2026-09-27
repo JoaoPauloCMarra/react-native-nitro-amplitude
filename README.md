@@ -24,9 +24,9 @@ bun add react-native-nitro-amplitude react-native-nitro-modules
 
 ## Requirements and compatibility
 
-Compatibility for `0.8.6`:
+Compatibility for `0.8.7`:
 
-| Dependency                   | Supported range    | `0.8.6` baseline                          |
+| Dependency                   | Supported range    | `0.8.7` baseline                          |
 | ---------------------------- | ------------------ | ----------------------------------------- |
 | `react`                      | `>=18.2.0`         | `19.2.3`                                  |
 | `react-native`               | `>=0.75.0`         | `0.86.3` package and Expo SDK 57 baseline |
@@ -48,7 +48,7 @@ regenerate and rebuild native projects so the committed Nitro 0.37.1 bindings
 are compiled into the app:
 
 ```sh
-bun add react-native-nitro-amplitude@0.8.6 react-native-nitro-modules@0.37.1
+bun add react-native-nitro-amplitude@0.8.7 react-native-nitro-modules@0.37.1
 bunx expo prebuild
 ```
 
@@ -292,7 +292,9 @@ subpath and remain available from the root for compatibility.
 - `workerMetrics`: current `queueSize`, `inFlightCount`, and
   `pendingBodyBytes` from the native HTTP worker (bounded queue of 100
   requests, 2 concurrent workers). POST/PUT bodies of at least 1 KiB to
-  `*.amplitude.com` are gzip-compressed on the worker thread.
+  `amplitude.com` or its DNS subdomains are gzip-compressed on the worker thread.
+  Custom hosts remain uncompressed, including hosts or paths that merely contain
+  that text; malformed authorities and userinfo do not qualify.
 - `networkTimings`: the bounded list of recent analytics and experiment
   request timings.
 - Flush and fetch metadata plus `diagnosticFailures`.
@@ -457,6 +459,10 @@ Architecture notes:
 - For typed Experiment variant payloads, prefer the typed variant helpers
   exported from the package (`react-native-nitro-amplitude/experiment`) over
   reading the untyped `variant.payload` directly.
+
+### Browser storage failure behavior
+
+Failed localStorage writes and removals remain visible through shared in-process overrides. A namespace reset prevents older durable values from reappearing after access recovers. Successful durable reads can observe external changes; denied reads use the last locally written value. If namespace reset cannot enumerate or remove durable keys, its in-process tombstone also hides later cross-tab writes until a successful explicit reset or a local write for that key. Browser storage events cannot prove that an event queued before reset contains fresh data, so this failure path keeps the namespace hidden. These fallbacks do not promise persistence across a page reload when browser storage rejects writes.
 
 ## Troubleshooting
 

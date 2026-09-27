@@ -4,6 +4,7 @@ import type {
   Storage as AnalyticsStorage,
 } from "@amplitude/analytics-core";
 import type { Storage as ExperimentStorage } from "../experiment/types/storage";
+import { BrowserStringStorage } from "./browser-string-storage";
 
 function namespaceKey(namespace: string, key: string): string {
   return `${namespace}::${key}`;
@@ -29,66 +30,11 @@ export function createNamespacedStores(namespace: string): NamespacedStores {
   };
 }
 
-class WebStringStorage {
-  private static readonly memory = new Map<string, string>();
-
-  constructor(private readonly namespace: string) {}
-
-  get(key: string): string | undefined {
-    const storageKey = namespaceKey(this.namespace, key);
-    try {
-      if (typeof localStorage !== "undefined") {
-        return localStorage.getItem(storageKey) ?? undefined;
-      }
-    } catch {}
-    return WebStringStorage.memory.get(storageKey);
-  }
-
-  set(key: string, value: string): void {
-    const storageKey = namespaceKey(this.namespace, key);
-    WebStringStorage.memory.set(storageKey, value);
-    try {
-      if (typeof localStorage !== "undefined") {
-        localStorage.setItem(storageKey, value);
-      }
-    } catch {}
-  }
-
-  remove(key: string): void {
-    const storageKey = namespaceKey(this.namespace, key);
-    WebStringStorage.memory.delete(storageKey);
-    try {
-      if (typeof localStorage !== "undefined") {
-        localStorage.removeItem(storageKey);
-      }
-    } catch {}
-  }
-
-  reset(): void {
-    const prefix = `${this.namespace}::`;
-    for (const key of WebStringStorage.memory.keys()) {
-      if (key.startsWith(prefix)) {
-        WebStringStorage.memory.delete(key);
-      }
-    }
-    try {
-      if (typeof localStorage !== "undefined") {
-        for (let index = localStorage.length - 1; index >= 0; index--) {
-          const key = localStorage.key(index);
-          if (key?.startsWith(prefix)) {
-            localStorage.removeItem(key);
-          }
-        }
-      }
-    } catch {}
-  }
-}
-
 export class NitroAnalyticsStorage<T> implements AnalyticsStorage<T> {
-  private readonly storage: WebStringStorage;
+  private readonly storage: BrowserStringStorage;
 
   constructor(namespace: string) {
-    this.storage = new WebStringStorage(namespace);
+    this.storage = new BrowserStringStorage(namespace);
   }
 
   async isEnabled(): Promise<boolean> {
@@ -125,10 +71,10 @@ export class NitroAnalyticsStorage<T> implements AnalyticsStorage<T> {
 }
 
 export class NitroExperimentStorage implements ExperimentStorage {
-  private readonly storage: WebStringStorage;
+  private readonly storage: BrowserStringStorage;
 
   constructor(namespace: string) {
-    this.storage = new WebStringStorage(namespace);
+    this.storage = new BrowserStringStorage(namespace);
   }
 
   async get(key: string): Promise<string | null> {

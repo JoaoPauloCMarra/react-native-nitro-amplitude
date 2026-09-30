@@ -41,6 +41,7 @@ import { parseOldCookies } from "./cookie-migration";
 import { isNative } from "./utils/platform";
 
 const START_SESSION_EVENT = "session_start";
+const OFFLINE_RECHECK_MIN_MILLIS = 1000;
 const END_SESSION_EVENT = "session_end";
 
 function normalizeAppState(value: unknown): AppStateStatus {
@@ -562,14 +563,10 @@ export class AmplitudeReactNative
       this.recoverDestinationFlush(state.destination);
     }
 
-    if (isNative()) {
-      const { flushPendingDiskWrites } =
-        require("../native/storage") as typeof import("../native/storage");
-      try {
-        flushPendingDiskWrites(this.getStorageErrorHandler());
-      } catch (error) {
-        flushError ??= error;
-      }
+    try {
+      this.flushPendingNativeDiskWrites();
+    } catch (error) {
+      flushError ??= error;
     }
 
     if (flushError !== undefined) {
@@ -583,9 +580,10 @@ export class AmplitudeReactNative
       clearTimeout(scheduleId);
     }
     destination.resetSchedule?.();
-    destination.scheduleId = null;
     if (destination.queue && destination.queue.length > 0) {
-      destination.schedule?.(this.config.flushIntervalMillis);
+      destination.schedule?.(
+        Math.max(this.config.flushIntervalMillis, OFFLINE_RECHECK_MIN_MILLIS),
+      );
     }
   }
 

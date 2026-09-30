@@ -2499,6 +2499,39 @@ describe("react-native-nitro-amplitude", () => {
       }
     });
 
+    it("does not spin when the flush interval is zero while offline", async () => {
+      const send = jest.fn((url: string, payload: Payload) =>
+        dryRunTransport.send(url, payload),
+      );
+      const analytics = new AmplitudeReactNative();
+      setNetworkEnabled(false);
+      const timeoutSpy = jest.spyOn(globalThis, "setTimeout");
+      try {
+        await analytics.init("offline-zero-key", "offline-user", {
+          instanceName: "offline-zero",
+          trackingSessionEvents: false,
+          flushIntervalMillis: 0,
+          transportProvider: { send },
+        }).promise;
+        void analytics.track("offline_zero_event");
+        timeoutSpy.mockClear();
+        for (let step = 0; step < 10; step += 1) {
+          await new Promise((resolve) => setTimeout(resolve, 5));
+        }
+
+        const zeroDelayRearms = timeoutSpy.mock.calls.filter(
+          ([, delay]) => delay === 0,
+        );
+        expect(zeroDelayRearms.length).toBeLessThanOrEqual(1);
+        expect(send).not.toHaveBeenCalled();
+        expect(analytics.getDiagnostics().queueSize).toBe(1);
+      } finally {
+        timeoutSpy.mockRestore();
+        setNetworkEnabled(true);
+        analytics.shutdown();
+      }
+    });
+
     it("keeps a client ready when init follows shutdown during the final flush", async () => {
       jest.useRealTimers();
       let releaseFirstSend: (() => void) | undefined;

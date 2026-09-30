@@ -933,6 +933,7 @@ export class ExperimentClient implements Client {
     this.retryBackoffs.add(backoff);
     backoff.start(async () => {
       await this.fetchInternal(user, fetchBackoffTimeout, false, options);
+      this.retryBackoffs.delete(backoff);
     });
   }
 

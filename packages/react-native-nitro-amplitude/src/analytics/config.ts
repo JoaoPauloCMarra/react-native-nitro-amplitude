@@ -78,6 +78,13 @@ export const getDefaultConfig = () => {
   };
 };
 
+/**
+ * Native apps batch uploads like Amplitude's Swift and Kotlin SDKs, and upload
+ * again when the app moves to the background. Web keeps the browser default.
+ */
+const NATIVE_FLUSH_INTERVAL_MILLIS = 30_000;
+const WEB_FLUSH_INTERVAL_MILLIS = 1000;
+
 export class ReactNativeConfig extends Config implements IReactNativeConfig {
   appVersion?: string;
   cookieExpiration: number;
@@ -103,7 +110,9 @@ export class ReactNativeConfig extends Config implements IReactNativeConfig {
   constructor(apiKey: string, options?: ReactNativeOptions) {
     const defaultConfig = getDefaultConfig();
     super({
-      flushIntervalMillis: 1000,
+      flushIntervalMillis: isNative()
+        ? NATIVE_FLUSH_INTERVAL_MILLIS
+        : WEB_FLUSH_INTERVAL_MILLIS,
       flushMaxRetries: 5,
       flushQueueSize: 30,
       logLevel:

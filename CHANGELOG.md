@@ -4,6 +4,25 @@ All notable changes to this project are documented in this file.
 
 The format follows Keep a Changelog and the project adheres to SemVer.
 
+## [0.9.0] - 2026-09-30
+
+### Breaking changes
+
+- Native analytics uploads now run every 30 seconds instead of every second,
+  when 30 events are queued, or when the app moves to the background. Events
+  stay in durable native storage until they upload. Web keeps the 1 second
+  interval. A `track(...).promise` on native now resolves when its batch
+  uploads, which can take up to 30 seconds.
+
+  Migration: to keep the previous timing, pass `flushIntervalMillis: 1000` to
+  `init(...)` or to `analytics` in `createAmplitudeClient(...)`. Call
+  `flush()` when an upload must happen now.
+
+### Changed
+
+- Native analytics uploads queued events when the app moves to the background.
+  A failed background upload keeps the events in storage for the next attempt.
+
 ## [0.8.8] - 2026-09-27
 
 ### Breaking changes

@@ -167,6 +167,7 @@ import {
 } from "../index";
 import * as AnalyticsCompat from "../analytics";
 import * as ExperimentCompat from "../experiment";
+import { ReactNativeConfig } from "../analytics/config";
 import { AmplitudeReactNative } from "../analytics/react-native-client";
 import { Backoff } from "../experiment/util/backoff";
 import { getNativeApplicationContext } from "../native/context";
@@ -291,17 +292,19 @@ describe("react-native-nitro-amplitude", () => {
         migrateLegacyData: false,
       }).promise;
 
-      await analytics.track("default_transport").promise;
+      // Track resolves after upload; the 30 s native default needs a flush.
+      const tracked = analytics.track("default_transport").promise;
+      await expect(analytics.flushWithResult()).resolves.toMatchObject({
+        ok: true,
+        failed: 0,
+      });
+      await tracked;
 
       expect(mockHybridObjects.AmplitudeStorage?.set).toHaveBeenCalledWith(
         expect.stringContaining("analytics-events::AMP_unsent_analytics-"),
         expect.any(String),
         true,
       );
-      await expect(analytics.flushWithResult()).resolves.toMatchObject({
-        ok: true,
-        failed: 0,
-      });
       expect(mockHybridObjects.AmplitudeWorker?.enqueue).toHaveBeenCalled();
     } finally {
       analytics.shutdown();
@@ -2347,5 +2350,108 @@ describe("react-native-nitro-amplitude", () => {
           event.type === "network_timing" && event.timing.kind === "analytics",
       ),
     ).toBe(true);
+  });
+
+  describe("mobile flush defaults", () => {
+    type AppStateMock = {
+      AppState: {
+        addEventListener: jest.Mock<
+          { remove: jest.Mock },
+          [string, (state: string) => void]
+        >;
+      };
+    };
+
+    function latestAppStateHandler(): (state: string) => void {
+      const { addEventListener } = (
+        jest.requireMock("react-native") as AppStateMock
+      ).AppState;
+      const call = addEventListener.mock.calls.at(-1);
+      if (!call) {
+        throw new Error("AppState listener was not installed");
+      }
+      return call[1];
+    }
+
+    it("batches native uploads every 30 seconds by default", () => {
+      expect(new ReactNativeConfig("native-key").flushIntervalMillis).toBe(
+        30_000,
+      );
+    });
+
+    it("keeps the 1 second web default", () => {
+      (jest.requireMock("react-native") as ReactNativeMock).Platform.OS = "web";
+      expect(new ReactNativeConfig("web-key").flushIntervalMillis).toBe(1000);
+    });
+
+    it("keeps an explicit flush interval", () => {
+      expect(
+        new ReactNativeConfig("explicit-key", { flushIntervalMillis: 1000 })
+          .flushIntervalMillis,
+      ).toBe(1000);
+    });
+
+    it("uploads queued events when the app moves to the background", async () => {
+      const analytics = new AmplitudeReactNative();
+      try {
+        await analytics.init("background-flush-key", undefined, {
+          instanceName: "background-flush",
+          trackingSessionEvents: false,
+          transportProvider: dryRunTransport,
+        }).promise;
+        const handler = latestAppStateHandler();
+        const flush = jest.spyOn(analytics, "flush");
+
+        handler("inactive");
+        expect(flush).not.toHaveBeenCalled();
+
+        handler("background");
+        expect(flush).toHaveBeenCalledTimes(1);
+
+        handler("active");
+        handler("background");
+        expect(flush).toHaveBeenCalledTimes(2);
+      } finally {
+        analytics.shutdown();
+      }
+    });
+
+    it("ignores a failed background upload", async () => {
+      const analytics = new AmplitudeReactNative();
+      try {
+        await analytics.init("background-failure-key", undefined, {
+          instanceName: "background-failure",
+          trackingSessionEvents: false,
+          transportProvider: dryRunTransport,
+        }).promise;
+        const handler = latestAppStateHandler();
+        const failure = Promise.reject(new Error("offline"));
+        jest.spyOn(analytics, "flush").mockReturnValue({ promise: failure });
+
+        expect(() => handler("background")).not.toThrow();
+        await expect(failure).rejects.toThrow("offline");
+      } finally {
+        analytics.shutdown();
+      }
+    });
+
+    it("does not upload in the background on web", async () => {
+      (jest.requireMock("react-native") as ReactNativeMock).Platform.OS = "web";
+      const analytics = new AmplitudeReactNative();
+      try {
+        await analytics.init("web-background-key", undefined, {
+          instanceName: "web-background",
+          trackingSessionEvents: false,
+          transportProvider: dryRunTransport,
+        }).promise;
+        const handler = latestAppStateHandler();
+        const flush = jest.spyOn(analytics, "flush");
+
+        handler("background");
+        expect(flush).not.toHaveBeenCalled();
+      } finally {
+        analytics.shutdown();
+      }
+    });
   });
 });

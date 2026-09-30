@@ -164,7 +164,11 @@ export default function AmplitudeIdentityLabScreen() {
         title="Identity lab"
         subtitle="Deep link nitroamplitude://e2e-identity"
       >
-        <StatusRow testID="e2e-identity-ready" label="state" value="ready" />
+        <StatusRow
+          testID="e2e-identity-ready"
+          label="state"
+          value={report ? "ready" : "running"}
+        />
         <StatusRow
           testID="e2e-identity-mode"
           label="mode"

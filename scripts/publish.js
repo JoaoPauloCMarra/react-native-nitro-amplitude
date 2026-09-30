@@ -132,8 +132,8 @@ function getGitStatus() {
   const status = execCommandWithOutput("git status --porcelain", {
     cwd: packageDir,
   });
-  if (status === null || status === "") {
-    return [];
+  if (status === null) {
+    return null;
   }
   return status.split("\n").filter(Boolean);
 }
@@ -144,11 +144,26 @@ function checkNpmAuth() {
 }
 
 function isPackageVersionPublished(packageName, version) {
-  return (
-    execCommandWithOutput(
-      `npm view ${shellQuote(`${packageName}@${version}`)} version 2>/dev/null`,
-    ) !== null
-  );
+  try {
+    const output = execSync(
+      `npm view ${shellQuote(`${packageName}@${version}`)} version`,
+      {
+        encoding: "utf-8",
+        cwd: projectRoot,
+        shell: true,
+        stdio: ["ignore", "pipe", "pipe"],
+      },
+    ).trim();
+    return output !== "";
+  } catch (error) {
+    const stderr = String(error?.stderr ?? "");
+    if (stderr.includes("E404")) {
+      return false;
+    }
+    throw new Error(
+      `npm view ${packageName}@${version} failed: ${stderr.trim() || String(error)}`,
+    );
+  }
 }
 
 function isNpmTrustedPublishingCI() {
@@ -379,6 +394,10 @@ Options:
     }
 
     const gitStatus = getGitStatus();
+    if (gitStatus === null) {
+      log("✗ git status failed; run the publish from a valid git checkout", "red");
+      process.exit(1);
+    }
     if (gitStatus.length > 0) {
       log("⚠️  Warning: You have uncommitted changes", "yellow");
       console.log(formatGitStatus(gitStatus));

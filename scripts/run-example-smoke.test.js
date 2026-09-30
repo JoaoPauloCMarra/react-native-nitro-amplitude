@@ -48,13 +48,20 @@ test("runs the expected Maestro flow in fixture mode", () => {
     0,
   );
   assert.equal(calls.length, 1);
-  assert.deepEqual(calls[0][0], "bunx");
-  assert.deepEqual(calls[0][1], [
-    "maestro",
-    "test",
-    "maestro/smoke-tests.yaml",
-  ]);
+  assert.deepEqual(calls[0][0], "maestro");
+  assert.deepEqual(calls[0][1], ["test", "maestro/smoke-tests.yaml"]);
   assert.equal(calls[0][2].env.EXPO_PUBLIC_AMPLITUDE_DRY_RUN, "1");
+});
+
+test("asks for the Maestro CLI when it is not installed", () => {
+  assert.throws(
+    () =>
+      runExampleSmoke({
+        env: fixtureEnv("1"),
+        spawn: () => ({ error: Object.assign(new Error("spawn"), { code: "ENOENT" }) }),
+      }),
+    /Install the Maestro CLI: https:\/\/maestro.dev/,
+  );
 });
 
 test("returns the Maestro exit status", () => {

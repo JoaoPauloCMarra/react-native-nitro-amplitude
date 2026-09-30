@@ -1,4 +1,4 @@
-const { createRunOncePlugin } = require("@expo/config-plugins");
+const { createRunOncePlugin } = require("expo/config-plugins");
 const pkg = require("./package.json");
 
 const withNitroAmplitude = (config) => config;

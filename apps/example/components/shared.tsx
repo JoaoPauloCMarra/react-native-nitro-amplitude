@@ -14,13 +14,10 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const isWeb = Platform.OS === "web";
 
-const fontSans400 = "Inter_400Regular";
-const fontSans500 = "Inter_500Medium";
-const fontSans600 = "Inter_600SemiBold";
-const fontSans700 = "Inter_700Bold";
-const fontSans800 = "Inter_800ExtraBold";
-const fontMono400 = "JetBrainsMono_400Regular";
-const fontMono700 = "JetBrainsMono_700Bold";
+const fontMono = Platform.select({
+  ios: "Menlo",
+  default: "monospace",
+});
 
 export const Colors = {
   background: "#eef3f9",
@@ -326,14 +323,14 @@ export const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 34,
     lineHeight: 38,
-    fontFamily: fontSans800,
+    fontWeight: "800",
     color: Colors.text,
     letterSpacing: 0,
   },
   headerSubtitle: {
     fontSize: 14,
     lineHeight: 20,
-    fontFamily: fontSans500,
+    fontWeight: "500",
     color: Colors.muted,
   },
   card: {
@@ -368,14 +365,14 @@ export const styles = StyleSheet.create({
   },
   cardTitle: {
     fontSize: 17,
-    fontFamily: fontSans800,
+    fontWeight: "800",
     color: Colors.text,
     letterSpacing: 0,
   },
   cardSubtitle: {
     fontSize: 11,
     color: Colors.muted,
-    fontFamily: fontSans700,
+    fontWeight: "700",
     textTransform: "uppercase",
     letterSpacing: 0.8,
   },
@@ -416,7 +413,7 @@ export const styles = StyleSheet.create({
   },
   buttonText: {
     fontSize: 14,
-    fontFamily: fontSans700,
+    fontWeight: "700",
     letterSpacing: 0.2,
   },
   buttonTextSm: {
@@ -430,7 +427,7 @@ export const styles = StyleSheet.create({
   },
   label: {
     fontSize: 11,
-    fontFamily: fontSans700,
+    fontWeight: "700",
     color: Colors.muted,
     textTransform: "uppercase",
     letterSpacing: 0.9,
@@ -445,7 +442,6 @@ export const styles = StyleSheet.create({
     paddingVertical: 10,
     color: Colors.text,
     fontSize: 14,
-    fontFamily: fontSans400,
   },
   statusRow: {
     flexDirection: "row",
@@ -461,7 +457,7 @@ export const styles = StyleSheet.create({
   },
   statusLabel: {
     fontSize: 12,
-    fontFamily: fontSans600,
+    fontWeight: "600",
     color: Colors.muted,
   },
   statusValue: {
@@ -469,7 +465,8 @@ export const styles = StyleSheet.create({
     textAlign: "right",
     fontSize: 13,
     color: Colors.text,
-    fontFamily: fontMono700,
+    fontFamily: fontMono,
+    fontWeight: "700",
   },
   codeBlock: {
     backgroundColor: "#0f172a",
@@ -482,7 +479,7 @@ export const styles = StyleSheet.create({
     minWidth: "100%",
   },
   codeBlockText: {
-    fontFamily: fontMono400,
+    fontFamily: fontMono,
     fontSize: 12,
     lineHeight: 18,
     color: "#cbd5e1",
@@ -492,7 +489,7 @@ export const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 12,
-    fontFamily: fontSans800,
+    fontWeight: "800",
     color: Colors.muted,
     textTransform: "uppercase",
     letterSpacing: 1,

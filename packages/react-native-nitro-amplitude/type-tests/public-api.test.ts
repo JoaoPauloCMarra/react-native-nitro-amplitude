@@ -14,7 +14,9 @@ import {
 import { init, track } from "../src/analytics";
 import {
   Experiment as ExperimentSubpath,
+  parseVariantJson as parseSubpathVariantJson,
   type ExperimentConfig as ExperimentSubpathConfig,
+  type VariantFreshness as SubpathVariantFreshness,
 } from "../src/experiment";
 import type { ExperimentClient } from "../src";
 import type { ExperimentConfig } from "../src/experiment/types/config";
@@ -272,3 +274,11 @@ void experimentSubpathConfig;
 void webInitExport;
 void webExperimentInit;
 void webHttpRequest;
+
+const subpathFreshness: SubpathVariantFreshness = "fresh";
+void subpathFreshness;
+const subpathParsed: { ok: boolean } = parseSubpathVariantJson(
+  { value: "on", payload: { ok: true } },
+  { ok: false },
+);
+void subpathParsed;

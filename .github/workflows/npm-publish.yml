@@ -244,9 +244,6 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Prepare package artifacts
-        run: bun run build
-
       - name: Publish to npm with Trusted Publishing
         working-directory: ${{ env.PACKAGE_DIR }}
         env:

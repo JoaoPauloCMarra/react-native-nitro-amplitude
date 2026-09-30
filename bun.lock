@@ -29,8 +29,6 @@
       "version": "1.0.0",
       "dependencies": {
         "@babel/runtime": "^7.29.7",
-        "@expo-google-fonts/inter": "^0.4.2",
-        "@expo-google-fonts/jetbrains-mono": "^0.4.1",
         "expo": "~57.0.26",
         "expo-asset": "~57.0.18",
         "expo-build-properties": "~57.0.22",
@@ -61,7 +59,7 @@
     },
     "packages/react-native-nitro-amplitude": {
       "name": "react-native-nitro-amplitude",
-      "version": "0.9.0",
+      "version": "0.9.1",
       "dependencies": {
         "@amplitude/analytics-connector": "^1.6.8",
         "@amplitude/analytics-core": "2.58.0",
@@ -74,10 +72,14 @@
         "@types/react": "~19.2.18",
       },
       "peerDependencies": {
+        "expo": ">=52.0.0",
         "react": ">=18.2.0",
         "react-native": ">=0.75.0",
         "react-native-nitro-modules": ">=0.37.0 <0.38.0",
       },
+      "optionalPeers": [
+        "expo",
+      ],
     },
   },
   "trustedDependencies": [
@@ -388,10 +390,6 @@
     "@eslint/object-schema": ["@eslint/object-schema@3.0.5", "", {}, "sha512-vqTaUEgxzm+YDSdElad6PiRoX4t8VGDjCtt05zn4nU810UIx/uNEV7/lZJ6KwFThKZOzOxzXy48da+No7HZaMw=="],
 
     "@eslint/plugin-kit": ["@eslint/plugin-kit@0.7.2", "", { "dependencies": { "@eslint/core": "^1.2.1", "levn": "^0.4.1" } }, "sha512-+CNAzxglkrpNf/kKywqQfk74QjtceuOE7Qm+AF8miRvPF/wmmK5+OJOgVh3AVTT3RP2mH3+FOaxlE5v72owk0A=="],
-
-    "@expo-google-fonts/inter": ["@expo-google-fonts/inter@0.4.2", "", {}, "sha512-syfiImMaDmq7cFi0of+waE2M4uSCyd16zgyWxdPOY7fN2VBmSLKEzkfbZgeOjJq61kSqPBNNtXjggiQiSD6gMQ=="],
-
-    "@expo-google-fonts/jetbrains-mono": ["@expo-google-fonts/jetbrains-mono@0.4.1", "", {}, "sha512-CslACrtMOcRwoWXCO7OMEI+9w3fukWSoBtvNz46OqPoogEuuoY0tkDY1O8sFumk8t0pC6Cx0Xr95O0TOQhpkug=="],
 
     "@expo-google-fonts/material-symbols": ["@expo-google-fonts/material-symbols@0.4.38", "", {}, "sha512-IJkBtN1o8u9BW5fvSii1MyHPQ7Q0HxbWcVBvOrOzgMLpVtZw7R2w94wBTVR7kZwv3w1JNTESMmLA5Sqn1+Z36A=="],
 

@@ -2,7 +2,7 @@ const { spawnSync } = require("node:child_process");
 const path = require("node:path");
 
 const projectRoot = path.resolve(__dirname, "..");
-const maestroArgs = ["maestro", "test", "maestro/smoke-tests.yaml"];
+const maestroArgs = ["test", "maestro/smoke-tests.yaml"];
 
 function assertDryRunEnvironment(env = process.env) {
   if (env.EXPO_PUBLIC_AMPLITUDE_DRY_RUN !== "1") {
@@ -17,7 +17,7 @@ function assertDryRunEnvironment(env = process.env) {
 function runExampleSmoke({ env = process.env, spawn = spawnSync, e2eArgs } = {}) {
   assertDryRunEnvironment(env);
 
-  const command = e2eArgs ? "agent-device" : "bunx";
+  const command = e2eArgs ? "agent-device" : "maestro";
   const args = e2eArgs ? ["test", ...e2eArgs] : maestroArgs;
   const result = spawn(command, args, {
     cwd: projectRoot,
@@ -26,6 +26,9 @@ function runExampleSmoke({ env = process.env, spawn = spawnSync, e2eArgs } = {})
   });
 
   if (result.error) {
+    if (!e2eArgs && result.error.code === "ENOENT") {
+      throw new Error("Install the Maestro CLI: https://maestro.dev");
+    }
     throw result.error;
   }
 

@@ -5,4 +5,7 @@ open "com.nitroamplitude.example" "nitroamplitude://e2e" --relaunch
 wait "stable"
 wait id="e2e-screen"
 wait text "e2e-ready"
+open "nitroamplitude://e2e-identity"
+wait id="e2e-identity-screen"
+wait text "fail=0 pass=2"
 close

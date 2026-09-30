@@ -7,6 +7,7 @@ import type { Logger } from "./types/logger";
 import { Source, VariantSource, isFallback } from "./types/source";
 import { LocalStorage, MemoryStorage } from "./storage/local-storage";
 import {
+  parseVariantJson,
   variantBoolean,
   variantJson,
   variantNumber,
@@ -23,6 +24,7 @@ export type { Logger };
 export { Source, VariantSource, isFallback };
 export { LocalStorage, MemoryStorage };
 export {
+  parseVariantJson,
   variantBoolean,
   variantJson,
   variantNumber,
@@ -37,6 +39,7 @@ export type {
   ExperimentFetchResult,
   ExperimentVariantResult,
   FetchOptions,
+  VariantFreshness,
 } from "./types/client";
 export type { ExperimentUser, ExperimentUserProvider } from "./types/user";
 export type { Exposure, ExposureTrackingProvider } from "./types/exposure";

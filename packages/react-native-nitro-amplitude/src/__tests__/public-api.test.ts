@@ -2454,4 +2454,100 @@ describe("react-native-nitro-amplitude", () => {
       }
     });
   });
+
+  describe("analytics lifecycle", () => {
+    it("keeps events queued while the network is disabled", async () => {
+      const send = jest.fn((url: string, payload: Payload) =>
+        dryRunTransport.send(url, payload),
+      );
+      const analytics = new AmplitudeReactNative();
+      setNetworkEnabled(false);
+      try {
+        await analytics.init("offline-queue-key", "offline-user", {
+          instanceName: "offline-queue",
+          trackingSessionEvents: false,
+          flushIntervalMillis: 5,
+          flushMaxRetries: 2,
+          transportProvider: { send },
+        }).promise;
+        let settled = false;
+        const tracked = analytics
+          .track("offline_event")
+          .promise.then((result) => {
+            settled = true;
+            return result;
+          });
+        for (let step = 0; step < 20; step += 1) {
+          await new Promise((resolve) => setTimeout(resolve, 5));
+        }
+        await expect(analytics.flushWithResult()).resolves.toMatchObject({
+          ok: false,
+          retried: 1,
+        });
+
+        expect(settled).toBe(false);
+        expect(send).not.toHaveBeenCalled();
+        expect(analytics.getDiagnostics().queueSize).toBe(1);
+
+        setNetworkEnabled(true);
+        await analytics.flush().promise;
+        await expect(tracked).resolves.toMatchObject({ code: 202 });
+        expect(send).toHaveBeenCalledTimes(1);
+      } finally {
+        setNetworkEnabled(true);
+        analytics.shutdown();
+      }
+    });
+
+    it("keeps a client ready when init follows shutdown during the final flush", async () => {
+      jest.useRealTimers();
+      let releaseFirstSend: (() => void) | undefined;
+      let sendCount = 0;
+      const gatedTransport: Transport = {
+        async send(url: string, payload: Payload) {
+          sendCount += 1;
+          if (sendCount === 1) {
+            await new Promise<void>((resolve) => {
+              releaseFirstSend = resolve;
+            });
+          }
+          return dryRunTransport.send(url, payload);
+        },
+      };
+      const analytics = new AmplitudeReactNative();
+      try {
+        await analytics.init("shutdown-reinit-key", "user-a", {
+          instanceName: "shutdown-reinit",
+          trackingSessionEvents: false,
+          flushIntervalMillis: 60000,
+          transportProvider: gatedTransport,
+        }).promise;
+        void analytics.track("before_logout");
+        for (let step = 0; step < 20; step += 1) await Promise.resolve();
+
+        analytics.shutdown();
+        const reinit = analytics.init("shutdown-reinit-key", "user-b", {
+          instanceName: "shutdown-reinit",
+          trackingSessionEvents: false,
+          flushIntervalMillis: 60000,
+          transportProvider: gatedTransport,
+        }).promise;
+        for (let step = 0; step < 50 && !releaseFirstSend; step += 1) {
+          await new Promise((resolve) => setTimeout(resolve, 0));
+        }
+        releaseFirstSend?.();
+        await reinit;
+        for (let step = 0; step < 20; step += 1) {
+          await new Promise((resolve) => setTimeout(resolve, 0));
+        }
+
+        expect(analytics.getDiagnostics().initialized).toBe(true);
+        const tracked = analytics.track("after_login").promise;
+        await analytics.flush().promise;
+        await expect(tracked).resolves.toMatchObject({ code: 202 });
+      } finally {
+        analytics.shutdown();
+      }
+    });
+  });
 });

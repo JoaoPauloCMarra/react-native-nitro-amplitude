@@ -93,7 +93,7 @@ export class ExperimentClient implements Client {
   private readonly defaultUserProvider: DefaultUserProvider;
   private readonly userSessionExposureTracker:
     UserSessionExposureTracker | undefined;
-  private retriesBackoff: Backoff | undefined;
+  private readonly retryBackoffs = new Set<Backoff>();
   private readonly poller: Poller = new Poller(
     () => this.pollFlags(),
     flagPollerIntervalMillis,
@@ -924,21 +924,23 @@ export class ExperimentClient implements Client {
 
   private startRetries(user: ExperimentUser, options?: FetchOptions): void {
     this.logger.debug("[Experiment] Retry fetch");
-    this.retriesBackoff = new Backoff(
+    const backoff = new Backoff(
       fetchBackoffAttempts,
       fetchBackoffMinMillis,
       fetchBackoffMaxMillis,
       fetchBackoffScalar,
     );
-    this.retriesBackoff.start(async () => {
+    this.retryBackoffs.add(backoff);
+    backoff.start(async () => {
       await this.fetchInternal(user, fetchBackoffTimeout, false, options);
     });
   }
 
   private stopRetries(): void {
-    if (this.retriesBackoff != null) {
-      this.retriesBackoff.cancel();
+    for (const backoff of this.retryBackoffs) {
+      backoff.cancel();
     }
+    this.retryBackoffs.clear();
   }
 
   private addContextSync(user: ExperimentUser): ExperimentUser {

@@ -373,3 +373,42 @@ test("clearing during storage prevents earlier responses from restoring assignme
     client.stop();
   }
 });
+
+test("stop cancels retries from every concurrent failed fetch", async () => {
+  jest.useFakeTimers();
+  const request = jest
+    .fn<Promise<{ status: number; body: string }>, []>()
+    .mockRejectedValueOnce(new Error("offline-a"))
+    .mockRejectedValueOnce(new Error("offline-b"))
+    .mockResolvedValue({
+      status: 200,
+      body: '{"a":{"key":"on","value":"old-user-variant"}}',
+    });
+  const client = new ExperimentClient("test-deployment-key", {
+    retryFetchOnFailure: true,
+    automaticExposureTracking: false,
+    fetchOnStart: false,
+    pollOnStart: false,
+    httpClient: { request },
+  });
+  try {
+    await client.cacheReady();
+    const user = { user_id: "user-a" };
+    const first = client.fetchOrThrow(user, { flagKeys: ["a"] });
+    const second = client.fetchOrThrow(user, { flagKeys: ["b"] });
+    await expect(first).rejects.toThrow("offline-a");
+    await expect(second).rejects.toThrow("offline-b");
+    expect(request).toHaveBeenCalledTimes(2);
+
+    client.setUser({ user_id: "user-b" });
+    client.stop();
+    jest.advanceTimersByTime(120_000);
+    for (let step = 0; step < 40; step += 1) await Promise.resolve();
+
+    expect(request).toHaveBeenCalledTimes(2);
+    expect(client.variant("a").value).toBeUndefined();
+  } finally {
+    client.stop();
+    jest.useRealTimers();
+  }
+});

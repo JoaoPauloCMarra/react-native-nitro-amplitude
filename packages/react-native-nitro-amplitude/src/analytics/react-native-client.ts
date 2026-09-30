@@ -29,6 +29,7 @@ import {
   AnalyticsClient,
 } from "@amplitude/analytics-core";
 import { healthCheck } from "../diagnostics";
+import { getNetworkEnabled } from "../network";
 import {
   classifyDiagnosticFailure,
   recordDiagnosticFailure,
@@ -61,6 +62,7 @@ type ScheduledDestination = {
   queue?: unknown[];
   flush?: (useRetry?: boolean) => Promise<void>;
   resetSchedule?: () => void;
+  schedule?: (timeout: number) => void;
   scheduleEvents?: (list: unknown[]) => void;
   fulfillRequest?: (list: unknown[], code: number, message: string) => unknown;
 };
@@ -132,6 +134,7 @@ export class AmplitudeReactNative
   appState: AppStateStatus = "background";
   private appStateChangeHandler: NativeEventSubscription | undefined;
   private initPromise: Promise<void> | undefined;
+  private shutdownPromise: Promise<void> | undefined;
   private readonly connectorOwnerId = ++nextConnectorOwnerId;
   private lastFlushTime: number | undefined;
   private lastFlushDurationMillis: number | undefined;
@@ -207,11 +210,13 @@ export class AmplitudeReactNative
       return;
     }
     this.initializing = true;
-    this.lastScreenName = undefined;
-    this.explicitSessionId = options.sessionId;
     let appStateHandlerInstalled = false;
 
     try {
+      await this.shutdownPromise?.catch(() => undefined);
+      this.lastScreenName = undefined;
+      this.explicitSessionId = options.sessionId;
+
       // Step 1: Read cookies stored by old SDK
       const oldCookies = await parseOldCookies(options.apiKey, options);
 
@@ -285,7 +290,13 @@ export class AmplitudeReactNative
   }
 
   shutdown() {
-    void this.shutdownAndFlush();
+    const pending = this.shutdownAndFlush().finally(() => {
+      if (this.shutdownPromise === pending) {
+        this.shutdownPromise = undefined;
+      }
+    });
+    this.shutdownPromise = pending;
+    void pending;
   }
 
   private async shutdownAndFlush(): Promise<void> {
@@ -529,6 +540,11 @@ export class AmplitudeReactNative
     state: DestinationFlushState,
     useRetry: boolean,
   ): Promise<void> {
+    if (!getNetworkEnabled()) {
+      this.deferDestinationFlush(state.destination);
+      this.flushPendingNativeDiskWrites();
+      return;
+    }
     const scheduledFlush =
       state.destination.flushId ?? state.destination.scheduleId ?? null;
     let flushError: unknown;
@@ -559,6 +575,27 @@ export class AmplitudeReactNative
     if (flushError !== undefined) {
       throw flushError;
     }
+  }
+
+  private deferDestinationFlush(destination: ScheduledDestination): void {
+    const scheduleId = destination.scheduleId;
+    if (scheduleId !== null && scheduleId !== undefined) {
+      clearTimeout(scheduleId);
+    }
+    destination.resetSchedule?.();
+    destination.scheduleId = null;
+    if (destination.queue && destination.queue.length > 0) {
+      destination.schedule?.(this.config.flushIntervalMillis);
+    }
+  }
+
+  private flushPendingNativeDiskWrites(): void {
+    if (!isNative()) {
+      return;
+    }
+    const { flushPendingDiskWrites } =
+      require("../native/storage") as typeof import("../native/storage");
+    flushPendingDiskWrites(this.getStorageErrorHandler());
   }
 
   private recoverDestinationFlush(destination: ScheduledDestination): void {

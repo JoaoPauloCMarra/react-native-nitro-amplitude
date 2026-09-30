@@ -8,7 +8,7 @@ and the on-disk event/experiment queue.
 | Library | Where | Why |
 | --- | --- | --- |
 | zlib gzip | `cpp/core/Gzip.cpp`, `HybridAmplitudeWorker` | Amplitude HTTP V2 accepts `Content-Encoding: gzip`. Bodies ≥ 1 KiB to `*.amplitude.com` are compressed on the worker thread. |
-| JSONL segments + tombstones | `JsonlSegmentStore` | Deletes append a tombstone instead of rewriting the segment. Compaction runs when a segment is more than 50% dead. |
+| JSONL segments + tombstones | `JsonlSegmentStore` | Deletes append a tombstone instead of rewriting the segment. Compaction runs when a segment is more than 50% dead. Compaction keeps a tombstone while any lower segment still holds data, so a deleted key cannot reappear after relaunch, and it aborts without changes when a live row cannot be read. A delete throws `storage_error` when its tombstone cannot be written. |
 
 ## Evaluated and not shipped
 

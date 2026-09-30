@@ -1,6 +1,6 @@
 # API Reference
 
-## Analytics (default export)
+## Analytics (named exports)
 
 Re-exports the analytics client surface from `@amplitude/analytics-core` with React Native wiring:
 
@@ -96,8 +96,6 @@ Available on the `react-native-nitro-amplitude/testing` subpath.
 
 - `prefetchNativeContext()` — warms the native device-context cache, including
   the normalized option set used by Experiment.
-- `getNativeApplicationContext(options)` — JSON context for analytics and
-  experiment targeting; missing native values are empty strings.
 - `nitroHttpClient`, `nitroTransport` — background native HTTP for
   uploads/fetches with request-scoped completion and a bounded worker queue.
 

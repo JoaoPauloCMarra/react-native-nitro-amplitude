@@ -4,14 +4,10 @@
 
 | Version | Supported |
 | ------- | --------- |
-| 0.6.x   | Yes       |
-| 0.5.x   | No        |
-| 0.4.x   | No        |
-| 0.3.x   | No        |
-| 0.2.x   | No        |
-| 0.1.x   | No        |
+| 0.9.x   | Yes       |
+| < 0.9   | No        |
 
-The latest `0.6.x` release is the only supported line. Older lines are
+The latest `0.9.x` release is the only supported line. Older lines are
 unsupported and receive no security fixes; upgrade to the current release to
 receive security updates.
 
@@ -27,14 +23,20 @@ receive security updates.
 
 ## Reporting
 
-Report vulnerabilities via GitHub Security Advisories on the repository:
-https://github.com/JoaoPauloCMarra/react-native-nitro-amplitude/security/advisories
+Report vulnerabilities privately through GitHub private vulnerability
+reporting:
+https://github.com/JoaoPauloCMarra/react-native-nitro-amplitude/security/advisories/new
+
+Do not open public issues for security reports.
 
 ## Notes
 
 - Do not commit Amplitude API keys or experiment deployment keys.
-- Native storage persists analytics/experiment cache in app sandbox
-  (SharedPreferences / UserDefaults) in plain text. The package does not
-  encrypt persisted state; do not rely on it for secrets.
+- Native storage persists the analytics and experiment cache as plain-text
+  JSONL segment files in the app sandbox: `Application Support/nitro-amplitude`
+  on iOS and `filesDir/nitro-amplitude` on Android. UserDefaults and
+  SharedPreferences are read only once to migrate data from older package
+  versions. The package does not encrypt persisted state; do not rely on it for
+  secrets.
 - HTTP transport runs on a native background thread; payloads may contain
   analytics event data — use TLS endpoints only.

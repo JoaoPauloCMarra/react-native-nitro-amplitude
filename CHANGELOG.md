@@ -4,6 +4,75 @@ All notable changes to this project are documented in this file.
 
 The format follows Keep a Changelog and the project adheres to SemVer.
 
+## [0.9.1] - 2026-09-30
+
+### Breaking changes
+
+- None.
+
+### Fixed
+
+- Deleted native disk keys no longer come back after an app relaunch. Segment
+  compaction now keeps a delete marker while an older segment can still hold
+  the key.
+- A read error during segment compaction no longer deletes live keys.
+  Compaction stops and leaves the data unchanged.
+- `remove(key, true)`, `removeBatch`, `clear(true)`, namespace `reset()`, and
+  `NitroExperimentStorage.delete` now reject with a `storage_error` when the
+  delete cannot be written to disk. Before, they resolved while the key was
+  still stored.
+- Android release builds that enable R8 or ProGuard minification keep every
+  adapter method that native code calls by name. Before, native object creation
+  could fail in minified builds.
+- Experiment user context now uses the Experiment targeting keys `os`
+  (`"<os name> <os version>"`), `device_model`, `device_brand`,
+  `device_manufacturer`, `version`, `platform`, `language`, `country`, and
+  `carrier`. Targeting rules on OS and device fields now match. Native
+  identifiers such as `idfv` are no longer added to the Experiment user.
+- Two failed Experiment fetches that run at the same time no longer leave a
+  retry that `stop()` and `setUser()` cannot cancel.
+- Calling `init()` right after `shutdown()` no longer leaves a client that
+  reports ready but does not send events. `init()` waits for the shutdown to
+  finish.
+- While `setNetworkEnabled(false)` is active, analytics events stay queued and
+  scheduled flushes do not count as retry attempts, so events are not dropped
+  after `flushMaxRetries`. Uploads resume on the next flush interval after the
+  network is enabled, or at once when you call `flush()`.
+- Each `MemoryStorage` / `InMemoryStorage` instance keeps its own data, so
+  `reset()` on one instance no longer clears the others.
+- Native disk-adapter and per-request HTTP exceptions now classify as
+  `storage_error` and `network_error` instead of `native_unavailable`.
+- A failed analytics upload is recorded once in `diagnosticFailures`, and
+  `throttledCount` counts repeated failures.
+- The `react-native-nitro-amplitude/analytics` entry no longer emits value
+  re-exports for type-only names, so strict ESM bundlers can load it.
+- The `testing` mock `healthCheck()` returns `diskStorageWritable` and
+  `workerReady`.
+
+### Changed
+
+- The iOS podspec uses React Native's `min_ios_version_supported` instead of a
+  fixed iOS 13.0 floor.
+- The config plugin loads `expo/config-plugins`. `expo` is an optional peer
+  dependency.
+- `parseVariantJson` and the `VariantFreshness` type are exported from
+  `react-native-nitro-amplitude/experiment`.
+- The package is marked `"sideEffects": false`.
+- Removed the `unfetch` dependency. Experiment web requests use the global
+  `fetch`.
+- `@amplitude/ua-parser-js` is used only by the web context module.
+- README documents the tested baseline (React Native 0.86.3, Expo SDK 57), the
+  supported range (React Native >= 0.76, Expo SDK >= 52), and the Android NDK
+  27 requirement for React Native 0.76 and Expo SDK 52 apps.
+
+### Deprecated
+
+- The Experiment `LocalStorage` export (`ExperimentLocalStorage` from the root
+  entry) keeps variants in memory only. Use `NitroExperimentStorage` or
+  `createDurableAmplitudeStoragePreset` for durable variants.
+- The Android `initializeNitroAmplitude` Kotlin helper. The package initializer
+  already sets the Android context, so apps do not need to call it.
+
 ## [0.9.0] - 2026-09-30
 
 ### Breaking changes
@@ -30,11 +99,6 @@ The format follows Keep a Changelog and the project adheres to SemVer.
 - None.
 
 ### Fixed
-
-- Native JSONL overwrites retain the prior value when appending fails, including rotated segments and torn writes. Compaction follows a successful replacement append.
-- Browser storage preserves in-process fallback writes, removals, and resets when localStorage is unavailable or denies access.
-- Partial Experiment fetches remove missing requested flags by their actual keys, including numeric string keys, while retaining unrequested flags.
-- Native gzip selection matches only the exact Amplitude domain or its subdomains, excluding lookalike hosts and domain text in paths or queries.
 
 - Include the fixed-width integer header explicitly so the native gzip helper compiles with Linux Clang.
 

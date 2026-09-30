@@ -1,6 +1,6 @@
 {
   "name": "react-native-nitro-amplitude",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "description": "Amplitude Analytics and Experiment SDK for React Native powered by Nitro Modules and C++ on native platforms, with web-compatible fetch and storage fallbacks.",
   "main": "lib/commonjs/index.js",
   "module": "lib/module/index.js",
@@ -127,9 +127,15 @@
     "@types/react": "~19.2.18"
   },
   "peerDependencies": {
+    "expo": ">=52.0.0",
     "react": ">=18.2.0",
     "react-native": ">=0.75.0",
     "react-native-nitro-modules": ">=0.37.0 <0.38.0"
+  },
+  "peerDependenciesMeta": {
+    "expo": {
+      "optional": true
+    }
   },
   "react-native-builder-bob": {
     "source": "src",

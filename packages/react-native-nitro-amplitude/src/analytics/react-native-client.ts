@@ -979,6 +979,14 @@ export class AmplitudeReactNative
           flushPendingDiskWrites(this.getStorageErrorHandler());
         } catch {}
       }
+      if (isNative() && nextAppState === "background" && this.isReady) {
+        // Upload now; events stay in durable storage if the upload fails.
+        void this.flush().promise.catch((error: unknown) => {
+          this.config?.loggerProvider?.error(
+            `Background flush failed: ${String(error)}`,
+          );
+        });
+      }
       if (nextAppState == "active") {
         this.enterForeground(timestamp);
       } else {

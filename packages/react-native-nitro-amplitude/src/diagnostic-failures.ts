@@ -3,6 +3,10 @@ import { Status } from "@amplitude/analytics-core";
 import type { HttpClient, SimpleResponse } from "./experiment/types/transport";
 import { PACKAGE_VERSION } from "./package-version";
 import {
+  isNetworkGuardedTransport,
+  markNetworkGuardedTransport,
+} from "./network";
+import {
   clearDiagnosticEvents,
   getDiagnosticEventsByType,
   recordDiagnosticEvent,
@@ -235,6 +239,9 @@ export function createDiagnosticAnalyticsTransport(
     },
   };
   diagnosticTransports.add(wrapped);
+  if (isNetworkGuardedTransport(transport)) {
+    markNetworkGuardedTransport(wrapped);
+  }
   return wrapped;
 }
 

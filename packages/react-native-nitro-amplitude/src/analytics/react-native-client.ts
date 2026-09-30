@@ -29,7 +29,7 @@ import {
   AnalyticsClient,
 } from "@amplitude/analytics-core";
 import { healthCheck } from "../diagnostics";
-import { getNetworkEnabled } from "../network";
+import { getNetworkEnabled, isNetworkGuardedTransport } from "../network";
 import {
   classifyDiagnosticFailure,
   recordDiagnosticFailure,
@@ -541,7 +541,10 @@ export class AmplitudeReactNative
     state: DestinationFlushState,
     useRetry: boolean,
   ): Promise<void> {
-    if (!getNetworkEnabled()) {
+    if (
+      !getNetworkEnabled() &&
+      this.isNetworkGuardedDestination(state.destination)
+    ) {
       this.deferDestinationFlush(state.destination);
       this.flushPendingNativeDiskWrites();
       return;
@@ -574,6 +577,15 @@ export class AmplitudeReactNative
     }
   }
 
+  private isNetworkGuardedDestination(
+    destination: ScheduledDestination,
+  ): boolean {
+    return (
+      destination instanceof Destination &&
+      isNetworkGuardedTransport(destination.config?.transportProvider)
+    );
+  }
+
   private deferDestinationFlush(destination: ScheduledDestination): void {
     const scheduleId = destination.scheduleId;
     if (scheduleId !== null && scheduleId !== undefined) {
@@ -581,8 +593,11 @@ export class AmplitudeReactNative
     }
     destination.resetSchedule?.();
     if (destination.queue && destination.queue.length > 0) {
+      const interval = this.config.flushIntervalMillis;
       destination.schedule?.(
-        Math.max(this.config.flushIntervalMillis, OFFLINE_RECHECK_MIN_MILLIS),
+        Number.isFinite(interval)
+          ? Math.max(interval, OFFLINE_RECHECK_MIN_MILLIS)
+          : OFFLINE_RECHECK_MIN_MILLIS,
       );
     }
   }

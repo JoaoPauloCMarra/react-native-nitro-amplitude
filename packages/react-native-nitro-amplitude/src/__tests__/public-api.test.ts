@@ -166,9 +166,11 @@ import {
   variantString,
 } from "../index";
 import * as AnalyticsCompat from "../analytics";
+import * as AnalyticsTypesEntry from "../analytics/types";
 import * as ExperimentCompat from "../experiment";
 import { ReactNativeConfig } from "../analytics/config";
 import { AmplitudeReactNative } from "../analytics/react-native-client";
+import { nitroTransport } from "../analytics/nitro-transport";
 import { Backoff } from "../experiment/util/backoff";
 import { getNativeApplicationContext } from "../native/context";
 import { resetHybridInstancesForTests } from "../native/hybrid";
@@ -1053,6 +1055,14 @@ describe("react-native-nitro-amplitude", () => {
     );
   });
 
+  it("exports analytics-core runtime enums from Types", () => {
+    expect(AnalyticsTypesEntry.RevenueProperty.REVENUE).toBe("$revenue");
+    expect(AnalyticsTypesEntry.ServerZone.EU).toBe("EU");
+    expect(AnalyticsTypesEntry.LogLevel.None).toBe(0);
+    expect(AnalyticsTypesEntry.IdentifyOperation.SET).toBe("$set");
+    expect(AnalyticsTypesEntry.SpecialEventType.IDENTIFY).toBe("$identify");
+  });
+
   it("classifies native disk and HTTP exception codes", () => {
     expect(
       getAmplitudeErrorCode(
@@ -1104,6 +1114,28 @@ describe("react-native-nitro-amplitude", () => {
     expect(await analytics.get("event")).toBeUndefined();
     expect(await disk.get("variant")).toBeNull();
     expect(await experiment.get("variant")).toBeNull();
+  });
+
+  it("matches the Browser SDK device model fallback on web", () => {
+    const originalNavigator = globalThis.navigator;
+    Object.defineProperty(globalThis, "navigator", {
+      configurable: true,
+      value: {
+        language: "en-US",
+        userAgent:
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+      },
+    });
+    try {
+      const context = getWebApplicationContext({});
+      expect(context.osName).toBe("Windows");
+      expect(context.deviceModel).toBe("Windows");
+    } finally {
+      Object.defineProperty(globalThis, "navigator", {
+        configurable: true,
+        value: originalNavigator,
+      });
+    }
   });
 
   it("uses browser storage and fetch for web fallbacks", async () => {
@@ -2333,7 +2365,14 @@ describe("react-native-nitro-amplitude", () => {
         instanceName: "health-probe",
         migrateLegacyData: false,
       }).promise;
+      await analytics.healthCheck();
       const result = await analytics.healthCheck();
+      const probeKeys = new Set(
+        (mockHybridObjects.AmplitudeStorage?.set.mock.calls ?? [])
+          .map(([key]) => String(key))
+          .filter((key) => key.startsWith("health::")),
+      );
+      expect(Array.from(probeKeys)).toEqual(["health::probe"]);
       expect(result).toMatchObject({
         ok: true,
         nativeAvailable: true,
@@ -2511,9 +2550,6 @@ describe("react-native-nitro-amplitude", () => {
     });
 
     it("keeps events queued while the network is disabled", async () => {
-      const send = jest.fn((url: string, payload: Payload) =>
-        dryRunTransport.send(url, payload),
-      );
       const analytics = new AmplitudeReactNative();
       setNetworkEnabled(false);
       try {
@@ -2522,8 +2558,10 @@ describe("react-native-nitro-amplitude", () => {
           trackingSessionEvents: false,
           flushIntervalMillis: 5,
           flushMaxRetries: 2,
-          transportProvider: { send },
+          transportProvider: nitroTransport,
         }).promise;
+        const enqueueCount = () =>
+          mockHybridObjects.AmplitudeWorker?.enqueue?.mock.calls.length ?? 0;
         let settled = false;
         const tracked = analytics
           .track("offline_event")
@@ -2540,49 +2578,73 @@ describe("react-native-nitro-amplitude", () => {
         });
 
         expect(settled).toBe(false);
-        expect(send).not.toHaveBeenCalled();
+        expect(enqueueCount()).toBe(0);
         expect(analytics.getDiagnostics().queueSize).toBe(1);
 
         setNetworkEnabled(true);
         await analytics.flush().promise;
-        await expect(tracked).resolves.toMatchObject({ code: 202 });
-        expect(send).toHaveBeenCalledTimes(1);
+        await expect(tracked).resolves.toMatchObject({ code: 200 });
+        expect(enqueueCount()).toBe(1);
       } finally {
         setNetworkEnabled(true);
         analytics.shutdown();
       }
     });
 
-    it("does not spin when the flush interval is zero while offline", async () => {
-      const send = jest.fn((url: string, payload: Payload) =>
-        dryRunTransport.send(url, payload),
-      );
+    it("keeps recording with DryRunTransport while the network is disabled", async () => {
+      clearDryRunTransportRecords();
       const analytics = new AmplitudeReactNative();
       setNetworkEnabled(false);
-      const timeoutSpy = jest.spyOn(globalThis, "setTimeout");
       try {
-        await analytics.init("offline-zero-key", "offline-user", {
-          instanceName: "offline-zero",
+        await analytics.init("offline-dry-run-key", "offline-user", {
+          instanceName: "offline-dry-run",
           trackingSessionEvents: false,
-          flushIntervalMillis: 0,
-          transportProvider: { send },
+          flushIntervalMillis: 60000,
+          transportProvider: dryRunTransport,
         }).promise;
-        void analytics.track("offline_zero_event");
-        timeoutSpy.mockClear();
-        for (let step = 0; step < 10; step += 1) {
-          await new Promise((resolve) => setTimeout(resolve, 5));
-        }
+        const tracked = analytics.track("offline_dry_run_event").promise;
+        await analytics.flush().promise;
 
-        const zeroDelayRearms = timeoutSpy.mock.calls.filter(
-          ([, delay]) => delay === 0,
-        );
-        expect(zeroDelayRearms.length).toBeLessThanOrEqual(1);
-        expect(send).not.toHaveBeenCalled();
-        expect(analytics.getDiagnostics().queueSize).toBe(1);
+        await expect(tracked).resolves.toMatchObject({ code: 202 });
+        expect(getDryRunAnalyticsEvents()).toHaveLength(1);
       } finally {
-        timeoutSpy.mockRestore();
         setNetworkEnabled(true);
         analytics.shutdown();
+      }
+    });
+
+    it("does not spin when the flush interval is zero or NaN while offline", async () => {
+      for (const flushIntervalMillis of [0, Number.NaN]) {
+        const analytics = new AmplitudeReactNative();
+        setNetworkEnabled(false);
+        const timeoutSpy = jest.spyOn(globalThis, "setTimeout");
+        try {
+          await analytics.init(
+            `${String(flushIntervalMillis)}-zero-key`,
+            "offline-user",
+            {
+              instanceName: `offline-zero-${String(flushIntervalMillis)}`,
+              trackingSessionEvents: false,
+              flushIntervalMillis,
+              transportProvider: nitroTransport,
+            },
+          ).promise;
+          void analytics.track("offline_zero_event");
+          timeoutSpy.mockClear();
+          for (let step = 0; step < 10; step += 1) {
+            await new Promise((resolve) => setTimeout(resolve, 5));
+          }
+
+          const fastRearms = timeoutSpy.mock.calls.filter(
+            ([, delay]) => delay !== 5 && !(Number(delay) >= 1000),
+          );
+          expect(fastRearms.length).toBeLessThanOrEqual(1);
+          expect(analytics.getDiagnostics().queueSize).toBe(1);
+        } finally {
+          timeoutSpy.mockRestore();
+          setNetworkEnabled(true);
+          analytics.shutdown();
+        }
       }
     });
 

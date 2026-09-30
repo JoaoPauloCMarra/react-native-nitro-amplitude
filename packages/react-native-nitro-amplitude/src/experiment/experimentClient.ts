@@ -931,10 +931,14 @@ export class ExperimentClient implements Client {
       fetchBackoffScalar,
     );
     this.retryBackoffs.add(backoff);
-    backoff.start(async () => {
-      await this.fetchInternal(user, fetchBackoffTimeout, false, options);
-      this.retryBackoffs.delete(backoff);
-    });
+    backoff.start(
+      async () => {
+        await this.fetchInternal(user, fetchBackoffTimeout, false, options);
+      },
+      () => {
+        this.retryBackoffs.delete(backoff);
+      },
+    );
   }
 
   private stopRetries(): void {

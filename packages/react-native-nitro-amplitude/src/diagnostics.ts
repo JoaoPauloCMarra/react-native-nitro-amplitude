@@ -165,7 +165,7 @@ export async function healthCheck(
   try {
     const { getAmplitudeStorage } = getHybridModule();
     const storage = getAmplitudeStorage();
-    const key = `health::${Date.now()}`;
+    const key = "health::probe";
     storage.set(key, "ok", true);
     diskStorageWritable = storage.get(key, true) === "ok";
     storage.remove(key, true);

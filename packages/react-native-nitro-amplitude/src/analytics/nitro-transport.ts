@@ -1,7 +1,7 @@
 import { BaseTransport } from "@amplitude/analytics-core";
 import type { Payload, Response, Transport } from "@amplitude/analytics-core";
 import { nitroHttpClient } from "../native/http";
-import { assertNetworkEnabled } from "../network";
+import { assertNetworkEnabled, markNetworkGuardedTransport } from "../network";
 
 export class NitroTransport extends BaseTransport implements Transport {
   private readonly customHeaders: Record<string, string>;
@@ -9,6 +9,7 @@ export class NitroTransport extends BaseTransport implements Transport {
   constructor(customHeaders: Record<string, string> = {}) {
     super();
     this.customHeaders = customHeaders;
+    markNetworkGuardedTransport(this);
   }
 
   override async send(

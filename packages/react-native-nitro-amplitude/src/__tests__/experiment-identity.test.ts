@@ -412,3 +412,34 @@ test("stop cancels retries from every concurrent failed fetch", async () => {
     jest.useRealTimers();
   }
 });
+
+test("exhausted retry backoffs leave the retry set", async () => {
+  jest.useFakeTimers();
+  const request = jest
+    .fn<Promise<{ status: number; body: string }>, []>()
+    .mockRejectedValue(new Error("offline"));
+  const client = new ExperimentClient("test-deployment-key", {
+    retryFetchOnFailure: true,
+    automaticExposureTracking: false,
+    fetchOnStart: false,
+    pollOnStart: false,
+    httpClient: { request },
+  });
+  try {
+    await client.cacheReady();
+    await expect(
+      client.fetchOrThrow({ user_id: "user-a" }, { flagKeys: ["a"] }),
+    ).rejects.toThrow("offline");
+    const retrySet = (client as unknown as { retryBackoffs: Set<unknown> })
+      .retryBackoffs;
+    expect(retrySet.size).toBe(1);
+    for (let round = 0; round < 20; round += 1) {
+      jest.advanceTimersByTime(60_000);
+      for (let step = 0; step < 20; step += 1) await Promise.resolve();
+    }
+    expect(retrySet.size).toBe(0);
+  } finally {
+    client.stop();
+    jest.useRealTimers();
+  }
+});

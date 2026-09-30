@@ -282,3 +282,12 @@ const subpathParsed: { ok: boolean } = parseSubpathVariantJson(
   { ok: false },
 );
 void subpathParsed;
+
+const analyticsTypeValues = [
+  Types.RevenueProperty.REVENUE,
+  Types.ServerZone.EU,
+  Types.LogLevel.None,
+  Types.IdentifyOperation.SET,
+  Types.SpecialEventType.IDENTIFY,
+] as const;
+void analyticsTypeValues;

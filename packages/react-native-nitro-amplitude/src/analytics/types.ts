@@ -12,7 +12,6 @@ export type {
   GroupIdentifyEvent,
   IIdentify,
   IRevenue,
-  RevenueProperty,
   ILogger,
   Plugin,
   BeforePlugin,
@@ -26,6 +25,7 @@ export type {
 } from "@amplitude/analytics-core";
 export {
   IdentifyOperation,
+  RevenueProperty,
   SpecialEventType,
   LogLevel,
   ServerZone,

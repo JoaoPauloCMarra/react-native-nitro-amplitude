@@ -120,6 +120,7 @@ void JsonlSegmentStore::Load() {
     const std::string path = SegmentPath(id);
     const auto content = fileAdapter_->readFile(path);
     if (!content.has_value()) {
+      unreadableSegments_.insert(id);
       continue;
     }
     const size_t completeBytes = CompletePrefixLength(content.value());
@@ -149,6 +150,17 @@ void JsonlSegmentStore::Load() {
     segmentBytes_[id] = completeBytes;
     if (id > activeSegment_) {
       activeSegment_ = id;
+    }
+  }
+  if (!unreadableSegments_.empty() && *unreadableSegments_.rbegin() >= activeSegment_ &&
+      !failedToTrimTail) {
+    const uint32_t highestUnreadable = *unreadableSegments_.rbegin();
+    if (highestUnreadable == std::numeric_limits<uint32_t>::max()) {
+      appendsDisabled_ = true;
+    } else {
+      activeSegment_ = highestUnreadable + 1;
+      segmentBytes_[activeSegment_] = 0;
+      segmentDeadBytes_[activeSegment_] = 0;
     }
   }
   if (failedToTrimTail) {
@@ -293,7 +305,8 @@ bool JsonlSegmentStore::CompactSegment(uint32_t segment) {
       ++liveCount;
     }
   }
-  bool lowerSegmentHasData = false;
+  bool lowerSegmentHasData =
+      !unreadableSegments_.empty() && *unreadableSegments_.begin() < segment;
   for (const auto& entry : segmentBytes_) {
     if (entry.first < segment && entry.second > 0) {
       lowerSegmentHasData = true;

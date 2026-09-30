@@ -7,6 +7,7 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <set>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -55,6 +56,7 @@ private:
   std::unordered_map<std::string, Entry> index_;
   std::unordered_map<uint32_t, uint64_t> segmentBytes_;
   std::unordered_map<uint32_t, uint64_t> segmentDeadBytes_;
+  std::set<uint32_t> unreadableSegments_;
   uint32_t activeSegment_ = 0;
   bool appendsDisabled_ = false;
 };

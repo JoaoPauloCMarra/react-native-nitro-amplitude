@@ -19,6 +19,7 @@
 #include <iostream>
 #include <limits>
 #include <map>
+#include <set>
 #include <mutex>
 #include <stdexcept>
 #include <string>
@@ -93,6 +94,7 @@ public:
   bool failWrites = false;
   bool failNextWrite = false;
   bool failReads = false;
+  std::set<std::string> unreadablePaths;
   size_t writeAttempts = 0;
 
   bool ensureDirectory(const std::string&) override {
@@ -111,7 +113,7 @@ public:
   }
 
   std::optional<std::string> readFile(const std::string& path) override {
-    if (failReads) {
+    if (failReads || unreadablePaths.count(path) > 0) {
       return std::nullopt;
     }
     const auto it = files.find(path);
@@ -1145,6 +1147,50 @@ void testSegmentStoreCrossSegmentTombstoneSurvivesCompaction() {
   assert(reloaded.getDisk("D").value_or("") == std::string(30, 'd'));
 }
 
+void testSegmentStoreUnreadableSegmentStaysConservative() {
+  auto files = std::make_shared<FakeFileAdapter>();
+  const std::string dir = "unreadable-segment";
+  const std::string firstSegment = dir + "/segment-00000000.jsonl";
+  {
+    JsonlSegmentStore store(files, dir, 64);
+    store.setDisk("A", "a");
+    store.setDisk("B", std::string(30, 'b'));
+    store.setDisk("C", std::string(30, 'c'));
+    store.deleteDisk("A");
+  }
+  files->unreadablePaths.insert(firstSegment);
+  {
+    JsonlSegmentStore store(files, dir, 64);
+    store.setDisk("D", std::string(30, 'd'));
+  }
+  files->unreadablePaths.clear();
+  {
+    JsonlSegmentStore reloaded(files, dir, 64);
+    assert(!reloaded.hasDisk("A"));
+    assert(reloaded.getDisk("D").value_or("") == std::string(30, 'd'));
+  }
+
+  auto staleFiles = std::make_shared<FakeFileAdapter>();
+  const std::string staleDir = "unreadable-active";
+  {
+    JsonlSegmentStore store(staleFiles, staleDir, 64);
+    store.setDisk("G", "g");
+    store.setDisk("F", std::string(56, 'f'));
+    store.setDisk("E", "old");
+    store.setDisk("F", "x");
+  }
+  staleFiles->unreadablePaths.insert(staleDir + "/segment-00000001.jsonl");
+  {
+    JsonlSegmentStore store(staleFiles, staleDir, 64);
+    store.setDisk("E", "new");
+  }
+  staleFiles->unreadablePaths.clear();
+  JsonlSegmentStore reloaded(staleFiles, staleDir, 64);
+  assert(reloaded.getDisk("E").value_or("") == "new");
+  assert(reloaded.getDisk("F").value_or("") == "x");
+  assert(reloaded.getDisk("G").value_or("") == "g");
+}
+
 void testSegmentStoreCompactionDropsTombstonesWithoutLowerSegments() {
   auto files = std::make_shared<FakeFileAdapter>();
   const std::string firstSegment = "tombstone-drop/segment-00000000.jsonl";
@@ -1205,6 +1251,7 @@ int main() {
   testSegmentStoreCrossSegmentTombstoneSurvivesCompaction();
   testSegmentStoreCompactionReadFailurePreservesLiveKeys();
   testSegmentStoreCompactionDropsTombstonesWithoutLowerSegments();
+  testSegmentStoreUnreadableSegmentStaysConservative();
   testGzipAmplitudePayloads();
   testGzipAmplitudeAuthorityValidation();
   testContextFallbacks();

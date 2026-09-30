@@ -25,7 +25,7 @@ void HybridAmplitudeStorage::set(
     bool persist) {
   if (persist) {
     if (!adapter_) {
-      throw std::runtime_error("NitroAmplitude: Disk adapter unavailable");
+      throw std::runtime_error("NitroAmplitude: disk_adapter_unavailable");
     }
     adapter_->setDisk(key, value);
     return;

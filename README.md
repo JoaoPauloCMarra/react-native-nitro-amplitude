@@ -24,20 +24,25 @@ bun add react-native-nitro-amplitude react-native-nitro-modules
 
 ## Requirements and compatibility
 
-Compatibility for `0.9.0`:
+Compatibility for `0.9.1`:
 
-| Dependency                   | Supported range    | `0.9.0` baseline                          |
-| ---------------------------- | ------------------ | ----------------------------------------- |
-| `react`                      | `>=18.2.0`         | `19.2.3`                                  |
-| `react-native`               | `>=0.75.0`         | `0.86.3` package and Expo SDK 57 baseline |
-| `react-native-nitro-modules` | `>=0.37.0 <0.38.0` | `0.37.1`                                  |
-| Expo development builds      | SDK 57             | `~57.0.26`                                |
+| Dependency                   | Supported range    | Tested baseline     |
+| ---------------------------- | ------------------ | ------------------- |
+| `react`                      | `>=18.2.0`         | `19.2.3`            |
+| `react-native`               | `>=0.77`           | `0.86.3`            |
+| `react-native-nitro-modules` | `>=0.37.0 <0.38.0` | `0.37.1`            |
+| Expo development builds      | SDK `>=53`         | SDK 57 (`~57.0.26`) |
+
+The package supports React Native `>=0.77` and Expo SDK `>=53`, the Nitro
+Modules `0.37` minimum. It is tested on React Native `0.86.3` and Expo SDK 57.
+
+The iOS deployment target follows React Native's `min_ios_version_supported`.
 
 The package gate and example use React Native `0.86.3` with the Strict
 TypeScript API. `check:ci` also compiles the public source against React Native
-`0.87.0`'s Strict TypeScript API; this is a declaration-compatibility check, not
-the runtime baseline. Expo SDK 57 manages React Native `0.86.3`; do not
-override it in an Expo app.
+`0.87.0`'s Strict TypeScript API; this is a source type check, not the runtime
+baseline. Expo SDK 57 manages React Native `0.86.3`; do not override it in an
+Expo app.
 
 ### Upgrade from 0.7.x and earlier
 
@@ -48,7 +53,7 @@ regenerate and rebuild native projects so the committed Nitro 0.37.1 bindings
 are compiled into the app:
 
 ```sh
-bun add react-native-nitro-amplitude@0.9.0 react-native-nitro-modules@0.37.1
+bun add react-native-nitro-amplitude@0.9.1 react-native-nitro-modules@0.37.1
 bunx expo prebuild
 ```
 
@@ -110,11 +115,17 @@ const amplitude = createAmplitudeClient({
   },
 });
 
-await amplitude.init();
+await amplitude.init({ user_id: "user-123" });
 amplitude.analytics.track("Checkout Started", { source: "cart" });
+
+await amplitude.experiment.fetch();
 const enabled =
   amplitude.experiment.variant("enable-onboarding").value === "on";
 ```
+
+`fetchOnStart: false` means the client does not fetch variants by itself. Call
+`fetch()` (or `start()`) after `init()` and before you read `variant()`.
+Without a fetch, `variant()` returns only cached or fallback values.
 
 Pass `durableStorage: false` only when the app must supply its own storage
 adapters. Singleton `init` / `track` / `identify` remain available below.
@@ -264,7 +275,10 @@ environment, or test suite.
 The default analytics session store is durable: device ID, user ID, and session
 ID survive app restarts through the Nitro disk store on native and browser
 localStorage on web. `LocalStorage` is the durable store; `MemoryStorage` /
-`InMemoryStorage` are process-local only. Persisted session state is plain
+`InMemoryStorage` are process-local only, and each instance keeps its own
+data. The Experiment `LocalStorage` export (`ExperimentLocalStorage` from the
+root entry) is memory-only and deprecated; use `NitroExperimentStorage` or the
+durable storage preset for variants that must survive restarts. Persisted session state is plain
 text in the app sandbox; do not rely on it for secrets.
 
 ## Network Controls
@@ -294,8 +308,16 @@ examples when you need track/flush behavior without events reaching Amplitude.
 
 For offline-aware apps, pair `setNetworkEnabled` with a connectivity listener
 (for example `@react-native-community/netinfo`): disable the network while
-offline and re-enable it on reconnect, then call `flush()`. Events queue in
-durable Nitro storage while the network is disabled.
+offline and re-enable it on reconnect, then call `flush()`. While the network
+is disabled, analytics events stay queued in durable storage. Scheduled flushes
+are skipped and do not count as retry attempts, so events are not dropped for
+exceeding `flushMaxRetries`. Uploads resume on the next flush interval after
+you re-enable the network, or at once when you call `flush()`. A `flush()` or
+`flushWithResult()` call while the network is disabled resolves without
+sending and reports the events as still queued. This applies to the package's
+network transports (the default Nitro transport and the web fetch transport).
+`DryRunTransport` and custom transports keep running. Experiment fetches reject
+with `network_error` while the network is disabled.
 
 Network-control, dry-run record access, bounded timing helpers
 (`createNetworkTimingBuffer`, `createTimedAnalyticsTransport`,
@@ -452,7 +474,7 @@ Native HybridObject types:
 | iOS      | Native Nitro context, storage, and HTTP worker; pods and rebuild required. |
 | Android  | Native Nitro context, storage, and package-owned context initializer.      |
 | Web      | Browser fetch and storage fallbacks; no native plugin required.            |
-| Expo     | SDK 57 development builds with the config plugin.                          |
+| Expo     | SDK 53+ development builds with the config plugin (tested on SDK 57).      |
 | Expo Go  | Unsupported because Expo Go cannot load custom Nitro modules.              |
 
 Architecture notes:

@@ -10,7 +10,7 @@ Pod::Spec.new do |s|
   s.license      = package["license"]
   s.authors      = package["author"]
 
-  s.platforms    = { :ios => "13.0" }
+  s.platforms    = { :ios => defined?(min_ios_version_supported) ? min_ios_version_supported : "15.1" }
   s.source       = { :git => "https://github.com/JoaoPauloCMarra/react-native-nitro-amplitude.git", :tag => "v#{s.version}" }
 
   s.source_files = [

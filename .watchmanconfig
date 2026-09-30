@@ -5,6 +5,7 @@
     "node_modules/.cache",
     "android/.cxx",
     "apps/example/android/.cxx",
-    "packages/react-native-nitro-storage/android/.cxx"
+    "packages/react-native-nitro-amplitude/android/.cxx",
+    "packages/react-native-nitro-amplitude/android/build"
   ]
 }

@@ -3,6 +3,10 @@ import { Status } from "@amplitude/analytics-core";
 import type { HttpClient, SimpleResponse } from "./experiment/types/transport";
 import { PACKAGE_VERSION } from "./package-version";
 import {
+  isNetworkGuardedTransport,
+  markNetworkGuardedTransport,
+} from "./network";
+import {
   clearDiagnosticEvents,
   getDiagnosticEventsByType,
   recordDiagnosticEvent,
@@ -52,16 +56,23 @@ export function recordDiagnosticFailure(
     (input.operation === "analytics_upload"
       ? "analytics_upload"
       : "experiment_variant_fetch");
-  const existing = getDiagnosticFailures().find((failure) => {
-    return (
-      failure.operation === input.operation &&
+  const maxRetriesExceeded = input.maxRetriesExceeded ?? false;
+  const failures = getDiagnosticFailures();
+  let existing: AmplitudeDiagnosticFailure | undefined;
+  for (let index = failures.length - 1; index >= 0; index -= 1) {
+    const failure = failures[index];
+    if (
+      failure?.operation === input.operation &&
       failure.surface === surface &&
       failure.kind === input.kind &&
       failure.targetHost === input.targetHost &&
       failure.httpStatus === input.httpStatus &&
-      failure.maxRetriesExceeded === (input.maxRetriesExceeded ?? false)
-    );
-  });
+      failure.maxRetriesExceeded === maxRetriesExceeded
+    ) {
+      existing = failure;
+      break;
+    }
+  }
   const lastFailureAt = Date.now();
   recordDiagnosticEvent({
     type: "failure",
@@ -75,7 +86,7 @@ export function recordDiagnosticFailure(
       batchSize: input.batchSize,
       queuedEventCount: input.queuedEventCount,
       retryCount: input.retryCount,
-      maxRetriesExceeded: input.maxRetriesExceeded,
+      maxRetriesExceeded,
       lastFailureAt,
       throttledCount: existing ? existing.throttledCount + 1 : 0,
       packageVersion: PACKAGE_VERSION,
@@ -165,10 +176,15 @@ export function classifyDiagnosticFailure(
   return "unknown";
 }
 
+const diagnosticTransports = new WeakSet<Transport>();
+
 export function createDiagnosticAnalyticsTransport(
   transport: Transport,
 ): Transport {
-  return {
+  if (diagnosticTransports.has(transport)) {
+    return transport;
+  }
+  const wrapped: Transport = {
     async send(
       serverUrl: string,
       payload: Payload,
@@ -222,6 +238,11 @@ export function createDiagnosticAnalyticsTransport(
       }
     },
   };
+  diagnosticTransports.add(wrapped);
+  if (isNetworkGuardedTransport(transport)) {
+    markNetworkGuardedTransport(wrapped);
+  }
+  return wrapped;
 }
 
 export function createDiagnosticHttpClient(httpClient: HttpClient): HttpClient {

@@ -166,9 +166,11 @@ import {
   variantString,
 } from "../index";
 import * as AnalyticsCompat from "../analytics";
+import * as AnalyticsTypesEntry from "../analytics/types";
 import * as ExperimentCompat from "../experiment";
 import { ReactNativeConfig } from "../analytics/config";
 import { AmplitudeReactNative } from "../analytics/react-native-client";
+import { nitroTransport } from "../analytics/nitro-transport";
 import { Backoff } from "../experiment/util/backoff";
 import { getNativeApplicationContext } from "../native/context";
 import { resetHybridInstancesForTests } from "../native/hybrid";
@@ -190,6 +192,7 @@ import {
 import { nitroHttpClient as webNitroHttpClient } from "../native/http.web";
 import * as WebEntry from "../index.web";
 import { getDiagnosticEvents } from "../diagnostics-pipeline";
+import { recordDiagnosticFailure } from "../diagnostic-failures";
 import {
   LocalStorage,
   MemoryStorage,
@@ -728,11 +731,16 @@ describe("react-native-nitro-amplitude", () => {
             targetHost: "api2.amplitude.com",
             batchSize: 1,
             queuedEventCount: 1,
-            throttledCount: expect.any(Number),
+            throttledCount: 0,
             packageVersion: expect.any(String),
           }),
         ]),
       );
+      expect(
+        getDiagnostics().diagnosticFailures.filter(
+          (failure) => failure.operation === "analytics_upload",
+        ),
+      ).toHaveLength(1);
     } finally {
       analytics.shutdown();
       otherAnalytics.shutdown();
@@ -1047,6 +1055,30 @@ describe("react-native-nitro-amplitude", () => {
     );
   });
 
+  it("exports analytics-core runtime enums from Types", () => {
+    expect(AnalyticsTypesEntry.RevenueProperty.REVENUE).toBe("$revenue");
+    expect(AnalyticsTypesEntry.ServerZone.EU).toBe("EU");
+    expect(AnalyticsTypesEntry.LogLevel.None).toBe(0);
+    expect(AnalyticsTypesEntry.IdentifyOperation.SET).toBe("$set");
+    expect(AnalyticsTypesEntry.SpecialEventType.IDENTIFY).toBe("$identify");
+  });
+
+  it("classifies native disk and HTTP exception codes", () => {
+    expect(
+      getAmplitudeErrorCode(
+        new Error("NitroAmplitude: disk_adapter_unavailable"),
+      ),
+    ).toBe("storage_error");
+    expect(getAmplitudeErrorCode(new Error("native_http_exception"))).toBe(
+      "network_error",
+    );
+    expect(
+      getAmplitudeErrorCode(
+        new Error("NitroAmplitude: segment storage append failed"),
+      ),
+    ).toBe("storage_error");
+  });
+
   it("provides typed testing helpers and variant helpers", async () => {
     const storage = createFakeExperimentStorage({ flag: "on" });
     expect(await storage.get("flag")).toBe("on");
@@ -1082,6 +1114,28 @@ describe("react-native-nitro-amplitude", () => {
     expect(await analytics.get("event")).toBeUndefined();
     expect(await disk.get("variant")).toBeNull();
     expect(await experiment.get("variant")).toBeNull();
+  });
+
+  it("matches the Browser SDK device model fallback on web", () => {
+    const originalNavigator = globalThis.navigator;
+    Object.defineProperty(globalThis, "navigator", {
+      configurable: true,
+      value: {
+        language: "en-US",
+        userAgent:
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+      },
+    });
+    try {
+      const context = getWebApplicationContext({});
+      expect(context.osName).toBe("Windows");
+      expect(context.deviceModel).toBe("Windows");
+    } finally {
+      Object.defineProperty(globalThis, "navigator", {
+        configurable: true,
+        value: originalNavigator,
+      });
+    }
   });
 
   it("uses browser storage and fetch for web fallbacks", async () => {
@@ -1293,6 +1347,22 @@ describe("react-native-nitro-amplitude", () => {
 
     await first.remove("durable");
     expect(await second.get("durable")).toBeUndefined();
+  });
+
+  it("resets only the MemoryStorage instance that was reset", async () => {
+    const analyticsA = new MemoryStorage<string>();
+    const analyticsB = new MemoryStorage<string>();
+    await analyticsA.set("a", "value-a");
+    await analyticsB.set("b", "value-b");
+    await analyticsA.reset();
+    expect(await analyticsB.get("b")).toBe("value-b");
+
+    const experimentA = new ExperimentCompat.MemoryStorage();
+    const experimentB = new ExperimentCompat.MemoryStorage();
+    await experimentA.put("a", "value-a");
+    await experimentB.put("b", "value-b");
+    await experimentA.reset();
+    expect(await experimentB.get("b")).toBe("value-b");
   });
 
   it("scopes web LocalStorage reset to package keys", async () => {
@@ -2295,7 +2365,14 @@ describe("react-native-nitro-amplitude", () => {
         instanceName: "health-probe",
         migrateLegacyData: false,
       }).promise;
+      await analytics.healthCheck();
       const result = await analytics.healthCheck();
+      const probeKeys = new Set(
+        (mockHybridObjects.AmplitudeStorage?.set.mock.calls ?? [])
+          .map(([key]) => String(key))
+          .filter((key) => key.startsWith("health::")),
+      );
+      expect(Array.from(probeKeys)).toEqual(["health::probe"]);
       expect(result).toMatchObject({
         ok: true,
         nativeAvailable: true,
@@ -2449,6 +2526,174 @@ describe("react-native-nitro-amplitude", () => {
 
         handler("background");
         expect(flush).not.toHaveBeenCalled();
+      } finally {
+        analytics.shutdown();
+      }
+    });
+  });
+
+  describe("analytics lifecycle", () => {
+    it("counts repeated diagnostic failures", () => {
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        recordDiagnosticFailure({
+          operation: "analytics_upload",
+          kind: "timeout",
+          targetHost: "api2.amplitude.com",
+        });
+      }
+
+      expect(
+        getDiagnostics().diagnosticFailures.map(
+          (failure) => failure.throttledCount,
+        ),
+      ).toEqual([0, 1, 2]);
+    });
+
+    it("keeps events queued while the network is disabled", async () => {
+      const analytics = new AmplitudeReactNative();
+      setNetworkEnabled(false);
+      try {
+        await analytics.init("offline-queue-key", "offline-user", {
+          instanceName: "offline-queue",
+          trackingSessionEvents: false,
+          flushIntervalMillis: 5,
+          flushMaxRetries: 2,
+          transportProvider: nitroTransport,
+        }).promise;
+        const enqueueCount = () =>
+          mockHybridObjects.AmplitudeWorker?.enqueue?.mock.calls.length ?? 0;
+        let settled = false;
+        const tracked = analytics
+          .track("offline_event")
+          .promise.then((result) => {
+            settled = true;
+            return result;
+          });
+        for (let step = 0; step < 20; step += 1) {
+          await new Promise((resolve) => setTimeout(resolve, 5));
+        }
+        await expect(analytics.flushWithResult()).resolves.toMatchObject({
+          ok: false,
+          retried: 1,
+        });
+
+        expect(settled).toBe(false);
+        expect(enqueueCount()).toBe(0);
+        expect(analytics.getDiagnostics().queueSize).toBe(1);
+
+        setNetworkEnabled(true);
+        await analytics.flush().promise;
+        await expect(tracked).resolves.toMatchObject({ code: 200 });
+        expect(enqueueCount()).toBe(1);
+      } finally {
+        setNetworkEnabled(true);
+        analytics.shutdown();
+      }
+    });
+
+    it("keeps recording with DryRunTransport while the network is disabled", async () => {
+      clearDryRunTransportRecords();
+      const analytics = new AmplitudeReactNative();
+      setNetworkEnabled(false);
+      try {
+        await analytics.init("offline-dry-run-key", "offline-user", {
+          instanceName: "offline-dry-run",
+          trackingSessionEvents: false,
+          flushIntervalMillis: 60000,
+          transportProvider: dryRunTransport,
+        }).promise;
+        const tracked = analytics.track("offline_dry_run_event").promise;
+        await analytics.flush().promise;
+
+        await expect(tracked).resolves.toMatchObject({ code: 202 });
+        expect(getDryRunAnalyticsEvents()).toHaveLength(1);
+      } finally {
+        setNetworkEnabled(true);
+        analytics.shutdown();
+      }
+    });
+
+    it("does not spin when the flush interval is zero or NaN while offline", async () => {
+      for (const flushIntervalMillis of [0, Number.NaN]) {
+        const analytics = new AmplitudeReactNative();
+        setNetworkEnabled(false);
+        const timeoutSpy = jest.spyOn(globalThis, "setTimeout");
+        try {
+          await analytics.init(
+            `${String(flushIntervalMillis)}-zero-key`,
+            "offline-user",
+            {
+              instanceName: `offline-zero-${String(flushIntervalMillis)}`,
+              trackingSessionEvents: false,
+              flushIntervalMillis,
+              transportProvider: nitroTransport,
+            },
+          ).promise;
+          void analytics.track("offline_zero_event");
+          timeoutSpy.mockClear();
+          for (let step = 0; step < 10; step += 1) {
+            await new Promise((resolve) => setTimeout(resolve, 5));
+          }
+
+          const fastRearms = timeoutSpy.mock.calls.filter(
+            ([, delay]) => delay !== 5 && !(Number(delay) >= 1000),
+          );
+          expect(fastRearms.length).toBeLessThanOrEqual(1);
+          expect(analytics.getDiagnostics().queueSize).toBe(1);
+        } finally {
+          timeoutSpy.mockRestore();
+          setNetworkEnabled(true);
+          analytics.shutdown();
+        }
+      }
+    });
+
+    it("keeps a client ready when init follows shutdown during the final flush", async () => {
+      jest.useRealTimers();
+      let releaseFirstSend: (() => void) | undefined;
+      let sendCount = 0;
+      const gatedTransport: Transport = {
+        async send(url: string, payload: Payload) {
+          sendCount += 1;
+          if (sendCount === 1) {
+            await new Promise<void>((resolve) => {
+              releaseFirstSend = resolve;
+            });
+          }
+          return dryRunTransport.send(url, payload);
+        },
+      };
+      const analytics = new AmplitudeReactNative();
+      try {
+        await analytics.init("shutdown-reinit-key", "user-a", {
+          instanceName: "shutdown-reinit",
+          trackingSessionEvents: false,
+          flushIntervalMillis: 60000,
+          transportProvider: gatedTransport,
+        }).promise;
+        void analytics.track("before_logout");
+        for (let step = 0; step < 20; step += 1) await Promise.resolve();
+
+        analytics.shutdown();
+        const reinit = analytics.init("shutdown-reinit-key", "user-b", {
+          instanceName: "shutdown-reinit",
+          trackingSessionEvents: false,
+          flushIntervalMillis: 60000,
+          transportProvider: gatedTransport,
+        }).promise;
+        for (let step = 0; step < 50 && !releaseFirstSend; step += 1) {
+          await new Promise((resolve) => setTimeout(resolve, 0));
+        }
+        releaseFirstSend?.();
+        await reinit;
+        for (let step = 0; step < 20; step += 1) {
+          await new Promise((resolve) => setTimeout(resolve, 0));
+        }
+
+        expect(analytics.getDiagnostics().initialized).toBe(true);
+        const tracked = analytics.track("after_login").promise;
+        await analytics.flush().promise;
+        await expect(tracked).resolves.toMatchObject({ code: 202 });
       } finally {
         analytics.shutdown();
       }

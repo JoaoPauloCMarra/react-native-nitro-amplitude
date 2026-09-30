@@ -9,12 +9,16 @@ import {
   HttpRequest,
   HttpResponse,
 } from "@amplitude/experiment-core";
-import unfetch from "unfetch";
 
 import { HttpClient, SimpleResponse } from "../types/transport";
 
 const runtimeGlobal = safeGlobal ?? globalThis;
-const getFetch = () => runtimeGlobal.fetch || unfetch;
+const getFetch = (): typeof fetch => {
+  if (typeof runtimeGlobal.fetch !== "function") {
+    throw new Error("Experiment fetch failed: global fetch is unavailable");
+  }
+  return runtimeGlobal.fetch;
+};
 
 type AbortControllerLike = {
   signal: AbortSignal;

@@ -10,6 +10,7 @@ export class Backoff {
 
   private started = false;
   private done = false;
+  private onDone: (() => void) | undefined;
 
   private timeoutHandle:
     ReturnType<typeof runtimeGlobal.setTimeout> | undefined;
@@ -26,7 +27,8 @@ export class Backoff {
     this.scalar = scalar;
   }
 
-  public start(fn: () => Promise<void>): void {
+  public start(fn: () => Promise<void>, onDone?: () => void): void {
+    this.onDone = onDone;
     if (!this.started) {
       this.started = true;
     } else {
@@ -41,6 +43,13 @@ export class Backoff {
       runtimeGlobal.clearTimeout(this.timeoutHandle);
       this.timeoutHandle = undefined;
     }
+  }
+
+  private finish(): void {
+    this.done = true;
+    const onDone = this.onDone;
+    this.onDone = undefined;
+    onDone?.();
   }
 
   private applyJitter(delay: number): number {
@@ -60,14 +69,14 @@ export class Backoff {
       try {
         this.timeoutHandle = undefined;
         await fn();
-        this.done = true;
+        this.finish();
       } catch (e) {
         const nextAttempt = attempt + 1;
         if (!this.done && nextAttempt < this.attempts) {
           const nextDelay = Math.min(delay * this.scalar, this.max);
           this.backoff(fn, nextAttempt, nextDelay);
         } else {
-          this.done = true;
+          this.finish();
         }
       }
     }, this.applyJitter(delay));

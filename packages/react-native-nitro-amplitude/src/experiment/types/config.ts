@@ -183,24 +183,25 @@ export interface ExperimentConfig {
  |------------------|-----------------------------------|
  | **debug**        | `false`                           |
  | **logLevel**     | `LogLevel.Error`                  |
- | **logger**       | `null` (ConsoleLogger will be used) |
+ | **loggerProvider** | `null` (ConsoleLogger will be used) |
  | **instanceName** | `$default_instance` |
- | **fallbackVariant**         | `null`                 |
- | **initialVariants**         | `null`                 |
+ | **fallbackVariant**         | `{}`                 |
+ | **initialVariants**         | `{}`                 |
  | **initialFlags**         | `undefined`                 |
  | **source** | `Source.LocalStorage` |
  | **serverUrl**    | `"https://api.lab.amplitude.com"` |
  | **flagsServerUrl**    | `"https://flag.lab.amplitude.com"` |
  | **serverZone**    | `"US"` |
- | **assignmentTimeoutMillis**    | `10000` |
- | **retryFailedAssignment**    | `true` |
+ | **fetchTimeoutMillis**    | `10000` |
+ | **retryFetchOnFailure**    | `true` |
  | **automaticExposureTracking** | `true` |
  | **pollOnStart** | `true` |
  | **fetchOnStart** | `true` |
  | **automaticFetchOnAmplitudeIdentityChange** | `false` |
  | **userProvider**    | `null` |
- | **analyticsProvider**    | `null` |
  | **exposureTrackingProvider**    | `null` |
+ | **httpClient**    | Nitro HTTP client (browser `fetch` on web) |
+ | **storage**    | Durable Nitro storage (browser storage on web) |
 
  *
  * @category Configuration

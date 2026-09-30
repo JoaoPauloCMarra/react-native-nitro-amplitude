@@ -5,6 +5,20 @@ import { createAmplitudeError } from "./errors";
 import { recordDiagnosticEvent } from "./diagnostics-pipeline";
 
 let networkEnabled = true;
+const networkGuardedTransports = new WeakSet<object>();
+
+export function markNetworkGuardedTransport<T extends object>(transport: T): T {
+  networkGuardedTransports.add(transport);
+  return transport;
+}
+
+export function isNetworkGuardedTransport(transport: unknown): boolean {
+  return (
+    typeof transport === "object" &&
+    transport !== null &&
+    networkGuardedTransports.has(transport)
+  );
+}
 
 export type DryRunRequest = {
   url: string;
@@ -153,7 +167,7 @@ export function createTimedAnalyticsTransport(
   transport: Transport,
   record: AmplitudeNetworkTimingRecorder,
 ): Transport {
-  return {
+  const timed: Transport = {
     async send(
       serverUrl: string,
       payload: Payload,
@@ -193,6 +207,10 @@ export function createTimedAnalyticsTransport(
       }
     },
   };
+  if (isNetworkGuardedTransport(transport)) {
+    markNetworkGuardedTransport(timed);
+  }
+  return timed;
 }
 
 export function createTimedHttpClient(

@@ -29,6 +29,7 @@ import {
   AnalyticsClient,
 } from "@amplitude/analytics-core";
 import { healthCheck } from "../diagnostics";
+import { getNetworkEnabled, isNetworkGuardedTransport } from "../network";
 import {
   classifyDiagnosticFailure,
   recordDiagnosticFailure,
@@ -40,6 +41,7 @@ import { parseOldCookies } from "./cookie-migration";
 import { isNative } from "./utils/platform";
 
 const START_SESSION_EVENT = "session_start";
+const OFFLINE_RECHECK_MIN_MILLIS = 1000;
 const END_SESSION_EVENT = "session_end";
 
 function normalizeAppState(value: unknown): AppStateStatus {
@@ -61,6 +63,7 @@ type ScheduledDestination = {
   queue?: unknown[];
   flush?: (useRetry?: boolean) => Promise<void>;
   resetSchedule?: () => void;
+  schedule?: (timeout: number) => void;
   scheduleEvents?: (list: unknown[]) => void;
   fulfillRequest?: (list: unknown[], code: number, message: string) => unknown;
 };
@@ -132,6 +135,7 @@ export class AmplitudeReactNative
   appState: AppStateStatus = "background";
   private appStateChangeHandler: NativeEventSubscription | undefined;
   private initPromise: Promise<void> | undefined;
+  private shutdownPromise: Promise<void> | undefined;
   private readonly connectorOwnerId = ++nextConnectorOwnerId;
   private lastFlushTime: number | undefined;
   private lastFlushDurationMillis: number | undefined;
@@ -207,11 +211,13 @@ export class AmplitudeReactNative
       return;
     }
     this.initializing = true;
-    this.lastScreenName = undefined;
-    this.explicitSessionId = options.sessionId;
     let appStateHandlerInstalled = false;
 
     try {
+      await this.shutdownPromise?.catch(() => undefined);
+      this.lastScreenName = undefined;
+      this.explicitSessionId = options.sessionId;
+
       // Step 1: Read cookies stored by old SDK
       const oldCookies = await parseOldCookies(options.apiKey, options);
 
@@ -285,7 +291,13 @@ export class AmplitudeReactNative
   }
 
   shutdown() {
-    void this.shutdownAndFlush();
+    const pending = this.shutdownAndFlush().finally(() => {
+      if (this.shutdownPromise === pending) {
+        this.shutdownPromise = undefined;
+      }
+    });
+    this.shutdownPromise = pending;
+    void pending;
   }
 
   private async shutdownAndFlush(): Promise<void> {
@@ -529,6 +541,14 @@ export class AmplitudeReactNative
     state: DestinationFlushState,
     useRetry: boolean,
   ): Promise<void> {
+    if (
+      !getNetworkEnabled() &&
+      this.isNetworkGuardedDestination(state.destination)
+    ) {
+      this.deferDestinationFlush(state.destination);
+      this.flushPendingNativeDiskWrites();
+      return;
+    }
     const scheduledFlush =
       state.destination.flushId ?? state.destination.scheduleId ?? null;
     let flushError: unknown;
@@ -546,19 +566,49 @@ export class AmplitudeReactNative
       this.recoverDestinationFlush(state.destination);
     }
 
-    if (isNative()) {
-      const { flushPendingDiskWrites } =
-        require("../native/storage") as typeof import("../native/storage");
-      try {
-        flushPendingDiskWrites(this.getStorageErrorHandler());
-      } catch (error) {
-        flushError ??= error;
-      }
+    try {
+      this.flushPendingNativeDiskWrites();
+    } catch (error) {
+      flushError ??= error;
     }
 
     if (flushError !== undefined) {
       throw flushError;
     }
+  }
+
+  private isNetworkGuardedDestination(
+    destination: ScheduledDestination,
+  ): boolean {
+    return (
+      destination instanceof Destination &&
+      isNetworkGuardedTransport(destination.config?.transportProvider)
+    );
+  }
+
+  private deferDestinationFlush(destination: ScheduledDestination): void {
+    const scheduleId = destination.scheduleId;
+    if (scheduleId !== null && scheduleId !== undefined) {
+      clearTimeout(scheduleId);
+    }
+    destination.resetSchedule?.();
+    if (destination.queue && destination.queue.length > 0) {
+      const interval = this.config.flushIntervalMillis;
+      destination.schedule?.(
+        Number.isFinite(interval)
+          ? Math.max(interval, OFFLINE_RECHECK_MIN_MILLIS)
+          : OFFLINE_RECHECK_MIN_MILLIS,
+      );
+    }
+  }
+
+  private flushPendingNativeDiskWrites(): void {
+    if (!isNative()) {
+      return;
+    }
+    const { flushPendingDiskWrites } =
+      require("../native/storage") as typeof import("../native/storage");
+    flushPendingDiskWrites(this.getStorageErrorHandler());
   }
 
   private recoverDestinationFlush(destination: ScheduledDestination): void {

@@ -120,6 +120,7 @@ void JsonlSegmentStore::Load() {
     const std::string path = SegmentPath(id);
     const auto content = fileAdapter_->readFile(path);
     if (!content.has_value()) {
+      unreadableSegments_.insert(id);
       continue;
     }
     const size_t completeBytes = CompletePrefixLength(content.value());
@@ -149,6 +150,17 @@ void JsonlSegmentStore::Load() {
     segmentBytes_[id] = completeBytes;
     if (id > activeSegment_) {
       activeSegment_ = id;
+    }
+  }
+  if (!unreadableSegments_.empty() && *unreadableSegments_.rbegin() >= activeSegment_ &&
+      !failedToTrimTail) {
+    const uint32_t highestUnreadable = *unreadableSegments_.rbegin();
+    if (highestUnreadable == std::numeric_limits<uint32_t>::max()) {
+      appendsDisabled_ = true;
+    } else {
+      activeSegment_ = highestUnreadable + 1;
+      segmentBytes_[activeSegment_] = 0;
+      segmentDeadBytes_[activeSegment_] = 0;
     }
   }
   if (failedToTrimTail) {
@@ -282,51 +294,75 @@ bool JsonlSegmentStore::AppendTombstoneLocked(const std::string& key) {
 }
 
 bool JsonlSegmentStore::CompactSegment(uint32_t segment) {
-  std::vector<std::pair<std::string, Entry>> live;
+  const std::string path = SegmentPath(segment);
+  const auto content = fileAdapter_->readFile(path);
+  if (!content.has_value()) {
+    return false;
+  }
+  size_t liveCount = 0;
   for (const auto& entry : index_) {
     if (entry.second.segment == segment) {
-      live.emplace_back(entry.first, entry.second);
+      ++liveCount;
     }
   }
-  const std::string path = SegmentPath(segment);
-  if (live.empty()) {
+  bool lowerSegmentHasData =
+      !unreadableSegments_.empty() && *unreadableSegments_.begin() < segment;
+  for (const auto& entry : segmentBytes_) {
+    if (entry.first < segment && entry.second > 0) {
+      lowerSegmentHasData = true;
+      break;
+    }
+  }
+
+  std::string rebuilt;
+  uint64_t keptTombstoneBytes = 0;
+  std::vector<std::pair<std::string, Entry>> compacted;
+  compacted.reserve(liveCount);
+  const size_t completeBytes = CompletePrefixLength(content.value());
+  size_t offset = 0;
+  while (offset < completeBytes) {
+    const size_t newline = content.value().find('\n', offset);
+    const size_t length = newline - offset + 1;
+    const size_t tab = content.value().find('\t', offset);
+    std::string key;
+    std::string value;
+    if (tab != std::string::npos && tab < newline &&
+        UnescapeInto(content.value().substr(offset, tab - offset), key)) {
+      if (key == kTombstoneKey) {
+        if (lowerSegmentHasData &&
+            UnescapeInto(content.value().substr(tab + 1, newline - tab - 1), value) &&
+            index_.find(value) == index_.end()) {
+          rebuilt.append(content.value(), offset, length);
+          keptTombstoneBytes += length;
+        }
+      } else {
+        const auto live = index_.find(key);
+        if (live != index_.end() && live->second.segment == segment &&
+            live->second.offset == offset && live->second.length == length) {
+          Entry compactedEntry = live->second;
+          compactedEntry.offset = rebuilt.size();
+          rebuilt.append(content.value(), offset, length);
+          compacted.emplace_back(key, compactedEntry);
+        }
+      }
+    }
+    offset = newline + 1;
+  }
+  if (compacted.size() != liveCount) {
+    return false;
+  }
+  if (rebuilt.empty()) {
     if (!fileAdapter_->removeFile(path)) {
       return false;
     }
-    segmentBytes_[segment] = 0;
-    segmentDeadBytes_[segment] = 0;
-    return true;
-  }
-  std::sort(live.begin(), live.end(), [](const auto& left, const auto& right) {
-    return left.second.offset < right.second.offset;
-  });
-  std::string rebuilt;
-  std::vector<std::string> unreadable;
-  std::vector<std::pair<std::string, Entry>> compacted;
-  compacted.reserve(live.size());
-  for (const auto& entry : live) {
-    const auto line =
-        fileAdapter_->readRange(path, entry.second.offset, entry.second.length);
-    if (!line.has_value() || line->size() != entry.second.length) {
-      unreadable.push_back(entry.first);
-      continue;
-    }
-    Entry compactedEntry = entry.second;
-    compactedEntry.offset = rebuilt.size();
-    rebuilt += line.value();
-    compacted.emplace_back(entry.first, compactedEntry);
-  }
-  if (!fileAdapter_->writeFile(path, rebuilt)) {
+  } else if (!fileAdapter_->writeFile(path, rebuilt)) {
     return false;
   }
   for (const auto& entry : compacted) {
     index_[entry.first] = entry.second;
   }
-  for (const auto& key : unreadable) {
-    index_.erase(key);
-  }
   segmentBytes_[segment] = rebuilt.size();
-  segmentDeadBytes_[segment] = 0;
+  segmentDeadBytes_[segment] = keptTombstoneBytes;
   return true;
 }
 
@@ -365,7 +401,7 @@ void JsonlSegmentStore::deleteDisk(const std::string& key) {
   }
   const Entry deletedEntry = it->second;
   if (!AppendTombstoneLocked(key)) {
-    return;
+    throw std::runtime_error("NitroAmplitude: segment storage append failed");
   }
   index_.erase(key);
   segmentDeadBytes_[deletedEntry.segment] += deletedEntry.length;

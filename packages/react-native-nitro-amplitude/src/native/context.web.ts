@@ -24,17 +24,20 @@ export function getNativeApplicationContext(
     platform: "Web",
     language: browserNavigator?.language ?? browserNavigator?.userLanguage,
   };
-  if (uaResult.os.name) {
-    context.osName = uaResult.os.name;
+  const osName = uaResult.os.name || uaResult.browser.name;
+  if (osName) {
+    context.osName = osName;
   }
-  if (uaResult.os.version) {
-    context.osVersion = uaResult.os.version;
+  const osVersion = uaResult.os.version || uaResult.browser.version;
+  if (osVersion) {
+    context.osVersion = osVersion;
   }
   if (uaResult.device.vendor) {
     context.deviceManufacturer = uaResult.device.vendor;
   }
-  if (uaResult.device.model) {
-    context.deviceModel = uaResult.device.model;
+  const deviceModel = uaResult.device.model || uaResult.os.name;
+  if (deviceModel) {
+    context.deviceModel = deviceModel;
   }
   return context;
 }

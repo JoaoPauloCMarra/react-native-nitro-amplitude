@@ -13,6 +13,35 @@ import {
 } from "../../native/context";
 import { ConnectorUserProvider } from "./connector";
 
+type ContextSource = Partial<Record<string, string | undefined>>;
+
+export function toExperimentUserContext(
+  context: ContextSource,
+): Record<string, string> {
+  const osName = context.os ?? context.osName;
+  const os = [osName, context.os ? undefined : context.osVersion]
+    .filter((part): part is string => !!part)
+    .join(" ");
+  const mapped: Record<string, string | undefined> = {
+    version: context.version ?? context.versionName,
+    platform: context.platform,
+    language: context.language,
+    country: context.country,
+    os,
+    device_brand: context.deviceBrand,
+    device_manufacturer: context.deviceManufacturer,
+    device_model: context.deviceModel,
+    carrier: context.carrier,
+  };
+  const user: Record<string, string> = {};
+  for (const [key, value] of Object.entries(mapped)) {
+    if (value) {
+      user[key] = value;
+    }
+  }
+  return user;
+}
+
 export class DefaultUserProvider implements ExperimentUserProvider {
   public baseProvider: ExperimentUserProvider | null;
   private readonly applicationContext: ApplicationContext;
@@ -55,15 +84,17 @@ export class DefaultUserProvider implements ExperimentUserProvider {
       return this.cachedApplicationContext;
     } else if (isNative()) {
       try {
-        this.cachedApplicationContext = getNativeApplicationContext(
-          EXPERIMENT_CONTEXT_OPTIONS,
+        this.cachedApplicationContext = toExperimentUserContext(
+          getNativeApplicationContext(EXPERIMENT_CONTEXT_OPTIONS),
         );
       } catch {
         this.cachedApplicationContext = {};
       }
       return this.cachedApplicationContext;
     } else {
-      this.cachedApplicationContext = this.applicationContext;
+      this.cachedApplicationContext = toExperimentUserContext(
+        this.applicationContext,
+      );
       return this.cachedApplicationContext;
     }
   }

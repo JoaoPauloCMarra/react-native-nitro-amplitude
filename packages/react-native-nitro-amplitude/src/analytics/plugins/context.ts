@@ -6,7 +6,6 @@ import {
   UUID,
   getLanguage,
 } from "@amplitude/analytics-core";
-import UAParser from "@amplitude/ua-parser-js";
 import { VERSION } from "../version";
 import { Platform } from "react-native";
 import { getNativeApplicationContext } from "../../native/context";
@@ -58,20 +57,9 @@ export class Context implements BeforePlugin {
 
   // @ts-ignore
   config: ReactNativeConfig;
-  uaResult: UAParser.IResult;
   library = `amplitude-nitro-ts/${VERSION}`;
   private nativeContext: NativeContext | undefined;
   private nativeContextLoaded = false;
-
-  constructor() {
-    let agent: string | undefined;
-    /* istanbul ignore else */
-    if (typeof navigator !== "undefined") {
-      agent = navigator.userAgent;
-    }
-
-    this.uaResult = new UAParser(agent).getResult();
-  }
 
   setup(config: ReactNativeConfig): Promise<undefined> {
     this.config = config;
@@ -100,28 +88,13 @@ export class Context implements BeforePlugin {
     const time = new Date().getTime();
     const platformOS = getPlatformOS();
     const nativeContext = this.getNativeContext();
-    const isWebPlatform = platformOS === "web";
     const fallbackPlatform = getNativePlatformName(platformOS);
     const appVersion = this.config.appVersion || nativeContext?.version;
     const platform = nativeContext?.platform || fallbackPlatform;
-
-    const osName =
-      nativeContext?.osName ||
-      (isWebPlatform ? this.uaResult.browser.name : fallbackPlatform);
-
-    const osVersion =
-      nativeContext?.osVersion ||
-      (isWebPlatform ? this.uaResult.browser.version : undefined);
-
-    const deviceVendor =
-      nativeContext?.deviceManufacturer ||
-      (isWebPlatform ? this.uaResult.device.vendor : undefined);
-
-    const deviceModel =
-      nativeContext?.deviceModel ||
-      (isWebPlatform
-        ? this.uaResult.device.model || this.uaResult.os.name
-        : undefined);
+    const osName = nativeContext?.osName || fallbackPlatform;
+    const osVersion = nativeContext?.osVersion;
+    const deviceVendor = nativeContext?.deviceManufacturer;
+    const deviceModel = nativeContext?.deviceModel;
     const language = nativeContext?.language || getLanguage();
     const country = nativeContext?.country;
     const carrier = nativeContext?.carrier;

@@ -18,6 +18,7 @@ class NitroAmplitudePackage : BaseReactPackage() {
   }
 }
 
+@Deprecated("The package initializer sets the Android context. Apps do not need to call this.")
 fun initializeNitroAmplitude(context: ReactApplicationContext) {
   AndroidAmplitudeAdapter.setContext(context)
   NitroAmplitudeOnLoad.initializeNative()

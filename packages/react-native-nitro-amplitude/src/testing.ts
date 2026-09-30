@@ -1,5 +1,8 @@
 import type { AmplitudeReturn, Result } from "@amplitude/analytics-core";
-import type { AmplitudeReactNativeClient } from "./analytics/react-native-client";
+import type {
+  AmplitudeHealthCheckResult,
+  AmplitudeReactNativeClient,
+} from "./analytics/react-native-client";
 import type { Client } from "./experiment/types/client";
 import type { Storage } from "./experiment/types/storage";
 import type { ExperimentUser } from "./experiment/types/user";
@@ -109,13 +112,17 @@ export function createMockAmplitudeClient(): AmplitudeReactNativeClient {
       queueSize: 0,
       activeInstanceNames: ["$default_instance"],
     })),
-    healthCheck: createMockFunction(async () => ({
-      ok: true,
-      analyticsInitialized: true,
-      nativeAvailable: true,
-      storageWritable: true,
-      errors: [],
-    })),
+    healthCheck: createMockFunction(
+      async (): Promise<AmplitudeHealthCheckResult> => ({
+        ok: true,
+        analyticsInitialized: true,
+        nativeAvailable: true,
+        storageWritable: true,
+        diskStorageWritable: true,
+        workerReady: true,
+        errors: [],
+      }),
+    ),
   };
   return client as unknown as AmplitudeReactNativeClient;
 }

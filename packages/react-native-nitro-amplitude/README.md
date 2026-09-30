@@ -26,11 +26,11 @@ bun add react-native-nitro-amplitude react-native-nitro-modules
 
 Compatibility for `0.9.1`:
 
-| Dependency                   | Supported range    | Tested baseline |
-| ---------------------------- | ------------------ | --------------- |
-| `react`                      | `>=18.2.0`         | `19.2.3`        |
-| `react-native`               | `>=0.76`           | `0.86.3`        |
-| `react-native-nitro-modules` | `>=0.37.0 <0.38.0` | `0.37.1`        |
+| Dependency                   | Supported range    | Tested baseline     |
+| ---------------------------- | ------------------ | ------------------- |
+| `react`                      | `>=18.2.0`         | `19.2.3`            |
+| `react-native`               | `>=0.76`           | `0.86.3`            |
+| `react-native-nitro-modules` | `>=0.37.0 <0.38.0` | `0.37.1`            |
 | Expo development builds      | SDK `>=52`         | SDK 57 (`~57.0.26`) |
 
 The package is tested on React Native `0.86.3` and Expo SDK 57. It supports
@@ -47,7 +47,10 @@ Expo SDK `52` default to NDK `26`, so those apps must set the Android
 {
   "expo": {
     "plugins": [
-      ["expo-build-properties", { "android": { "ndkVersion": "27.1.12297006" } }]
+      [
+        "expo-build-properties",
+        { "android": { "ndkVersion": "27.1.12297006" } }
+      ]
     ]
   }
 }

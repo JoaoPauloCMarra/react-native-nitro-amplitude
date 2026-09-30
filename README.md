@@ -29,32 +29,12 @@ Compatibility for `0.9.1`:
 | Dependency                   | Supported range    | Tested baseline     |
 | ---------------------------- | ------------------ | ------------------- |
 | `react`                      | `>=18.2.0`         | `19.2.3`            |
-| `react-native`               | `>=0.76`           | `0.86.3`            |
+| `react-native`               | `>=0.77`           | `0.86.3`            |
 | `react-native-nitro-modules` | `>=0.37.0 <0.38.0` | `0.37.1`            |
-| Expo development builds      | SDK `>=52`         | SDK 57 (`~57.0.26`) |
+| Expo development builds      | SDK `>=53`         | SDK 57 (`~57.0.26`) |
 
-The package is tested on React Native `0.86.3` and Expo SDK 57. It supports
-React Native `>=0.76` and Expo SDK `>=52`. The npm peer range stays at
-`react-native >=0.75.0`, the Nitro Modules minimum, but versions below `0.76`
-are not tested.
-
-Nitro Modules `0.37` requires Android NDK `27` or later. React Native `0.76` and
-Expo SDK `52` default to NDK `26`, so those apps must set the Android
-`ndkVersion` to `27` or later. In bare apps, set `ndkVersion` in
-`android/build.gradle`. In Expo SDK 52 apps, use `expo-build-properties`:
-
-```json
-{
-  "expo": {
-    "plugins": [
-      [
-        "expo-build-properties",
-        { "android": { "ndkVersion": "27.1.12297006" } }
-      ]
-    ]
-  }
-}
-```
+The package supports React Native `>=0.77` and Expo SDK `>=53`, the Nitro
+Modules `0.37` minimum. It is tested on React Native `0.86.3` and Expo SDK 57.
 
 The iOS deployment target follows React Native's `min_ios_version_supported`.
 
@@ -334,8 +314,10 @@ are skipped and do not count as retry attempts, so events are not dropped for
 exceeding `flushMaxRetries`. Uploads resume on the next flush interval after
 you re-enable the network, or at once when you call `flush()`. A `flush()` or
 `flushWithResult()` call while the network is disabled resolves without
-sending and reports the events as still queued. Experiment fetches reject with
-`network_error` while the network is disabled.
+sending and reports the events as still queued. This applies to the package's
+network transports (the default Nitro transport and the web fetch transport).
+`DryRunTransport` and custom transports keep running. Experiment fetches reject
+with `network_error` while the network is disabled.
 
 Network-control, dry-run record access, bounded timing helpers
 (`createNetworkTimingBuffer`, `createTimedAnalyticsTransport`,
@@ -492,7 +474,7 @@ Native HybridObject types:
 | iOS      | Native Nitro context, storage, and HTTP worker; pods and rebuild required. |
 | Android  | Native Nitro context, storage, and package-owned context initializer.      |
 | Web      | Browser fetch and storage fallbacks; no native plugin required.            |
-| Expo     | SDK 52+ development builds with the config plugin (tested on SDK 57).      |
+| Expo     | SDK 53+ development builds with the config plugin (tested on SDK 57).      |
 | Expo Go  | Unsupported because Expo Go cannot load custom Nitro modules.              |
 
 Architecture notes:

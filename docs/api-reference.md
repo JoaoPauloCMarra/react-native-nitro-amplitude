@@ -52,8 +52,12 @@ Native HTTP POSTs/PUTs of at least 1 KiB to `*.amplitude.com` send
 
 Available on the `react-native-nitro-amplitude/network` subpath.
 
-- `setNetworkEnabled(enabled)` / `getNetworkEnabled()` — global switch; all
-  native and web transport paths throw a typed `network_error` while disabled.
+- `setNetworkEnabled(enabled)` / `getNetworkEnabled()` — global switch. While
+  disabled, the package's network transports (`nitroTransport`, the web fetch
+  transport, `nitroHttpClient`) throw a typed `network_error`. Analytics skips
+  scheduled flushes for those transports, so queued events stay queued and do
+  not use up retry attempts. `DryRunTransport`, `DryRunHttpClient`, and custom
+  transports are not affected and keep running.
 - `DryRunTransport`, `DryRunHttpClient` — record-only transports for tests
   and examples.
 - `getDryRunTransportRecords()`, `getDryRunAnalyticsEvents()`,

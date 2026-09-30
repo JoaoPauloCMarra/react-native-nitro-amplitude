@@ -1,23 +1,28 @@
 import { Storage } from "../types/storage";
 
 export class MemoryStorage implements Storage {
-  private static readonly memoryStorage = new Map<string, string>();
+  private readonly memoryStorage = new Map<string, string>();
 
   async get(key: string): Promise<string | null> {
-    return MemoryStorage.memoryStorage.get(key) ?? null;
+    return this.memoryStorage.get(key) ?? null;
   }
 
   async put(key: string, value: string): Promise<void> {
-    MemoryStorage.memoryStorage.set(key, value);
+    this.memoryStorage.set(key, value);
   }
 
   async delete(key: string): Promise<void> {
-    MemoryStorage.memoryStorage.delete(key);
+    this.memoryStorage.delete(key);
   }
 
   async reset(): Promise<void> {
-    MemoryStorage.memoryStorage.clear();
+    this.memoryStorage.clear();
   }
 }
 
+/**
+ * @deprecated Keeps variants in memory only, so they do not survive an app
+ * restart. Use `NitroExperimentStorage` or `createDurableAmplitudeStoragePreset`
+ * for durable variants.
+ */
 export class LocalStorage extends MemoryStorage {}

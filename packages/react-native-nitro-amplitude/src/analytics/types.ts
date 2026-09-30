@@ -1,4 +1,4 @@
-export {
+export type {
   AmplitudeReturn,
   BaseEvent,
   EventOptions,
@@ -10,21 +10,23 @@ export {
   Event,
   IdentifyEvent,
   GroupIdentifyEvent,
-  IdentifyOperation,
-  SpecialEventType,
   IIdentify,
   IRevenue,
   RevenueProperty,
   ILogger,
-  LogLevel,
   Plugin,
   BeforePlugin,
   EnrichmentPlugin,
   DestinationPlugin,
   Result,
   ServerZoneType,
-  ServerZone,
   IdentityStorageType,
   Storage,
   TransportType,
+} from "@amplitude/analytics-core";
+export {
+  IdentifyOperation,
+  SpecialEventType,
+  LogLevel,
+  ServerZone,
 } from "@amplitude/analytics-core";

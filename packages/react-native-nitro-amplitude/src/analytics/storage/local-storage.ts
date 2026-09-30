@@ -3,7 +3,7 @@ import { BrowserStringStorage } from "../../native/browser-string-storage";
 import { isNative } from "../utils/platform";
 
 export class MemoryStorage<T> implements Storage<T> {
-  private static readonly memoryStorage = new Map<string, unknown>();
+  private readonly memoryStorage = new Map<string, unknown>();
 
   async isEnabled(): Promise<boolean> {
     /* istanbul ignore if */
@@ -41,7 +41,7 @@ export class MemoryStorage<T> implements Storage<T> {
   }
 
   async getRaw(key: string): Promise<string | undefined> {
-    const value = MemoryStorage.memoryStorage.get(key);
+    const value = this.memoryStorage.get(key);
     if (typeof value !== "string") {
       return undefined;
     }
@@ -50,7 +50,7 @@ export class MemoryStorage<T> implements Storage<T> {
 
   async set(key: string, value: T): Promise<void> {
     try {
-      MemoryStorage.memoryStorage.set(key, JSON.stringify(value));
+      this.memoryStorage.set(key, JSON.stringify(value));
     } catch {
       //
     }
@@ -58,7 +58,7 @@ export class MemoryStorage<T> implements Storage<T> {
 
   async remove(key: string): Promise<void> {
     try {
-      MemoryStorage.memoryStorage.delete(key);
+      this.memoryStorage.delete(key);
     } catch {
       //
     }
@@ -66,7 +66,7 @@ export class MemoryStorage<T> implements Storage<T> {
 
   async reset(): Promise<void> {
     try {
-      MemoryStorage.memoryStorage.clear();
+      this.memoryStorage.clear();
     } catch {
       //
     }

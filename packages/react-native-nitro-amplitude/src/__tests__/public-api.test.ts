@@ -190,6 +190,7 @@ import {
 import { nitroHttpClient as webNitroHttpClient } from "../native/http.web";
 import * as WebEntry from "../index.web";
 import { getDiagnosticEvents } from "../diagnostics-pipeline";
+import { recordDiagnosticFailure } from "../diagnostic-failures";
 import {
   LocalStorage,
   MemoryStorage,
@@ -728,11 +729,16 @@ describe("react-native-nitro-amplitude", () => {
             targetHost: "api2.amplitude.com",
             batchSize: 1,
             queuedEventCount: 1,
-            throttledCount: expect.any(Number),
+            throttledCount: 0,
             packageVersion: expect.any(String),
           }),
         ]),
       );
+      expect(
+        getDiagnostics().diagnosticFailures.filter(
+          (failure) => failure.operation === "analytics_upload",
+        ),
+      ).toHaveLength(1);
     } finally {
       analytics.shutdown();
       otherAnalytics.shutdown();
@@ -1047,6 +1053,22 @@ describe("react-native-nitro-amplitude", () => {
     );
   });
 
+  it("classifies native disk and HTTP exception codes", () => {
+    expect(
+      getAmplitudeErrorCode(
+        new Error("NitroAmplitude: disk_adapter_unavailable"),
+      ),
+    ).toBe("storage_error");
+    expect(getAmplitudeErrorCode(new Error("native_http_exception"))).toBe(
+      "network_error",
+    );
+    expect(
+      getAmplitudeErrorCode(
+        new Error("NitroAmplitude: segment storage append failed"),
+      ),
+    ).toBe("storage_error");
+  });
+
   it("provides typed testing helpers and variant helpers", async () => {
     const storage = createFakeExperimentStorage({ flag: "on" });
     expect(await storage.get("flag")).toBe("on");
@@ -1293,6 +1315,22 @@ describe("react-native-nitro-amplitude", () => {
 
     await first.remove("durable");
     expect(await second.get("durable")).toBeUndefined();
+  });
+
+  it("resets only the MemoryStorage instance that was reset", async () => {
+    const analyticsA = new MemoryStorage<string>();
+    const analyticsB = new MemoryStorage<string>();
+    await analyticsA.set("a", "value-a");
+    await analyticsB.set("b", "value-b");
+    await analyticsA.reset();
+    expect(await analyticsB.get("b")).toBe("value-b");
+
+    const experimentA = new ExperimentCompat.MemoryStorage();
+    const experimentB = new ExperimentCompat.MemoryStorage();
+    await experimentA.put("a", "value-a");
+    await experimentB.put("b", "value-b");
+    await experimentA.reset();
+    expect(await experimentB.get("b")).toBe("value-b");
   });
 
   it("scopes web LocalStorage reset to package keys", async () => {
@@ -2456,6 +2494,22 @@ describe("react-native-nitro-amplitude", () => {
   });
 
   describe("analytics lifecycle", () => {
+    it("counts repeated diagnostic failures", () => {
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        recordDiagnosticFailure({
+          operation: "analytics_upload",
+          kind: "timeout",
+          targetHost: "api2.amplitude.com",
+        });
+      }
+
+      expect(
+        getDiagnostics().diagnosticFailures.map(
+          (failure) => failure.throttledCount,
+        ),
+      ).toEqual([0, 1, 2]);
+    });
+
     it("keeps events queued while the network is disabled", async () => {
       const send = jest.fn((url: string, payload: Payload) =>
         dryRunTransport.send(url, payload),

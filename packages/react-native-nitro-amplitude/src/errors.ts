@@ -38,6 +38,7 @@ const NATIVE_ERROR_CODES: Record<string, AmplitudeErrorCode> = {
   invalid_http_response: "network_error",
   cancelled: "network_error",
   queue_full: "network_error",
+  native_http_exception: "network_error",
   adapter_unavailable: "native_unavailable",
   disk_adapter_unavailable: "storage_error",
   storage_error: "storage_error",

@@ -406,7 +406,14 @@ void testSegmentStoreCompactionWriteFailurePreservesData() {
   store.setDisk("remove", "remove-value");
 
   files->failAppends = true;
-  store.deleteDisk("remove");
+  bool deleteThrew = false;
+  try {
+    store.deleteDisk("remove");
+  } catch (const std::runtime_error& error) {
+    deleteThrew =
+        std::string(error.what()) == "NitroAmplitude: segment storage append failed";
+  }
+  assert(deleteThrew);
 
   assert(store.hasDisk("remove"));
   assert(store.getDisk("remove").value_or("") == "remove-value");
@@ -1118,6 +1125,66 @@ void testSegmentStoreTombstoneReload() {
   assert(reloaded.getDisk("keep").value_or("") == "keep-value");
 }
 
+void testSegmentStoreCrossSegmentTombstoneSurvivesCompaction() {
+  auto files = std::make_shared<FakeFileAdapter>();
+  {
+    JsonlSegmentStore store(files, "tombstone-cross", 64);
+    store.setDisk("A", "a");
+    store.setDisk("B", std::string(30, 'b'));
+    store.setDisk("C", std::string(30, 'c'));
+    store.deleteDisk("A");
+    assert(!store.hasDisk("A"));
+    store.setDisk("D", std::string(30, 'd'));
+    assert(!store.hasDisk("A"));
+  }
+  JsonlSegmentStore reloaded(files, "tombstone-cross", 64);
+  assert(!reloaded.hasDisk("A"));
+  assert(!reloaded.getDisk("A").has_value());
+  assert(reloaded.getDisk("B").value_or("") == std::string(30, 'b'));
+  assert(reloaded.getDisk("C").value_or("") == std::string(30, 'c'));
+  assert(reloaded.getDisk("D").value_or("") == std::string(30, 'd'));
+}
+
+void testSegmentStoreCompactionDropsTombstonesWithoutLowerSegments() {
+  auto files = std::make_shared<FakeFileAdapter>();
+  const std::string firstSegment = "tombstone-drop/segment-00000000.jsonl";
+  {
+    JsonlSegmentStore store(files, "tombstone-drop", 64);
+    store.setDisk("A", "a");
+    store.setDisk("B", std::string(30, 'b'));
+    store.deleteDisk("A");
+    store.setDisk("C", std::string(30, 'c'));
+    assert(files->files[firstSegment] == "B\t" + std::string(30, 'b') + "\n");
+  }
+  JsonlSegmentStore reloaded(files, "tombstone-drop", 64);
+  assert(!reloaded.hasDisk("A"));
+  assert(reloaded.getDisk("B").value_or("") == std::string(30, 'b'));
+  assert(reloaded.getDisk("C").value_or("") == std::string(30, 'c'));
+}
+
+void testSegmentStoreCompactionReadFailurePreservesLiveKeys() {
+  auto files = std::make_shared<FakeFileAdapter>();
+  {
+    JsonlSegmentStore store(files, "compact-read-failure", 64);
+    store.setDisk("A", "keep-me");
+    store.setDisk("B", std::string(40, 'b'));
+    store.setDisk("C", std::string(40, 'c'));
+    files->failReads = true;
+    store.setDisk("B", "x");
+    files->failReads = false;
+    assert(store.hasDisk("A"));
+    assert(store.getDisk("A").value_or("") == "keep-me");
+    assert(store.getDisk("B").value_or("") == "x");
+    store.setDisk("A", "moved");
+    assert(files->files.count("compact-read-failure/segment-00000000.jsonl") == 0);
+    assert(store.getDisk("A").value_or("") == "moved");
+  }
+  JsonlSegmentStore reloaded(files, "compact-read-failure", 64);
+  assert(reloaded.getDisk("A").value_or("") == "moved");
+  assert(reloaded.getDisk("B").value_or("") == "x");
+  assert(reloaded.getDisk("C").value_or("") == std::string(40, 'c'));
+}
+
 int main() {
   testStorage();
   testStorageAdapterContract();
@@ -1135,6 +1202,9 @@ int main() {
   testSegmentStoreFailedTornTailTrimRetiresSegment();
   testSegmentStoreOverwriteCompactionFailurePreservesValues();
   testSegmentStoreTombstoneReload();
+  testSegmentStoreCrossSegmentTombstoneSurvivesCompaction();
+  testSegmentStoreCompactionReadFailurePreservesLiveKeys();
+  testSegmentStoreCompactionDropsTombstonesWithoutLowerSegments();
   testGzipAmplitudePayloads();
   testGzipAmplitudeAuthorityValidation();
   testContextFallbacks();

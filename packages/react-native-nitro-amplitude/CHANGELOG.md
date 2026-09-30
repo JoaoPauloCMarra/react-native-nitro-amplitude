@@ -61,6 +61,8 @@ The format follows Keep a Changelog and the project adheres to SemVer.
 - Removed the `unfetch` dependency. Experiment web requests use the global
   `fetch`.
 - `@amplitude/ua-parser-js` is used only by the web context module.
+- Update the pinned `@amplitude/analytics-core` dependency from `2.58.0` to
+  `2.59.0`.
 - README documents the tested baseline (React Native 0.86.3, Expo SDK 57), the
   supported range (React Native >= 0.76, Expo SDK >= 52), and the Android NDK
   27 requirement for React Native 0.76 and Expo SDK 52 apps.

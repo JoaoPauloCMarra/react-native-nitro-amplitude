@@ -62,7 +62,7 @@
       "version": "0.9.1",
       "dependencies": {
         "@amplitude/analytics-connector": "^1.6.8",
-        "@amplitude/analytics-core": "2.58.0",
+        "@amplitude/analytics-core": "2.59.0",
         "@amplitude/experiment-core": "^0.13.6",
         "@amplitude/ua-parser-js": "^0.7.33",
         "tslib": "^2.8.1",
@@ -99,7 +99,7 @@
   "packages": {
     "@amplitude/analytics-connector": ["@amplitude/analytics-connector@1.6.8", "", {}, "sha512-ryZUsakytEZZ+g/O5mTsObckhCKtZrNdZw+KKcbuzVCZa1LJFPWHvKj+jwQpPO0ngsbb6oEpC5laaIEM5B4XKQ=="],
 
-    "@amplitude/analytics-core": ["@amplitude/analytics-core@2.58.0", "", { "dependencies": { "@amplitude/analytics-connector": "^1.6.4", "@types/zen-observable": "0.8.3", "safe-json-stringify": "1.2.0", "tslib": "^2.4.1", "zen-observable": "0.10.0" } }, "sha512-ZFd271l2UZrR0gXXcgRqV1fj6nURIemovV7EDTdO8z+9rVobV7P+mjs4srqLwEJl3YfNX/ma1IgfFFriFEmXSQ=="],
+    "@amplitude/analytics-core": ["@amplitude/analytics-core@2.59.0", "", { "dependencies": { "@amplitude/analytics-connector": "^1.6.4", "@types/zen-observable": "0.8.3", "safe-json-stringify": "1.2.0", "tslib": "^2.4.1", "zen-observable": "0.10.0" } }, "sha512-osXJU1QVOgbqyAvtQpqr9lDhOfos4+q5UWT1R9BcyZDU0AqsFusaGnk/vOebi3ySKOQh29sUFHViLnSn1BrziQ=="],
 
     "@amplitude/experiment-core": ["@amplitude/experiment-core@0.13.6", "", { "dependencies": { "js-base64": "^3.7.5" } }, "sha512-MLzTOUxsvgVyn2o4YPlfdGBk1Z19oPyIkXdwiRVytAxCnkb4I+Gcx6oV7Or6Jw/cN5MYP1dTWnT8upwN0XyhPA=="],
 

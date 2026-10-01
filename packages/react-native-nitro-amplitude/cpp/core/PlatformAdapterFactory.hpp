@@ -30,7 +30,7 @@ inline PlatformAdapters getSharedPlatformAdapters() {
   return PlatformAdapters{adapter, adapter, adapter};
 #elif __ANDROID__
   static std::shared_ptr<AndroidAmplitudeAdapterCpp> adapter =
-      std::make_shared<AndroidAmplitudeAdapterCpp>(AndroidAmplitudeAdapterJava::getContext());
+      std::make_shared<AndroidAmplitudeAdapterCpp>();
   return PlatformAdapters{adapter, adapter, adapter};
 #endif
 #endif

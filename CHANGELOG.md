@@ -4,6 +4,72 @@ All notable changes to this project are documented in this file.
 
 The format follows Keep a Changelog and the project adheres to SemVer.
 
+## [0.10.0] - 2026-10-01
+
+### Breaking changes
+
+- Native HTTP response bodies are read up to 4 MiB. A longer body is cut at
+  4 MiB and the request still completes with its status code and no error.
+  This applies to `nitroHttpClient` and `nitroTransport`. Migration: do not
+  use `nitroHttpClient` for responses larger than 4 MiB.
+- The native upload queue rejects a new request with `queue_full` when more
+  than 64 MiB of request bodies and headers are queued, in addition to the
+  100-request limit. A request is always accepted when the queue is empty.
+  Migration: treat `queue_full` as retryable, as for the request limit.
+- `GET` and `HEAD` requests are sent without a body on iOS and Android. Android
+  used to send a `GET` with a body as a `POST`. Migration: send request data in
+  a `POST`.
+- An HTTP method that is empty or is not a valid HTTP token completes with
+  `network_error` on both platforms. Methods are sent in upper case. `PATCH`
+  and custom methods are not supported on Android.
+- `remove`, `clear`, `getAllKeys`, and `getKeysByPrefix` on native disk storage
+  throw `storage_error` while the storage directory cannot be opened. They
+  used to return without doing anything. Migration: handle the rejection as
+  you do for a failed write.
+- The key `\x7fDEL` is reserved and is rejected with `storage_error`. A value
+  written under that key was already read back as deleted.
+- Android: a malformed URL returns `invalid_url` instead of `network_error`,
+  as on iOS.
+
+### Fixed
+
+- Disk writes that fail because the disk or quota is full no longer leave
+  partial records or extra segment files. Storage is unchanged after the
+  error and works again when space is free. A segment that cannot be opened
+  for writing is retired once, not on every failure.
+- If the storage directory is removed while the app runs, the next write
+  creates it again. Storage keeps its data when a directory check fails, and
+  it opens when its directory exists even if a parent directory cannot be
+  created.
+- Empty segment files and leftover temporary files from an interrupted
+  compaction are removed when storage opens. Segments that hold only delete
+  markers are merged when every later segment was read completely, so the
+  number of storage files stays bounded.
+- Segment files with an id above 4294967295 are ignored. On 32-bit Android
+  such a file stopped the module from starting.
+- Records above 4 GiB are rejected with `storage_error` instead of being
+  truncated.
+- Calling a worker unsubscribe function after the worker is released no
+  longer crashes.
+- A worker thread that fails to start reports an error instead of terminating
+  the process.
+- Request bodies above 2 GiB are sent uncompressed.
+- Legacy preference migration resumes later without importing a deleted key
+  again.
+- Android: storage calls made before the package initializer has run fail
+  with `storage_error` and recover on later calls. A context prefetch before
+  initialization no longer crashes the process.
+- Android: a storage write with no storage directory throws `storage_error`
+  instead of being dropped.
+- Android: an empty locale list falls back to the default locale.
+- Android: HTTP bodies or header arrays above 2 GiB fail with a network error
+  instead of overflowing.
+- Android: file offsets are 64-bit on 32-bit devices.
+- iOS: strings that are not valid UTF-8 in the NSUserDefaults fallback are
+  treated as missing on read and rejected with `storage_error` on write,
+  instead of crashing. Strings that contain NUL are stored and read intact.
+- iOS: an unavailable `identifierForVendor` is no longer cached as empty.
+
 ## [0.9.1] - 2026-09-30
 
 ### Breaking changes

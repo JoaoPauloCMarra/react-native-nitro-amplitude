@@ -39,6 +39,7 @@ private:
   std::mutex contextCacheMutex_;
   std::map<std::string, std::string> contextCache_;
   std::shared_ptr<JsonlSegmentStore> diskStore_;
+  bool legacyDiskPending_ = false;
 
   void MigrateLegacyDisk();
 };

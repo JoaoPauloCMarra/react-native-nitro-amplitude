@@ -24,7 +24,7 @@ bun add react-native-nitro-amplitude react-native-nitro-modules
 
 ## Requirements and compatibility
 
-Compatibility for `0.9.1`:
+Compatibility for `0.10.0`:
 
 | Dependency                   | Supported range    | Tested baseline     |
 | ---------------------------- | ------------------ | ------------------- |
@@ -46,14 +46,14 @@ Expo app.
 
 ### Upgrade from 0.7.x and earlier
 
-The `0.8.x` and `0.9.x` lines keep the native peer boundary introduced in `0.7.0`:
+The `0.8.x`, `0.9.x`, and `0.10.x` lines keep the native peer boundary introduced in `0.7.0`:
 `react-native-nitro-amplitude` requires `react-native-nitro-modules`
 `>=0.37.0 <0.38.0`. Upgrade the Nitro package together with this package, then
 regenerate and rebuild native projects so the committed Nitro 0.37.1 bindings
 are compiled into the app:
 
 ```sh
-bun add react-native-nitro-amplitude@0.9.1 react-native-nitro-modules@0.37.1
+bun add react-native-nitro-amplitude@0.10.0 react-native-nitro-modules@0.37.1
 bunx expo prebuild
 ```
 
@@ -426,7 +426,11 @@ Analytics exports:
 - `Identify`, `Revenue`, and analytics `Types`.
 - `nitroTransport`, `nitroHttpClient`, storage adapters
   (`NitroAnalyticsStorage`, `NitroExperimentStorage`, `NitroMemoryStorage`,
-  `LocalStorage`, `MemoryStorage`, `InMemoryStorage`).
+  `LocalStorage`, `MemoryStorage`, `InMemoryStorage`). `nitroHttpClient`
+  limits: response bodies are cut at 4 MiB with the status code kept, `GET`
+  and `HEAD` are sent without a body, and `PATCH` and custom methods are not
+  supported on Android. The native upload queue holds at most 100 requests
+  and 64 MiB; above that a request completes with `queue_full`.
 - Network controls, dry-run record access, timing helpers, and mock helpers
   remain available from the root. Prefer the `/network` and `/testing`
   subpaths in new code.

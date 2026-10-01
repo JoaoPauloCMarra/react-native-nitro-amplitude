@@ -1,8 +1,11 @@
 #include "AndroidAmplitudeAdapterCpp.hpp"
 
+#include "../../../cpp/core/LegacyDiskMigration.hpp"
 #include "../../../cpp/core/PosixFileAdapter.hpp"
 
 #include <exception>
+#include <limits>
+#include <stdexcept>
 #include <utility>
 
 namespace NitroAmplitude {
@@ -12,14 +15,21 @@ using JavaStringArray = JArrayClass<jstring>;
 
 namespace {
 
+jsize toJavaSize(size_t size) {
+  if (size > static_cast<size_t>(std::numeric_limits<jsize>::max())) {
+    throw std::length_error("NitroAmplitude: value exceeds JNI array size");
+  }
+  return static_cast<jsize>(size);
+}
+
 std::vector<std::string> fromJavaStringArray(alias_ref<JavaStringArray> values) {
   if (!values) {
     return {};
   }
   std::vector<std::string> result;
-  const jsize size = values->size();
+  const size_t size = values->size();
   result.reserve(size);
-  for (jsize i = 0; i < size; ++i) {
+  for (size_t i = 0; i < size; ++i) {
     auto current = values->getElement(i);
     result.push_back(current ? current->toStdString() : std::string());
   }
@@ -27,7 +37,7 @@ std::vector<std::string> fromJavaStringArray(alias_ref<JavaStringArray> values) 
 }
 
 local_ref<JavaStringArray> toJavaStringArray(const std::vector<std::string>& values) {
-  auto array = JavaStringArray::newArray(static_cast<jsize>(values.size()));
+  auto array = JavaStringArray::newArray(static_cast<size_t>(toJavaSize(values.size())));
   for (size_t i = 0; i < values.size(); ++i) {
     auto value = make_jstring(values[i]);
     array->setElement(i, value.get());
@@ -37,41 +47,70 @@ local_ref<JavaStringArray> toJavaStringArray(const std::vector<std::string>& val
 
 } // namespace
 
-AndroidAmplitudeAdapterCpp::AndroidAmplitudeAdapterCpp(alias_ref<JObject> /*context*/) {
-  static auto directoryMethod = AndroidAmplitudeAdapterJava::javaClassStatic()->getStaticMethod<jstring()>(
-      "getStorageDirectory", "()Ljava/lang/String;");
-  auto directory = directoryMethod(AndroidAmplitudeAdapterJava::javaClassStatic());
-  if (directory != nullptr) {
-    diskStore_ = std::make_shared<JsonlSegmentStore>(
-        std::make_shared<PosixFileAdapter>(), directory->toStdString());
+std::shared_ptr<JsonlSegmentStore> AndroidAmplitudeAdapterCpp::EnsureDiskStore() {
+  std::lock_guard<std::mutex> lock(diskStoreMutex_);
+  try {
+    if (diskStore_ == nullptr) {
+      static auto directoryMethod = AndroidAmplitudeAdapterJava::javaClassStatic()->getStaticMethod<jstring()>(
+          "getStorageDirectory", "()Ljava/lang/String;");
+      auto directory = directoryMethod(AndroidAmplitudeAdapterJava::javaClassStatic());
+      if (directory == nullptr) {
+        return nullptr;
+      }
+      diskStore_ = std::make_shared<JsonlSegmentStore>(
+          std::make_shared<PosixFileAdapter>(), directory->toStdString());
+    }
+    if (!legacyDiskMigrated_ && legacyDiskRetryAllowed_) {
+      legacyDiskRetryAllowed_ = false;
+      legacyDiskMigrated_ = MigrateLegacyDisk(*diskStore_);
+    }
+  } catch (const std::exception&) {
+    return diskStore_;
   }
-  MigrateLegacyDisk();
+  return diskStore_;
 }
 
-void AndroidAmplitudeAdapterCpp::MigrateLegacyDisk() {
-  if (diskStore_ == nullptr) {
+void AndroidAmplitudeAdapterCpp::ForgetLegacyDiskEntry(const std::string& key) {
+  std::lock_guard<std::mutex> lock(diskStoreMutex_);
+  if (legacyDiskMigrated_) {
     return;
   }
+  try {
+    static auto removeMethod = AndroidAmplitudeAdapterJava::javaClassStatic()
+        ->getStaticMethod<void(alias_ref<JavaStringArray>)>(
+            "removeLegacyDiskEntries", "([Ljava/lang/String;)V");
+    removeMethod(AndroidAmplitudeAdapterJava::javaClassStatic(), toJavaStringArray({key}));
+  } catch (const std::exception&) {
+  }
+}
+
+bool AndroidAmplitudeAdapterCpp::MigrateLegacyDisk(JsonlSegmentStore& store) {
   static auto entriesMethod = AndroidAmplitudeAdapterJava::javaClassStatic()->getStaticMethod<JavaStringArray()>(
       "getLegacyDiskEntries", "()[Ljava/lang/String;");
   const std::vector<std::string> flattened =
       fromJavaStringArray(entriesMethod(AndroidAmplitudeAdapterJava::javaClassStatic()));
   if (flattened.empty() || flattened.size() % 2 != 0) {
-    return;
+    return true;
   }
   std::vector<std::pair<std::string, std::string>> legacy;
   legacy.reserve(flattened.size() / 2);
   for (size_t i = 0; i + 1 < flattened.size(); i += 2) {
     legacy.emplace_back(flattened[i], flattened[i + 1]);
   }
-  try {
-    diskStore_->migrateLegacyEntries(legacy);
-  } catch (const std::exception&) {
-    return;
+  const LegacyDiskMigrationResult result = migrateLegacyDiskEntries(store, legacy);
+  if (!result.complete) {
+    if (!result.handledKeys.empty()) {
+      static auto removeMethod = AndroidAmplitudeAdapterJava::javaClassStatic()
+          ->getStaticMethod<void(alias_ref<JavaStringArray>)>(
+              "removeLegacyDiskEntries", "([Ljava/lang/String;)V");
+      removeMethod(AndroidAmplitudeAdapterJava::javaClassStatic(), toJavaStringArray(result.handledKeys));
+    }
+    return false;
   }
   static auto clearMethod = AndroidAmplitudeAdapterJava::javaClassStatic()->getStaticMethod<void()>(
       "clearLegacyDisk", "()V");
   clearMethod(AndroidAmplitudeAdapterJava::javaClassStatic());
+  return true;
 }
 
 void AndroidAmplitudeAdapterCpp::prefetchContext() {
@@ -87,33 +126,42 @@ std::string AndroidAmplitudeAdapterCpp::getApplicationContextJson(const std::str
 }
 
 void AndroidAmplitudeAdapterCpp::setDisk(const std::string& key, const std::string& value) {
-  if (diskStore_ != nullptr) {
-    diskStore_->setDisk(key, value);
+  const auto store = EnsureDiskStore();
+  if (store == nullptr) {
+    throw std::runtime_error("NitroAmplitude: disk_adapter_unavailable");
   }
+  store->setDisk(key, value);
+  std::lock_guard<std::mutex> lock(diskStoreMutex_);
+  legacyDiskRetryAllowed_ = true;
 }
 
 std::optional<std::string> AndroidAmplitudeAdapterCpp::getDisk(const std::string& key) {
-  if (diskStore_ == nullptr) {
+  const auto store = EnsureDiskStore();
+  if (store == nullptr) {
     return std::nullopt;
   }
-  return diskStore_->getDisk(key);
+  return store->getDisk(key);
 }
 
 void AndroidAmplitudeAdapterCpp::deleteDisk(const std::string& key) {
-  if (diskStore_ != nullptr) {
-    diskStore_->deleteDisk(key);
+  const auto store = EnsureDiskStore();
+  if (store != nullptr) {
+    store->deleteDisk(key);
+    ForgetLegacyDiskEntry(key);
   }
 }
 
 bool AndroidAmplitudeAdapterCpp::hasDisk(const std::string& key) {
-  return diskStore_ != nullptr && diskStore_->hasDisk(key);
+  const auto store = EnsureDiskStore();
+  return store != nullptr && store->hasDisk(key);
 }
 
 std::vector<std::string> AndroidAmplitudeAdapterCpp::getAllDiskKeys() {
-  if (diskStore_ == nullptr) {
+  const auto store = EnsureDiskStore();
+  if (store == nullptr) {
     return {};
   }
-  return diskStore_->getAllDiskKeys();
+  return store->getAllDiskKeys();
 }
 
 HttpResult AndroidAmplitudeAdapterCpp::performHttpRequest(
@@ -134,9 +182,10 @@ HttpResult AndroidAmplitudeAdapterCpp::performHttpRequest(
     headerNames.push_back(header.first);
     headerValues.push_back(header.second);
   }
-  auto bodyBytes = JArrayByte::newArray(static_cast<jsize>(body.size()));
-  if (!body.empty()) {
-    bodyBytes->setRegion(0, body.size(), reinterpret_cast<const jbyte*>(body.data()));
+  const jsize bodySize = toJavaSize(body.size());
+  auto bodyBytes = JArrayByte::newArray(static_cast<size_t>(bodySize));
+  if (bodySize > 0) {
+    bodyBytes->setRegion(0, bodySize, reinterpret_cast<const jbyte*>(body.data()));
   }
   const auto result = fromJavaStringArray(requestMethod(
       AndroidAmplitudeAdapterJava::javaClassStatic(),

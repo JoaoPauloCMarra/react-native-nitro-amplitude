@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -8,6 +9,7 @@
 namespace NitroAmplitude {
 
 std::optional<std::string> gzipCompress(const std::string& input);
+std::optional<std::string> gzipCompressBounded(const std::string& input, size_t maxInputBytes);
 
 bool shouldGzipAmplitudeRequest(
     const std::string& url,

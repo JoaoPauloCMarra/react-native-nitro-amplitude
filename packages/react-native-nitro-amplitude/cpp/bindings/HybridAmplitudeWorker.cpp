@@ -14,6 +14,7 @@ namespace {
 constexpr int kDefaultTimeoutMillis = 10000;
 constexpr int kMaxTimeoutMillis = 300000;
 constexpr size_t kMaxQueuedRequests = 100;
+constexpr size_t kMaxQueuedBytes = 64 * 1024 * 1024;
 constexpr size_t kWorkerThreadCount = 2;
 
 size_t requestBodyBytes(const WorkerRequest& request) {
@@ -23,25 +24,76 @@ size_t requestBodyBytes(const WorkerRequest& request) {
   }
   return request.body.size() + headerBytes;
 }
+
+bool isMethodToken(const std::string& method) {
+  if (method.empty()) {
+    return false;
+  }
+  for (const char character : method) {
+    const bool alphanumeric = (character >= 'A' && character <= 'Z') ||
+        (character >= 'a' && character <= 'z') || (character >= '0' && character <= '9');
+    if (!alphanumeric && std::string("!#$%&'*+-.^_`|~").find(character) == std::string::npos) {
+      return false;
+    }
+  }
+  return true;
+}
+
+std::string upperCaseMethod(const std::string& method) {
+  std::string upper = method;
+  for (char& character : upper) {
+    if (character >= 'a' && character <= 'z') {
+      character = static_cast<char>(character - 'a' + 'A');
+    }
+  }
+  return upper;
+}
+
+bool carriesBody(const std::string& method) {
+  return method != "GET" && method != "HEAD";
+}
+
+std::thread startThread(std::function<void()> body) {
+  return std::thread(std::move(body));
+}
 } // namespace
 
 HybridAmplitudeWorker::HybridAmplitudeWorker()
     : HybridObject(TAG), HybridAmplitudeWorkerSpec() {
   adapter_ = ::NitroAmplitude::getSharedPlatformAdapters().http;
-  for (size_t i = 0; i < kWorkerThreadCount; ++i) {
-    workerThreads_.emplace_back([this]() { workerLoop(); });
-  }
+  startWorkers(startThread);
 }
 
 HybridAmplitudeWorker::HybridAmplitudeWorker(
     std::shared_ptr<::NitroAmplitude::HttpAdapter> adapter)
     : HybridObject(TAG), HybridAmplitudeWorkerSpec(), adapter_(std::move(adapter)) {
-  for (size_t i = 0; i < kWorkerThreadCount; ++i) {
-    workerThreads_.emplace_back([this]() { workerLoop(); });
-  }
+  startWorkers(startThread);
+}
+
+HybridAmplitudeWorker::HybridAmplitudeWorker(
+    std::shared_ptr<::NitroAmplitude::HttpAdapter> adapter,
+    const ThreadFactory& threadFactory)
+    : HybridObject(TAG), HybridAmplitudeWorkerSpec(), adapter_(std::move(adapter)) {
+  startWorkers(threadFactory);
 }
 
 HybridAmplitudeWorker::~HybridAmplitudeWorker() {
+  stopWorkers();
+}
+
+void HybridAmplitudeWorker::startWorkers(const ThreadFactory& threadFactory) {
+  try {
+    workerThreads_.reserve(kWorkerThreadCount);
+    for (size_t i = 0; i < kWorkerThreadCount; ++i) {
+      workerThreads_.push_back(threadFactory([this]() { workerLoop(); }));
+    }
+  } catch (...) {
+    stopWorkers();
+    throw;
+  }
+}
+
+void HybridAmplitudeWorker::stopWorkers() {
   {
     std::lock_guard<std::mutex> lock(queueMutex_);
     running_ = false;
@@ -81,7 +133,10 @@ void HybridAmplitudeWorker::enqueue(
   const size_t bodyBytes = requestBodyBytes(request);
   {
     std::lock_guard<std::mutex> lock(queueMutex_);
-    if (queue_.size() >= kMaxQueuedRequests) {
+    const size_t queuedBytes = pendingBodyBytes_.load();
+    if (queue_.size() >= kMaxQueuedRequests ||
+        (!queue_.empty() &&
+         (bodyBytes > kMaxQueuedBytes || queuedBytes > kMaxQueuedBytes - bodyBytes))) {
       throw std::runtime_error("NitroAmplitude: queue_full");
     }
     request.generation = ++nextGeneration_;
@@ -108,17 +163,22 @@ std::function<void()> HybridAmplitudeWorker::addOnComplete(
         double,
         const std::string&,
         const std::string&)>& callback) {
-  std::lock_guard<std::mutex> lock(listenersMutex_);
-  const size_t listenerId = ++nextListenerId_;
-  listeners_.push_back(Listener{listenerId, callback});
-  return [this, listenerId]() {
-    std::lock_guard<std::mutex> innerLock(listenersMutex_);
-    listeners_.erase(
+  std::lock_guard<std::mutex> lock(listenerRegistry_->mutex);
+  const size_t listenerId = ++listenerRegistry_->nextListenerId;
+  listenerRegistry_->listeners.push_back(Listener{listenerId, callback});
+  std::weak_ptr<ListenerRegistry> weakRegistry = listenerRegistry_;
+  return [weakRegistry, listenerId]() {
+    const auto registry = weakRegistry.lock();
+    if (!registry) {
+      return;
+    }
+    std::lock_guard<std::mutex> innerLock(registry->mutex);
+    registry->listeners.erase(
         std::remove_if(
-            listeners_.begin(),
-            listeners_.end(),
+            registry->listeners.begin(),
+            registry->listeners.end(),
             [listenerId](const Listener& listener) { return listener.id == listenerId; }),
-        listeners_.end());
+        registry->listeners.end());
   };
 }
 
@@ -187,12 +247,15 @@ void HybridAmplitudeWorker::workerLoop() {
     try {
       if (!adapter_) {
         result.error = "Native adapter unavailable";
+      } else if (!isMethodToken(request.method)) {
+        result.error = "network_error";
       } else {
+        const std::string method = upperCaseMethod(request.method);
         std::unordered_map<std::string, std::string> headers = request.headers;
-        std::string body = request.body;
+        std::string body = carriesBody(method) ? request.body : std::string();
         if (::NitroAmplitude::shouldGzipAmplitudeRequest(
                 request.url,
-                request.method,
+                method,
                 headers,
                 body
             )) {
@@ -203,10 +266,10 @@ void HybridAmplitudeWorker::workerLoop() {
         }
 #ifndef NITRO_AMPLITUDE_DISABLE_PLATFORM_ADAPTER
 #if __ANDROID__
-        facebook::jni::ThreadScope::WithClassLoader([&request, &headers, &body, this, &result]() {
+        facebook::jni::ThreadScope::WithClassLoader([&request, &method, &headers, &body, this, &result]() {
               result = adapter_->performHttpRequest(
                   request.url,
-                  request.method,
+                  method,
                   headers,
                   body,
                   request.timeoutMillis);
@@ -214,7 +277,7 @@ void HybridAmplitudeWorker::workerLoop() {
 #else
         result = adapter_->performHttpRequest(
             request.url,
-            request.method,
+            method,
             headers,
             body,
             request.timeoutMillis);
@@ -222,7 +285,7 @@ void HybridAmplitudeWorker::workerLoop() {
 #else
         result = adapter_->performHttpRequest(
             request.url,
-            request.method,
+            method,
             headers,
             body,
             request.timeoutMillis);
@@ -267,8 +330,8 @@ void HybridAmplitudeWorker::notifyComplete(
     const std::string& error) {
   std::vector<Listener> snapshot;
   {
-    std::lock_guard<std::mutex> lock(listenersMutex_);
-    snapshot = listeners_;
+    std::lock_guard<std::mutex> lock(listenerRegistry_->mutex);
+    snapshot = listenerRegistry_->listeners;
   }
   for (const auto& listener : snapshot) {
     try {

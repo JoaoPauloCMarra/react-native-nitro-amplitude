@@ -5,17 +5,13 @@
 #include "../../cpp/core/JsonlSegmentStore.hpp"
 #include "../../cpp/core/StorageAdapter.hpp"
 #include <fbjni/fbjni.h>
+#include <memory>
+#include <mutex>
 
 namespace NitroAmplitude {
 
 struct AndroidAmplitudeAdapterJava : facebook::jni::JavaClass<AndroidAmplitudeAdapterJava> {
   static constexpr auto kJavaDescriptor = "Lcom/nitroamplitude/AndroidAmplitudeAdapter;";
-
-  static facebook::jni::alias_ref<facebook::jni::JObject> getContext() {
-    static auto method = javaClassStatic()->getStaticMethod<facebook::jni::JObject()>(
-        "getContext", "()Landroid/content/Context;");
-    return method(javaClassStatic());
-  }
 };
 
 class AndroidAmplitudeAdapterCpp
@@ -23,7 +19,7 @@ class AndroidAmplitudeAdapterCpp
       public StorageAdapter,
       public HttpAdapter {
 public:
-  explicit AndroidAmplitudeAdapterCpp(facebook::jni::alias_ref<facebook::jni::JObject> context);
+  AndroidAmplitudeAdapterCpp() = default;
   ~AndroidAmplitudeAdapterCpp() override = default;
 
   void prefetchContext() override;
@@ -43,9 +39,14 @@ public:
       int timeoutMillis) override;
 
 private:
+  std::mutex diskStoreMutex_;
   std::shared_ptr<JsonlSegmentStore> diskStore_;
+  bool legacyDiskMigrated_ = false;
+  bool legacyDiskRetryAllowed_ = true;
 
-  void MigrateLegacyDisk();
+  std::shared_ptr<JsonlSegmentStore> EnsureDiskStore();
+  bool MigrateLegacyDisk(JsonlSegmentStore& store);
+  void ForgetLegacyDiskEntry(const std::string& key);
 };
 
 } // namespace NitroAmplitude

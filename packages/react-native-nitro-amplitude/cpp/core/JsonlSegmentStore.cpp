@@ -82,7 +82,21 @@ std::optional<uint32_t> ParseSegmentId(const std::string& name) {
       digits.find_first_not_of("0123456789") != std::string::npos) {
     return std::nullopt;
   }
-  return static_cast<uint32_t>(std::stoul(digits));
+  const unsigned long long parsed = std::stoull(digits);
+  if (parsed > std::numeric_limits<uint32_t>::max()) {
+    return std::nullopt;
+  }
+  return static_cast<uint32_t>(parsed);
+}
+
+bool IsStaleTemporarySegment(const std::string& name) {
+  constexpr char marker[] = ".jsonl.tmp.";
+  const size_t position = name.find(marker);
+  if (position == std::string::npos ||
+      position + std::strlen(marker) >= name.size()) {
+    return false;
+  }
+  return ParseSegmentId(name.substr(0, position + std::strlen(kSegmentSuffix))).has_value();
 }
 
 size_t CompletePrefixLength(const std::string& content) {
@@ -98,20 +112,69 @@ size_t CompletePrefixLength(const std::string& content) {
 JsonlSegmentStore::JsonlSegmentStore(
     std::shared_ptr<FileAdapter> fileAdapter,
     std::string directory,
-    uint64_t maxSegmentBytes)
+    uint64_t maxSegmentBytes,
+    uint64_t maxRecordBytes)
     : fileAdapter_(std::move(fileAdapter)),
       directory_(std::move(directory)),
-      maxSegmentBytes_(maxSegmentBytes == 0 ? kDefaultMaxSegmentBytes : maxSegmentBytes) {
+      maxSegmentBytes_(maxSegmentBytes == 0 ? kDefaultMaxSegmentBytes : maxSegmentBytes),
+      maxRecordBytes_(std::min(
+          maxRecordBytes == 0 ? kDefaultMaxRecordBytes : maxRecordBytes,
+          kDefaultMaxRecordBytes)) {
   Load();
 }
 
-void JsonlSegmentStore::Load() {
-  fileAdapter_->ensureDirectory(directory_);
+bool JsonlSegmentStore::EnsureReadyLocked() {
+  return loaded_ || Load();
+}
+
+std::optional<std::set<uint32_t>> JsonlSegmentStore::ListedSegments() {
+  const auto names = fileAdapter_->readDirectory(directory_);
+  if (!names.has_value()) {
+    return std::nullopt;
+  }
+  std::set<uint32_t> listed;
+  for (const auto& name : names.value()) {
+    const auto id = ParseSegmentId(name);
+    if (id.has_value()) {
+      listed.insert(id.value());
+    }
+  }
+  return listed;
+}
+
+bool JsonlSegmentStore::HasMissingSegment(const std::set<uint32_t>& listed) const {
+  for (const auto& segment : segmentBytes_) {
+    if (segment.second > 0 && listed.count(segment.first) == 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool JsonlSegmentStore::Load() {
+  auto names = fileAdapter_->readDirectory(directory_);
+  if (!names.has_value()) {
+    fileAdapter_->ensureDirectory(directory_);
+    names = fileAdapter_->readDirectory(directory_);
+  }
+  if (!names.has_value()) {
+    return false;
+  }
+  index_.clear();
+  segmentBytes_.clear();
+  segmentDeadBytes_.clear();
+  unreadableSegments_.clear();
+  partiallyReadSegments_.clear();
+  activeSegment_ = 0;
+  appendsDisabled_ = false;
+  loaded_ = true;
   std::vector<uint32_t> segmentIds;
-  for (const auto& name : fileAdapter_->listFiles(directory_)) {
+  for (const auto& name : names.value()) {
     const auto id = ParseSegmentId(name);
     if (id.has_value()) {
       segmentIds.push_back(id.value());
+    } else if (IsStaleTemporarySegment(name)) {
+      fileAdapter_->removeFile(directory_ + "/" + name);
     }
   }
   std::sort(segmentIds.begin(), segmentIds.end());
@@ -121,6 +184,7 @@ void JsonlSegmentStore::Load() {
     const auto content = fileAdapter_->readFile(path);
     if (!content.has_value()) {
       unreadableSegments_.insert(id);
+      partiallyReadSegments_.insert(id);
       continue;
     }
     const size_t completeBytes = CompletePrefixLength(content.value());
@@ -131,7 +195,7 @@ void JsonlSegmentStore::Load() {
       const size_t tab = content.value().find('\t', offset);
       std::string key;
       std::string value;
-      if (tab != std::string::npos && tab < newline &&
+      if (length <= maxRecordBytes_ && tab != std::string::npos && tab < newline &&
           UnescapeInto(content.value().substr(offset, tab - offset), key) &&
           UnescapeInto(content.value().substr(tab + 1, newline - tab - 1), value)) {
         if (key == kTombstoneKey) {
@@ -139,12 +203,23 @@ void JsonlSegmentStore::Load() {
         } else {
           index_[key] = Entry{id, static_cast<uint64_t>(offset), static_cast<uint32_t>(length)};
         }
+      } else {
+        partiallyReadSegments_.insert(id);
       }
       offset = newline + 1;
     }
-    if (completeBytes < content.value().size()) {
+    if (completeBytes == 0) {
+      if (fileAdapter_->removeFile(path)) {
+        continue;
+      }
+      if (!content.value().empty()) {
+        failedToTrimTail = true;
+        partiallyReadSegments_.insert(id);
+      }
+    } else if (completeBytes < content.value().size()) {
       if (!fileAdapter_->writeFile(path, content.value().substr(0, completeBytes))) {
         failedToTrimTail = true;
+        partiallyReadSegments_.insert(id);
       }
     }
     segmentBytes_[id] = completeBytes;
@@ -186,6 +261,8 @@ void JsonlSegmentStore::Load() {
     segmentDeadBytes_[segment.first] =
         segment.second >= liveValue ? segment.second - liveValue : 0;
   }
+  ReclaimSegmentsWithoutLiveRecords();
+  return true;
 }
 
 std::string JsonlSegmentStore::SegmentPath(uint32_t segment) const {
@@ -199,19 +276,24 @@ void JsonlSegmentStore::SetLocked(const std::string& key, const std::string& val
     throw std::runtime_error("NitroAmplitude: segment storage append unavailable");
   }
 
+  if (key == kTombstoneKey) {
+    throw SegmentStoreRejectedRecord("NitroAmplitude: segment storage key reserved");
+  }
+
   std::string line;
   EscapeInto(key, line);
   line += '\t';
   EscapeInto(value, line);
   line += '\n';
-
-  RotateIfNeeded(line.size());
-  if (appendsDisabled_) {
-    throw std::runtime_error("NitroAmplitude: segment storage append unavailable");
+  if (line.size() > maxRecordBytes_) {
+    throw SegmentStoreRejectedRecord("NitroAmplitude: segment storage record too large");
   }
 
-  if (!fileAdapter_->appendFile(SegmentPath(activeSegment_), line)) {
-    AbandonActiveSegmentAfterAppendFailure();
+  const AppendResult result = AppendLineLocked(line);
+  if (result == AppendResult::Unavailable) {
+    throw std::runtime_error("NitroAmplitude: segment storage append unavailable");
+  }
+  if (result == AppendResult::Failed) {
     throw std::runtime_error("NitroAmplitude: segment storage append failed");
   }
 
@@ -231,7 +313,67 @@ void JsonlSegmentStore::SetLocked(const std::string& key, const std::string& val
   }
 }
 
+JsonlSegmentStore::AppendResult JsonlSegmentStore::AppendLineLocked(const std::string& line) {
+  if (!EnsureReadyLocked()) {
+    return AppendResult::Failed;
+  }
+  for (int attempt = 0; attempt < 2; ++attempt) {
+    if (appendsDisabled_) {
+      return AppendResult::Unavailable;
+    }
+    const uint32_t segmentBeforeRotation = activeSegment_;
+    RotateIfNeeded(line.size());
+    if (appendsDisabled_) {
+      return AppendResult::Unavailable;
+    }
+    const std::string path = SegmentPath(activeSegment_);
+    if (fileAdapter_->appendFile(path, line)) {
+      return AppendResult::Appended;
+    }
+
+    if (fileAdapter_->appendFile(path, std::string())) {
+      if (!RestoreActiveSegment(segmentBeforeRotation)) {
+        AbandonActiveSegmentAfterAppendFailure();
+      }
+      return AppendResult::Failed;
+    }
+
+    fileAdapter_->ensureDirectory(directory_);
+    const auto listed = ListedSegments();
+    if (listed.has_value() && HasMissingSegment(listed.value())) {
+      if (!Load()) {
+        return AppendResult::Failed;
+      }
+      continue;
+    }
+    if (segmentBytes_[activeSegment_] > 0 ||
+        !RestoreActiveSegment(segmentBeforeRotation)) {
+      AbandonActiveSegmentAfterAppendFailure();
+      return AppendResult::Failed;
+    }
+  }
+  return AppendResult::Failed;
+}
+
+bool JsonlSegmentStore::RestoreActiveSegment(uint32_t segmentBeforeRotation) {
+  const std::string path = SegmentPath(activeSegment_);
+  const uint64_t committed = segmentBytes_[activeSegment_];
+  if (committed > 0) {
+    return fileAdapter_->truncateFile(path, committed);
+  }
+  if (!fileAdapter_->removeFile(path)) {
+    return false;
+  }
+  if (activeSegment_ != segmentBeforeRotation) {
+    segmentBytes_.erase(activeSegment_);
+    segmentDeadBytes_.erase(activeSegment_);
+    activeSegment_ = segmentBeforeRotation;
+  }
+  return true;
+}
+
 void JsonlSegmentStore::AbandonActiveSegmentAfterAppendFailure() {
+  partiallyReadSegments_.insert(activeSegment_);
   if (activeSegment_ == std::numeric_limits<uint32_t>::max()) {
     appendsDisabled_ = true;
     return;
@@ -280,12 +422,8 @@ bool JsonlSegmentStore::AppendTombstoneLocked(const std::string& key) {
   line += '\t';
   EscapeInto(key, line);
   line += '\n';
-  RotateIfNeeded(line.size());
-  if (appendsDisabled_) {
-    return false;
-  }
-  if (!fileAdapter_->appendFile(SegmentPath(activeSegment_), line)) {
-    AbandonActiveSegmentAfterAppendFailure();
+  if (line.size() > maxRecordBytes_ ||
+      AppendLineLocked(line) != AppendResult::Appended) {
     return false;
   }
   segmentBytes_[activeSegment_] += line.size();
@@ -316,6 +454,7 @@ bool JsonlSegmentStore::CompactSegment(uint32_t segment) {
 
   std::string rebuilt;
   uint64_t keptTombstoneBytes = 0;
+  std::set<std::string> keptTombstoneKeys;
   std::vector<std::pair<std::string, Entry>> compacted;
   compacted.reserve(liveCount);
   const size_t completeBytes = CompletePrefixLength(content.value());
@@ -331,7 +470,8 @@ bool JsonlSegmentStore::CompactSegment(uint32_t segment) {
       if (key == kTombstoneKey) {
         if (lowerSegmentHasData &&
             UnescapeInto(content.value().substr(tab + 1, newline - tab - 1), value) &&
-            index_.find(value) == index_.end()) {
+            index_.find(value) == index_.end() &&
+            keptTombstoneKeys.insert(value).second) {
           rebuilt.append(content.value(), offset, length);
           keptTombstoneBytes += length;
         }
@@ -351,6 +491,9 @@ bool JsonlSegmentStore::CompactSegment(uint32_t segment) {
   if (compacted.size() != liveCount) {
     return false;
   }
+  if (liveCount == 0 && !rebuilt.empty() && MoveTombstonesToActiveSegment(segment, rebuilt)) {
+    return true;
+  }
   if (rebuilt.empty()) {
     if (!fileAdapter_->removeFile(path)) {
       return false;
@@ -366,6 +509,51 @@ bool JsonlSegmentStore::CompactSegment(uint32_t segment) {
   return true;
 }
 
+bool JsonlSegmentStore::MoveTombstonesToActiveSegment(
+    uint32_t segment,
+    const std::string& tombstones) {
+  if (appendsDisabled_ || segment >= activeSegment_ ||
+      partiallyReadSegments_.upper_bound(segment) != partiallyReadSegments_.end()) {
+    return false;
+  }
+  const std::string activePath = SegmentPath(activeSegment_);
+  const uint64_t activeBytes = segmentBytes_[activeSegment_];
+  std::string merged;
+  if (activeBytes > 0) {
+    auto activeContent = fileAdapter_->readFile(activePath);
+    if (!activeContent.has_value() || activeContent->size() != activeBytes) {
+      return false;
+    }
+    merged = std::move(activeContent.value());
+  }
+  merged += tombstones;
+  if (!fileAdapter_->writeFile(activePath, merged)) {
+    return false;
+  }
+  segmentBytes_[activeSegment_] = merged.size();
+  segmentDeadBytes_[activeSegment_] += tombstones.size();
+  if (!fileAdapter_->removeFile(SegmentPath(segment))) {
+    return false;
+  }
+  segmentBytes_[segment] = 0;
+  segmentDeadBytes_[segment] = 0;
+  return true;
+}
+
+void JsonlSegmentStore::ReclaimSegmentsWithoutLiveRecords() {
+  std::vector<uint32_t> candidates;
+  for (const auto& segment : segmentBytes_) {
+    if (segment.first != activeSegment_ && segment.second > 0 &&
+        segmentDeadBytes_[segment.first] >= segment.second) {
+      candidates.push_back(segment.first);
+    }
+  }
+  std::sort(candidates.begin(), candidates.end());
+  for (const uint32_t segment : candidates) {
+    CompactSegment(segment);
+  }
+}
+
 void JsonlSegmentStore::setDisk(const std::string& key, const std::string& value) {
   std::lock_guard<std::mutex> lock(mutex_);
   SetLocked(key, value);
@@ -373,12 +561,20 @@ void JsonlSegmentStore::setDisk(const std::string& key, const std::string& value
 
 std::optional<std::string> JsonlSegmentStore::getDisk(const std::string& key) {
   std::lock_guard<std::mutex> lock(mutex_);
+  if (!EnsureReadyLocked()) {
+    return std::nullopt;
+  }
   const auto it = index_.find(key);
   if (it == index_.end()) {
     return std::nullopt;
   }
   const auto line = fileAdapter_->readRange(SegmentPath(it->second.segment), it->second.offset, it->second.length);
   if (!line.has_value()) {
+    fileAdapter_->ensureDirectory(directory_);
+    const auto listed = ListedSegments();
+    if (listed.has_value() && HasMissingSegment(listed.value())) {
+      Load();
+    }
     return std::nullopt;
   }
   const size_t newline = line.value().find('\n');
@@ -395,14 +591,20 @@ std::optional<std::string> JsonlSegmentStore::getDisk(const std::string& key) {
 
 void JsonlSegmentStore::deleteDisk(const std::string& key) {
   std::lock_guard<std::mutex> lock(mutex_);
+  if (!EnsureReadyLocked()) {
+    throw std::runtime_error("NitroAmplitude: segment storage append failed");
+  }
+  if (index_.find(key) == index_.end()) {
+    return;
+  }
+  if (!AppendTombstoneLocked(key)) {
+    throw std::runtime_error("NitroAmplitude: segment storage append failed");
+  }
   const auto it = index_.find(key);
   if (it == index_.end()) {
     return;
   }
   const Entry deletedEntry = it->second;
-  if (!AppendTombstoneLocked(key)) {
-    throw std::runtime_error("NitroAmplitude: segment storage append failed");
-  }
   index_.erase(key);
   segmentDeadBytes_[deletedEntry.segment] += deletedEntry.length;
   MaybeCompact(deletedEntry.segment);
@@ -410,11 +612,14 @@ void JsonlSegmentStore::deleteDisk(const std::string& key) {
 
 bool JsonlSegmentStore::hasDisk(const std::string& key) {
   std::lock_guard<std::mutex> lock(mutex_);
-  return index_.find(key) != index_.end();
+  return EnsureReadyLocked() && index_.find(key) != index_.end();
 }
 
 std::vector<std::string> JsonlSegmentStore::getAllDiskKeys() {
   std::lock_guard<std::mutex> lock(mutex_);
+  if (!EnsureReadyLocked()) {
+    throw std::runtime_error("NitroAmplitude: segment storage unavailable");
+  }
   std::vector<std::string> keys;
   keys.reserve(index_.size());
   for (const auto& entry : index_) {
@@ -426,6 +631,9 @@ std::vector<std::string> JsonlSegmentStore::getAllDiskKeys() {
 size_t JsonlSegmentStore::migrateLegacyEntries(
     const std::vector<std::pair<std::string, std::string>>& entries) {
   std::lock_guard<std::mutex> lock(mutex_);
+  if (!EnsureReadyLocked()) {
+    throw std::runtime_error("NitroAmplitude: segment storage append failed");
+  }
   size_t imported = 0;
   for (const auto& entry : entries) {
     if (index_.find(entry.first) != index_.end()) {

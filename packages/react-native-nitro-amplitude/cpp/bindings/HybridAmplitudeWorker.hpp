@@ -31,6 +31,10 @@ class HybridAmplitudeWorker : public HybridAmplitudeWorkerSpec {
 public:
   HybridAmplitudeWorker();
   explicit HybridAmplitudeWorker(std::shared_ptr<::NitroAmplitude::HttpAdapter> adapter);
+  using ThreadFactory = std::function<std::thread(std::function<void()>)>;
+  HybridAmplitudeWorker(
+      std::shared_ptr<::NitroAmplitude::HttpAdapter> adapter,
+      const ThreadFactory& threadFactory);
   ~HybridAmplitudeWorker() override;
 
   void enqueue(
@@ -53,6 +57,8 @@ public:
   size_t getExternalMemorySize() noexcept override;
 
 private:
+  void startWorkers(const ThreadFactory& threadFactory);
+  void stopWorkers();
   void workerLoop();
   void notifyComplete(
       const std::string& requestId,
@@ -74,13 +80,16 @@ private:
   std::atomic<size_t> inFlightCount_{0};
   std::atomic<size_t> pendingBodyBytes_{0};
 
-  std::mutex listenersMutex_;
   struct Listener {
     size_t id;
     std::function<void(const std::string&, double, const std::string&, const std::string&)> callback;
   };
-  std::vector<Listener> listeners_;
-  size_t nextListenerId_ = 0;
+  struct ListenerRegistry {
+    std::mutex mutex;
+    std::vector<Listener> listeners;
+    size_t nextListenerId = 0;
+  };
+  std::shared_ptr<ListenerRegistry> listenerRegistry_ = std::make_shared<ListenerRegistry>();
 };
 
 } // namespace margelo::nitro::NitroAmplitude

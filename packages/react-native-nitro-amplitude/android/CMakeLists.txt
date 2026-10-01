@@ -18,6 +18,8 @@ add_library(
   ${SOURCES}
 )
 
+target_compile_definitions(NitroAmplitude PRIVATE _FILE_OFFSET_BITS=64)
+
 target_include_directories(
   NitroAmplitude
   PRIVATE

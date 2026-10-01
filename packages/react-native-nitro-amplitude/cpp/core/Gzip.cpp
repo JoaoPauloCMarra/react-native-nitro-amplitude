@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdint>
+#include <limits>
 #include <zlib.h>
 
 namespace NitroAmplitude {
@@ -119,7 +120,12 @@ bool isAmplitudeAuthority(std::string_view url) {
 } // namespace
 
 std::optional<std::string> gzipCompress(const std::string& input) {
-    if (input.empty()) {
+    return gzipCompressBounded(input, std::numeric_limits<uInt>::max() / 2);
+}
+
+std::optional<std::string> gzipCompressBounded(const std::string& input, size_t maxInputBytes) {
+    if (input.empty() || input.size() > maxInputBytes ||
+        input.size() > std::numeric_limits<uInt>::max() / 2) {
         return std::nullopt;
     }
 

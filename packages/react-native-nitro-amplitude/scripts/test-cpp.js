@@ -1,6 +1,7 @@
 const { execFileSync } = require("child_process");
 const path = require("path");
 const fs = require("fs");
+const os = require("os");
 
 const coverageEnabled = process.argv.includes("--coverage");
 const sanitizers =
@@ -110,6 +111,13 @@ const contextSpec = path.join(generatedDir, "HybridAmplitudeContextSpec.cpp");
 const storageSpec = path.join(generatedDir, "HybridAmplitudeStorageSpec.cpp");
 const workerSpec = path.join(generatedDir, "HybridAmplitudeWorkerSpec.cpp");
 const outputFile = path.join(buildDir, "hybrid_amplitude_storage_test");
+const iosDir = path.join(packageRoot, "ios");
+const iosAdapterTestFile = path.join(iosDir, "IOSAmplitudeAdapterTest.mm");
+const iosAdapterSource = path.join(iosDir, "IOSAmplitudeAdapterCpp.mm");
+const iosAdapterOutputFile =
+  process.platform === "darwin"
+    ? path.join(buildDir, "ios_amplitude_adapter_test")
+    : null;
 const coverageSources = [
   contextSource,
   storageSource,
@@ -117,6 +125,9 @@ const coverageSources = [
   path.join(cppDir, "bindings", "HybridAmplitudeContext.hpp"),
   path.join(cppDir, "bindings", "HybridAmplitudeStorage.hpp"),
   path.join(cppDir, "bindings", "HybridAmplitudeWorker.hpp"),
+  segmentStoreSource,
+  gzipSource,
+  path.join(cppDir, "core", "PosixFileAdapter.hpp"),
 ];
 
 const commonFlags = [
@@ -159,6 +170,14 @@ function sanitizerRuntimeEnv() {
     return process.env;
   }
 
+  if (sanitizers.includes("thread")) {
+    return {
+      ...process.env,
+      TSAN_OPTIONS:
+        process.env.TSAN_OPTIONS ?? "halt_on_error=1:second_deadlock_stack=1",
+    };
+  }
+
   if (sanitizers.includes("address")) {
     return {
       ...process.env,
@@ -175,6 +194,27 @@ function sanitizerRuntimeEnv() {
   }
 
   return process.env;
+}
+
+function runIosAdapterTest(baseEnv) {
+  if (!iosAdapterOutputFile) {
+    return;
+  }
+  const isolatedHome = fs.mkdtempSync(
+    path.join(os.tmpdir(), "nitro-amplitude-ios-adapter-"),
+  );
+  try {
+    runCommand(iosAdapterOutputFile, [], {
+      env: {
+        ...baseEnv,
+        HOME: isolatedHome,
+        CFFIXED_USER_HOME: isolatedHome,
+        __CFPREFERENCES_AVOID_DAEMON: "1",
+      },
+    });
+  } finally {
+    fs.rmSync(isolatedHome, { recursive: true, force: true });
+  }
 }
 
 function runCoverage() {
@@ -265,10 +305,32 @@ try {
     ...linkFlags,
   ]);
 
+  if (iosAdapterOutputFile) {
+    runCommand("clang++", [
+      ...commonFlags,
+      "-fobjc-arc",
+      "-DNITRO_AMPLITUDE_TESTING",
+      `-I${iosDir}`,
+      iosAdapterTestFile,
+      iosAdapterSource,
+      segmentStoreSource,
+      "-framework",
+      "Foundation",
+      "-o",
+      iosAdapterOutputFile,
+      ...linkFlags,
+    ]);
+  }
+
   if (coverageEnabled) {
     runCoverage();
+    runIosAdapterTest({
+      ...process.env,
+      LLVM_PROFILE_FILE: path.join(buildDir, "ios-adapter.profraw"),
+    });
   } else {
     runCommand(outputFile, [], { env: sanitizerRuntimeEnv() });
+    runIosAdapterTest(sanitizerRuntimeEnv());
   }
 
   console.log("✅ C++ tests passed!");

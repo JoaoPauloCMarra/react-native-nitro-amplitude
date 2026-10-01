@@ -46,6 +46,7 @@ const requiredFiles = [
   "cpp/core/JsonlSegmentStore.hpp",
   "cpp/core/JsonlSegmentStore.cpp",
   "cpp/core/PosixFileAdapter.hpp",
+  "cpp/core/LegacyDiskMigration.hpp",
   "cpp/bindings/HybridAmplitudeContext.cpp",
   "cpp/bindings/HybridAmplitudeStorage.cpp",
   "cpp/bindings/HybridAmplitudeWorker.cpp",
@@ -79,6 +80,8 @@ const forbiddenPatterns = [
   /(?:^|\/)\.env(?:\.|$)/,
   /(?:^|\/)npm-debug\.log$/,
   /(?:^|\/)[^/]*Test\.cpp$/,
+  /(?:^|\/)[^/]*Test\.mm$/,
+  /^android\/src\/test\//,
 ];
 
 function parseBunPackOutput(output) {

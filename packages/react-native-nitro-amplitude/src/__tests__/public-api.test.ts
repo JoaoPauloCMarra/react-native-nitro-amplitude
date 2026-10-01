@@ -1937,29 +1937,42 @@ describe("react-native-nitro-amplitude", () => {
   });
 
   it("reports durable storage failures from flushWithResult and retains the write", async () => {
-    const analytics = new AmplitudeReactNative();
-    const storage = new NitroAnalyticsStorage<{ ok: boolean }>("flush-error");
-    const timeline = (
-      analytics as unknown as {
-        timeline: { flush: () => Promise<void> };
-      }
-    ).timeline;
-    timeline.flush = async () => {
-      await storage.set("events", { ok: true });
-    };
-    await storage.get("missing");
-    mockHybridObjects.AmplitudeStorage?.setBatch.mockImplementationOnce(() => {
-      throw new Error("NitroAmplitude: storage_error");
-    });
+    const consoleError = jest
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    try {
+      const analytics = new AmplitudeReactNative();
+      const storage = new NitroAnalyticsStorage<{ ok: boolean }>("flush-error");
+      const timeline = (
+        analytics as unknown as {
+          timeline: { flush: () => Promise<void> };
+        }
+      ).timeline;
+      timeline.flush = async () => {
+        await storage.set("events", { ok: true });
+      };
+      await storage.get("missing");
+      mockHybridObjects.AmplitudeStorage?.setBatch.mockImplementationOnce(
+        () => {
+          throw new Error("NitroAmplitude: storage_error");
+        },
+      );
 
-    await expect(analytics.flushWithResult()).resolves.toMatchObject({
-      ok: false,
-      reason: "NitroAmplitude: storage_error",
-    });
-    expect(await storage.get("events")).toEqual({ ok: true });
+      await expect(analytics.flushWithResult()).resolves.toMatchObject({
+        ok: false,
+        reason: "NitroAmplitude: storage_error",
+      });
+      expect(await storage.get("events")).toEqual({ ok: true });
 
-    flushPendingDiskWrites();
-    expect(getRawBatchValue("flush-error::events")).toBe('{"ok":true}');
+      flushPendingDiskWrites();
+      expect(getRawBatchValue("flush-error::events")).toBe('{"ok":true}');
+      expect(consoleError).toHaveBeenCalledTimes(1);
+      expect(consoleError).toHaveBeenCalledWith(
+        "NitroAmplitude: durable storage flush failed: NitroAmplitude: storage_error",
+      );
+    } finally {
+      consoleError.mockRestore();
+    }
   });
 
   it("uses one setBatch call while preserving write ordering and last-write-wins", async () => {
@@ -2033,32 +2046,44 @@ describe("react-native-nitro-amplitude", () => {
   });
 
   it("retains failed and unattempted disk writes for a later retry", async () => {
-    const first = new NitroAnalyticsStorage<{ n: number }>("retry");
-    const second = new NitroAnalyticsStorage<{ n: number }>("retry");
-    await first.set("first", { n: 1 });
-    await second.set("second", { n: 2 });
-    await first.get("missing");
+    const consoleError = jest
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    try {
+      const first = new NitroAnalyticsStorage<{ n: number }>("retry");
+      const second = new NitroAnalyticsStorage<{ n: number }>("retry");
+      await first.set("first", { n: 1 });
+      await second.set("second", { n: 2 });
+      await first.get("missing");
 
-    const storageBatch = mockHybridObjects.AmplitudeStorage?.setBatch;
-    expect(storageBatch).toBeDefined();
-    storageBatch?.mockImplementationOnce(() => {
-      throw new Error("NitroAmplitude: storage_error");
-    });
+      const storageBatch = mockHybridObjects.AmplitudeStorage?.setBatch;
+      expect(storageBatch).toBeDefined();
+      storageBatch?.mockImplementationOnce(() => {
+        throw new Error("NitroAmplitude: storage_error");
+      });
 
-    expect(() => flushPendingDiskWrites()).toThrow(
-      "NitroAmplitude: storage_error",
-    );
-    expect(await first.get("first")).toEqual({ n: 1 });
-    expect(await second.get("second")).toEqual({ n: 2 });
-    expect(getRawBatchValue("retry::first")).toBeUndefined();
-    expect(getRawBatchValue("retry::second")).toBeUndefined();
-    expect(storageBatch).toHaveBeenCalledTimes(1);
+      expect(() => flushPendingDiskWrites()).toThrow(
+        "NitroAmplitude: storage_error",
+      );
+      expect(consoleError).toHaveBeenCalledTimes(1);
+      expect(consoleError).toHaveBeenCalledWith(
+        "NitroAmplitude: durable storage flush failed: NitroAmplitude: storage_error",
+      );
+      expect(await first.get("first")).toEqual({ n: 1 });
+      expect(await second.get("second")).toEqual({ n: 2 });
+      expect(getRawBatchValue("retry::first")).toBeUndefined();
+      expect(getRawBatchValue("retry::second")).toBeUndefined();
+      expect(storageBatch).toHaveBeenCalledTimes(1);
 
-    flushPendingDiskWrites();
+      flushPendingDiskWrites();
 
-    expect(storageBatch).toHaveBeenCalledTimes(2);
-    expect(getRawBatchValue("retry::first")).toBe('{"n":1}');
-    expect(getRawBatchValue("retry::second")).toBe('{"n":2}');
+      expect(consoleError).toHaveBeenCalledTimes(1);
+      expect(storageBatch).toHaveBeenCalledTimes(2);
+      expect(getRawBatchValue("retry::first")).toBe('{"n":1}');
+      expect(getRawBatchValue("retry::second")).toBe('{"n":2}');
+    } finally {
+      consoleError.mockRestore();
+    }
   });
 
   it("retries a failed timer flush without an uncaught rejection", async () => {

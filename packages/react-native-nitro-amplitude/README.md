@@ -24,7 +24,7 @@ bun add react-native-nitro-amplitude react-native-nitro-modules
 
 ## Requirements and compatibility
 
-Compatibility for `0.10.0`:
+Compatibility for `0.10.1`:
 
 | Dependency                   | Supported range    | Tested baseline     |
 | ---------------------------- | ------------------ | ------------------- |
@@ -53,7 +53,7 @@ regenerate and rebuild native projects so the committed Nitro 0.37.1 bindings
 are compiled into the app:
 
 ```sh
-bun add react-native-nitro-amplitude@0.10.0 react-native-nitro-modules@0.37.1
+bun add react-native-nitro-amplitude@0.10.1 react-native-nitro-modules@0.37.1
 bunx expo prebuild
 ```
 
@@ -127,8 +127,11 @@ const enabled =
 `fetch()` (or `start()`) after `init()` and before you read `variant()`.
 Without a fetch, `variant()` returns only cached or fallback values.
 
-Pass `durableStorage: false` only when the app must supply its own storage
-adapters. Singleton `init` / `track` / `identify` remain available below.
+`durableStorage: false` skips the combined storage preset. It does not disable
+the SDKs' default persistence. Supply `analytics.storageProvider`,
+`analytics.cookieStorage`, and `experiment.storage` explicitly when the app
+needs custom storage behavior. Singleton `init` / `track` / `identify` remain
+available below.
 
 ## Analytics
 
@@ -502,10 +505,13 @@ Architecture notes:
   The `migrateLegacyData` option is also accepted as a no-op; this package does
   not import legacy Amplitude SDK SQLite data. Migrate that data before
   switching SDKs if it is required.
-- Native event persistence is coalesced for throughput, but pending writes are
+- Native event persistence is coalesced for throughput. Pending writes are
   flushed when the app becomes inactive or enters the background, and by
-  explicit `flush()` or `shutdown()` calls. Use those methods before a process
-  boundary when the app needs an immediate durability guarantee.
+  explicit flush calls. Await `analytics.flushWithResult()` and inspect its
+  result when the app needs to observe completion or handle a failure.
+  Queued or retried events are not confirmed uploads. `shutdown()` starts an
+  asynchronous flush and teardown, returns `void`, and cannot be awaited as
+  a completion boundary.
 - For typed Experiment variant payloads, prefer the typed variant helpers
   exported from the package (`react-native-nitro-amplitude/experiment`) over
   reading the untyped `variant.payload` directly.
@@ -545,14 +551,22 @@ in one terminal, launch the installed example, then run
 `dry-run fixture` marker before performing analytics actions; setting an
 environment variable only for Maestro does not change an existing bundle.
 
-The optional Agent Device E2E flows use the same fixture-only setup. With the
-installed example showing `dry-run fixture`, run
-`EXPO_PUBLIC_AMPLITUDE_DRY_RUN=1 bun run example:e2e:android` or
-`EXPO_PUBLIC_AMPLITUDE_DRY_RUN=1 bun run example:e2e:ios`.
-The flows open the guarded E2E route and check the marker before restarting
-the fixture and exercising its APIs. Unexpected health, transport, flush,
-or variant results fail the run. These flows do not validate live Amplitude
-credentials or production delivery.
+The maintained Agent Device replay covers Analytics, Experiment, diagnostics,
+native HTTP against a local fixture, and storage across an app relaunch. Build
+the example with `EXPO_PUBLIC_AMPLITUDE_DRY_RUN=1`, start the local HTTP fixture,
+then select the exact installed target:
+
+```sh
+bun run example:replay --platform ios --udid <UDID> --http-fixture-url http://127.0.0.1:4318
+bun run example:replay --platform android --serial <SERIAL> --http-fixture-url http://10.0.2.2:4318
+```
+
+Use a fixture address reachable from the selected device. The replay checks
+the rendered fixture marker before exercising its APIs. Live provider checks
+remain separate and require staging credentials and account-side evidence.
+See the [replay guide](docs/qa/agent-device-replay.md) for fixture setup,
+coverage, artifact locations, and flow maintenance. `bun run check` includes
+the device-free replay freshness check; it does not execute a device replay.
 
 ## License
 

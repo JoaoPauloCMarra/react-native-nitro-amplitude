@@ -1,0 +1,221 @@
+{
+  "version": 1,
+  "entry": "scripts/run-example-replay.js",
+  "sourceScope": [
+    "packages/react-native-nitro-amplitude/src runtime source, excluding tests and generated files",
+    "package Android, iOS, and C++ runtime source, generated Nitro bindings, and package wiring",
+    "apps/example/app, components, assets, and runtime configuration",
+    "e2e suites and this coverage manifest are pinned separately in the source lock"
+  ],
+  "suites": [
+    {
+      "path": "e2e/qa-full-features.ad",
+      "purpose": "Public Analytics, Experiment, diagnostics, network policy, and local native HTTP behavior"
+    },
+    {
+      "path": "e2e/qa-persistence-relaunch.ad",
+      "purpose": "Native durable storage write followed by an app process relaunch and read"
+    },
+    {
+      "path": "e2e/qa-deeplink.ad",
+      "purpose": "App and identity deep-link routes"
+    }
+  ],
+  "fixtureMarker": {
+    "source": "apps/example/app/e2e.tsx",
+    "guardFragment": "process.env.EXPO_PUBLIC_AMPLITUDE_DRY_RUN !== \"1\"",
+    "text": "dry-run fixture",
+    "suites": [
+      "e2e/qa-full-features.ad",
+      "e2e/qa-persistence-relaunch.ad",
+      "e2e/qa-deeplink.ad"
+    ]
+  },
+  "features": [
+    {
+      "id": "native.context",
+      "coverage": "replay-asserted",
+      "transport": "public native context through the Analytics client",
+      "suite": "e2e/qa-full-features.ad",
+      "source": "apps/example/components/e2e-lab.tsx",
+      "controlId": "e2e-context-run",
+      "statusId": "e2e-context-status",
+      "statusFragment": "ok:context=device+session",
+      "expectedText": "ok:context=device+session"
+    },
+    {
+      "id": "analytics.identity-event",
+      "coverage": "replay-asserted",
+      "transport": "DryRunTransport fixture; asserts the queued public event user_id",
+      "suite": "e2e/qa-full-features.ad",
+      "source": "apps/example/components/e2e-lab.tsx",
+      "controlId": "e2e-identify-run",
+      "statusId": "e2e-analytics-status",
+      "statusFragment": "ok:identity=user=e2e-user:event=recorded",
+      "expectedText": "ok:identity=user=e2e-user:event=recorded"
+    },
+    {
+      "id": "analytics.opt-out-reset",
+      "coverage": "replay-asserted",
+      "transport": "DryRunTransport fixture; asserts no opted-out event escaped and reset identity was restored",
+      "suite": "e2e/qa-full-features.ad",
+      "source": "apps/example/components/e2e-lab.tsx",
+      "controlId": "e2e-opt-out-run",
+      "statusId": "e2e-identity-status",
+      "statusFragment": "ok:optout=suppressed:reset=restored",
+      "expectedText": "ok:optout=suppressed:reset=restored"
+    },
+    {
+      "id": "analytics.revenue",
+      "coverage": "replay-asserted",
+      "transport": "DryRunTransport fixture; asserts product, price, and quantity properties",
+      "suite": "e2e/qa-full-features.ad",
+      "source": "apps/example/components/e2e-lab.tsx",
+      "controlId": "e2e-revenue-run",
+      "statusId": "e2e-revenue-status",
+      "statusFragment": "ok:revenue=sku:e2e-sku:qty=2",
+      "expectedText": "ok:revenue=sku:e2e-sku:qty=2"
+    },
+    {
+      "id": "analytics.groups",
+      "coverage": "replay-asserted",
+      "transport": "DryRunTransport fixture; asserts the event group assignment",
+      "suite": "e2e/qa-full-features.ad",
+      "source": "apps/example/components/e2e-lab.tsx",
+      "controlId": "e2e-group-run",
+      "statusId": "e2e-group-status",
+      "statusFragment": "ok:group=plan:e2e:event=recorded",
+      "expectedText": "ok:group=plan:e2e:event=recorded"
+    },
+    {
+      "id": "native.http-echo",
+      "coverage": "replay-asserted",
+      "transport": "nitroHttpClient through the native worker to a task-owned local echo server",
+      "suite": "e2e/qa-full-features.ad",
+      "source": "apps/example/components/e2e-lab.tsx",
+      "controlId": "e2e-native-http-run",
+      "statusId": "e2e-native-http-status",
+      "statusFragment": "ok:native-http=echo",
+      "expectedText": "ok:native-http=echo"
+    },
+    {
+      "id": "native.http-non-2xx",
+      "coverage": "replay-asserted",
+      "transport": "nitroHttpClient through the native worker; local fixture returns HTTP 503",
+      "suite": "e2e/qa-full-features.ad",
+      "source": "apps/example/components/e2e-lab.tsx",
+      "controlId": "e2e-native-http-error-run",
+      "statusId": "e2e-native-http-error-status",
+      "statusFragment": "ok:native-http=status=503",
+      "expectedText": "ok:native-http=status=503"
+    },
+    {
+      "id": "network.disabled-policy",
+      "coverage": "replay-asserted",
+      "transport": "nitroHttpClient request while networking is disabled; requires the explicit policy error and restores the previous setting",
+      "suite": "e2e/qa-full-features.ad",
+      "source": "apps/example/components/e2e-lab.tsx",
+      "controlId": "e2e-network-policy-run",
+      "statusId": "e2e-network-status",
+      "statusFragment": "ok:network=blocked",
+      "expectedText": "ok:network=blocked"
+    },
+    {
+      "id": "diagnostics.health",
+      "coverage": "replay-asserted",
+      "transport": "Native health check plus safe and full public diagnostics",
+      "suite": "e2e/qa-full-features.ad",
+      "source": "apps/example/components/e2e-lab.tsx",
+      "controlId": "e2e-health-run",
+      "statusId": "e2e-health-status",
+      "statusFragment": "ok:health=true:safe=true:full=true",
+      "expectedText": "ok:health=true:safe=true:full=true"
+    },
+    {
+      "id": "analytics.events",
+      "coverage": "replay-asserted",
+      "transport": "DryRunTransport fixture; asserts the public event reached the recorded payload",
+      "suite": "e2e/qa-full-features.ad",
+      "source": "apps/example/components/e2e-lab.tsx",
+      "controlId": "e2e-records-run",
+      "statusId": "e2e-records-status",
+      "statusFragment": "ok:events=record-probe",
+      "expectedText": "ok:events=record-probe"
+    },
+    {
+      "id": "analytics.flush",
+      "coverage": "replay-asserted",
+      "transport": "DryRunTransport fixture; asserts flush result and the emitted probe event",
+      "suite": "e2e/qa-full-features.ad",
+      "source": "apps/example/components/e2e-lab.tsx",
+      "controlId": "e2e-flush-run",
+      "statusId": "e2e-analytics-status",
+      "statusFragment": "ok:flush=ok:event=flush-probe:sent=",
+      "expectedText": "ok:flush=ok"
+    },
+    {
+      "id": "experiment.variant",
+      "coverage": "replay-asserted",
+      "transport": "Injected in-process Experiment fixtureHttpClient; not native HTTP or provider validation",
+      "suite": "e2e/qa-full-features.ad",
+      "source": "apps/example/components/e2e-lab.tsx",
+      "controlId": "e2e-variant-run",
+      "statusId": "e2e-variant-status",
+      "statusFragment": "ok:flag=on",
+      "expectedText": "ok:flag=on"
+    },
+    {
+      "id": "experiment.lifecycle",
+      "coverage": "replay-asserted",
+      "transport": "Public Experiment client with injected in-process fixture; assert cached stale freshness, stop, restart, and assert fresh variant",
+      "suite": "e2e/qa-full-features.ad",
+      "source": "apps/example/components/e2e-lab.tsx",
+      "controlId": "e2e-lifecycle-run",
+      "statusId": "e2e-lifecycle-status",
+      "statusFragment": "ok:lifecycle=stale-then-fresh",
+      "expectedText": "ok:lifecycle=stale-then-fresh"
+    },
+    {
+      "id": "native.storage-write",
+      "coverage": "replay-asserted",
+      "transport": "Public NitroAnalyticsStorage writes a unique replay run marker to native durable storage",
+      "suite": "e2e/qa-persistence-relaunch.ad",
+      "source": "apps/example/components/e2e-lab.tsx",
+      "controlId": "e2e-storage-write",
+      "statusId": "e2e-storage-status",
+      "statusFragment": "ok:storage=written",
+      "expectedText": "ok:storage=written"
+    },
+    {
+      "id": "native.storage-relaunch",
+      "coverage": "replay-asserted",
+      "transport": "Public NitroAnalyticsStorage read after a new app process starts; no shared data is cleared",
+      "suite": "e2e/qa-persistence-relaunch.ad",
+      "source": "apps/example/components/e2e-lab.tsx",
+      "controlId": "e2e-storage-read",
+      "statusId": "e2e-storage-status",
+      "statusFragment": "ok:storage=restored",
+      "expectedText": "ok:storage=restored"
+    }
+  ],
+  "pending": [
+    {
+      "id": "analytics.live-ingestion",
+      "state": "pending-prerequisites",
+      "reason": "Local fixture delivery does not validate the live Amplitude ingestion endpoint or account-side receipt.",
+      "prerequisites": [
+        "Approved staging analytics key",
+        "Separate opt-in live-ingestion replay and account-side event evidence"
+      ]
+    },
+    {
+      "id": "experiment.live-provider",
+      "state": "pending-prerequisites",
+      "reason": "The in-process flag fixture does not validate Amplitude Experiment provider authentication or live assignment freshness.",
+      "prerequisites": [
+        "Approved staging deployment key",
+        "Separate opt-in provider replay with the returned flag assignment recorded"
+      ]
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "runtimeSourceSha256": "370da05be1be0100c6791b44c499724c355d0b7dd5b274e16b68c45b157b0e73",
+  "runtimeSourceSha256": "bd7a38eb8c400f1767d067956ec582e88120d1910404491d7239708105bf29c2",
   "runtimeSourceFiles": [
     "apps/example/app.config.js",
     "apps/example/app/_layout.tsx",
@@ -135,7 +135,7 @@
     "packages/react-native-nitro-amplitude/src/testing.ts"
   ],
   "coverageManifestSha256": "32f82df3a59dd1e362a969b6808787a3886ad9b032d4c38142b9994965c0a2d8",
-  "suiteFilesSha256": "626fab484aa830353c5faa0a19565b1a5cf549374eac422b130eb16cd5e2c48d",
+  "suiteFilesSha256": "7829fe4eb4039fdbdc61b3c0c7102090ba8adc93164e431d7a98677f0b355501",
   "suites": [
     "e2e/qa-full-features.ad",
     "e2e/qa-persistence-relaunch.ad",

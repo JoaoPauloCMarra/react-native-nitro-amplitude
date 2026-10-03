@@ -286,8 +286,6 @@ test("runner uses the manifest suites, exact target, unique OS temp artifacts, a
       "e2e/qa-full-features.ad",
       "e2e/qa-persistence-relaunch.ad",
       "e2e/qa-deeplink.ad",
-      "--platform",
-      "ios",
       "--udid",
       "device-123",
       "--session",

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Platform, View } from "react-native";
+import { Platform, StyleSheet, View } from "react-native";
 import {
   AmplitudeError,
   Experiment,
@@ -495,16 +495,23 @@ export function AmplitudeE2eLab({ fixtureUrl, runId }: AmplitudeE2eLabProps) {
               clearDryRunTransportRecords();
               setGroup("plan", "e2e");
               groupIdentify("plan", "e2e", new Identify().set("seat", "qa"));
-              track("e2e_group_probe");
               void flushWithResult()
                 .then((result) => {
-                  const recorded = getDryRunAnalyticsEvents().some((record) =>
-                    record.payload.events.some(
-                      (event) =>
-                        event.event_type === "e2e_group_probe" &&
-                        event.groups?.plan === "e2e",
-                    ),
+                  const events = getDryRunAnalyticsEvents().flatMap(
+                    (record) => record.payload.events,
                   );
+                  const recorded =
+                    events.some(
+                      (event) =>
+                        event.event_type === "$identify" &&
+                        event.groups?.plan === "e2e",
+                    ) &&
+                    events.some(
+                      (event) =>
+                        event.event_type === "$groupidentify" &&
+                        event.groups?.plan === "e2e" &&
+                        event.group_properties?.$set?.seat === "qa",
+                    );
                   setGroupStatus(
                     result.ok && recorded
                       ? "ok:group=plan:e2e:event=recorded"
@@ -762,7 +769,37 @@ export function AmplitudeE2eLab({ fixtureUrl, runId }: AmplitudeE2eLabProps) {
               });
           }}
         />
+        <View
+          testID="e2e-results"
+          accessible
+          accessibilityLabel={[
+            contextStatus,
+            storageStatus,
+            identityStatus,
+            revenueStatus,
+            nativeHttpStatus,
+            nativeHttpErrorStatus,
+            networkStatus,
+            groupStatus,
+            screenStatus,
+            healthStatus,
+            recordsStatus,
+            clientStatus,
+            analyticsStatus,
+            variantStatus,
+            lifecycleStatus,
+            stressStatus,
+            ready ? "ok:ready" : "warming",
+          ].join(" ")}
+          style={localStyles.resultsProbe}
+        />
       </View>
     </Card>
   );
 }
+
+const localStyles = StyleSheet.create({
+  resultsProbe: {
+    height: 1,
+  },
+});

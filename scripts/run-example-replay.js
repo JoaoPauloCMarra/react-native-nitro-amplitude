@@ -209,8 +209,6 @@ function runExampleReplay({
   const args = [
     "test",
     ...suites,
-    "--platform",
-    options.platform,
     options.targetFlag,
     options.target,
     "--session",

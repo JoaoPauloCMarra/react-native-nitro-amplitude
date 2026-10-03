@@ -67,8 +67,8 @@ export default function AmplitudeE2eScreen() {
           testID="open-e2e-identity"
           label="Identity lab"
         />
-        <AmplitudeE2eLab fixtureUrl={fixtureUrl} runId={runId} />
         <SmokeTestRunner />
+        <AmplitudeE2eLab fixtureUrl={fixtureUrl} runId={runId} />
       </Page>
     </View>
   );

@@ -5,73 +5,59 @@ open "com.nitroamplitude.example" "nitroamplitude://e2e?fixtureUrl=${FIXTURE_URL
 wait text "dry-run fixture"
 wait id="e2e-screen"
 wait text "e2e-ready"
+scroll bottom
 wait id="e2e-lab"
+wait id="e2e-results"
 wait text "ok:ready"
-scroll down
+scroll bottom
 press id="e2e-context-run"
-scroll top
 wait text "ok:context=device+session"
-scroll down
+scroll bottom
 press id="e2e-identify-run"
-scroll top
 wait text "ok:identity=user=e2e-user:event=recorded"
-scroll down
+scroll bottom
 press id="e2e-opt-out-run"
-scroll top
 wait text "ok:optout=suppressed:reset=restored"
-scroll down
+scroll bottom
 press id="e2e-revenue-run"
-scroll top
 wait text "ok:revenue=sku:e2e-sku:qty=2"
-scroll down
+scroll bottom
 press id="e2e-group-run"
-scroll top
 wait text "ok:group=plan:e2e:event=recorded"
-scroll down
+scroll bottom
 press id="e2e-native-http-run"
-scroll top
 wait text "ok:native-http=echo"
-scroll down
+scroll bottom
 press id="e2e-native-http-error-run"
-scroll top
 wait text "ok:native-http=status=503"
-scroll down
+scroll bottom
 press id="e2e-network-policy-run"
-scroll top
 wait text "ok:network=blocked"
-scroll down
+scroll bottom
 press id="e2e-screen-run"
-scroll top
 wait text "ok:screen"
-scroll down
+scroll bottom
 press id="e2e-health-run"
-scroll top
 wait text "ok:health=true:safe=true:full=true"
-scroll down
+scroll bottom
 press id="e2e-records-run"
-scroll top
 wait text "ok:events=record-probe"
-scroll down
+scroll bottom
 press id="e2e-flush-run"
-scroll top
 wait text "ok:flush=ok"
-scroll down
+scroll bottom
 press id="e2e-variant-run"
-scroll top
 wait text "ok:flag=on"
-scroll down
+scroll bottom
 press id="e2e-lifecycle-run"
-scroll top
 wait text "ok:lifecycle=stale-then-fresh"
-scroll down
+scroll bottom
 press id="e2e-client-run"
-scroll top
 wait text "ok:user=e2e-combined:dry=1"
-scroll down
+scroll bottom
 press id="e2e-run-stress"
-scroll top
 wait text "ok:tracks=50:ms="
-scroll down
+scroll top
 wait id="smoke-run-all"
 press id="smoke-run-all"
 wait text "Complete: PASS"

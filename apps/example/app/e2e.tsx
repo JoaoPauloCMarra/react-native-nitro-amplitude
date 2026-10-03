@@ -1,5 +1,5 @@
 import { Pressable, Text, View } from "react-native";
-import { Link, type Href } from "expo-router";
+import { Link, useLocalSearchParams, type Href } from "expo-router";
 import { AmplitudeE2eLab } from "../components/e2e-lab";
 import { Colors, Page, StatusRow } from "../components/shared";
 import { SmokeTestRunner } from "../components/smoke-test";
@@ -30,6 +30,17 @@ function LabLink({
 }
 
 export default function AmplitudeE2eScreen() {
+  const searchParams = useLocalSearchParams<{
+    fixtureUrl?: string;
+    runId?: string;
+  }>();
+  const fixtureUrl =
+    typeof searchParams.fixtureUrl === "string"
+      ? searchParams.fixtureUrl
+      : undefined;
+  const runId =
+    typeof searchParams.runId === "string" ? searchParams.runId : undefined;
+
   if (process.env.EXPO_PUBLIC_AMPLITUDE_DRY_RUN !== "1") {
     return (
       <Page title="E2E lab" subtitle="Start the example in fixture mode">
@@ -56,7 +67,7 @@ export default function AmplitudeE2eScreen() {
           testID="open-e2e-identity"
           label="Identity lab"
         />
-        <AmplitudeE2eLab />
+        <AmplitudeE2eLab fixtureUrl={fixtureUrl} runId={runId} />
         <SmokeTestRunner />
       </Page>
     </View>

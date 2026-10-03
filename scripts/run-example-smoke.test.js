@@ -1,5 +1,8 @@
 const assert = require("node:assert/strict");
 const { test } = require("node:test");
+const { readFileSync } = require("node:fs");
+const path = require("node:path");
+const vm = require("node:vm");
 
 const {
   assertDryRunEnvironment,
@@ -9,6 +12,36 @@ const {
 function fixtureEnv(value) {
   return { EXPO_PUBLIC_AMPLITUDE_DRY_RUN: value };
 }
+
+function exampleConfig(env) {
+  const context = { module: { exports: {} }, process: { env } };
+  vm.runInNewContext(
+    readFileSync(path.join(__dirname, "../apps/example/app.config.js"), "utf8"),
+    context,
+  );
+  return context.module.exports.expo;
+}
+
+test("local HTTP permissions are limited to explicit fixture builds", () => {
+  for (const value of [undefined, "0", "true"]) {
+    const config = exampleConfig(fixtureEnv(value));
+    const buildProperties = config.plugins.find(
+      (plugin) =>
+        Array.isArray(plugin) && plugin[0] === "expo-build-properties",
+    )[1];
+    assert.equal(config.ios.infoPlist, undefined);
+    assert.equal(buildProperties.android.usesCleartextTraffic, undefined);
+  }
+  const fixture = exampleConfig(fixtureEnv("1"));
+  const buildProperties = fixture.plugins.find(
+    (plugin) => Array.isArray(plugin) && plugin[0] === "expo-build-properties",
+  )[1];
+  assert.equal(
+    fixture.ios.infoPlist.NSAppTransportSecurity.NSAllowsArbitraryLoads,
+    true,
+  );
+  assert.equal(buildProperties.android.usesCleartextTraffic, true);
+});
 
 test("refuses live mode before spawning Maestro", () => {
   assert.throws(
@@ -58,7 +91,9 @@ test("asks for the Maestro CLI when it is not installed", () => {
     () =>
       runExampleSmoke({
         env: fixtureEnv("1"),
-        spawn: () => ({ error: Object.assign(new Error("spawn"), { code: "ENOENT" }) }),
+        spawn: () => ({
+          error: Object.assign(new Error("spawn"), { code: "ENOENT" }),
+        }),
       }),
     /Install the Maestro CLI: https:\/\/maestro.dev/,
   );
@@ -76,21 +111,37 @@ test("returns the Maestro exit status", () => {
 
 test("refuses E2E in live mode before launching an app", () => {
   let spawnCalls = 0;
-  assert.throws(() => runExampleSmoke({
-    env: fixtureEnv("0"),
-    e2eArgs: ["e2e/qa-full-features.ad"],
-    spawn: () => { spawnCalls += 1; return { status: 0 }; },
-  }), /Refusing example smoke/);
+  assert.throws(
+    () =>
+      runExampleSmoke({
+        env: fixtureEnv("0"),
+        e2eArgs: ["e2e/qa-full-features.ad"],
+        spawn: () => {
+          spawnCalls += 1;
+          return { status: 0 };
+        },
+      }),
+    /Refusing example smoke/,
+  );
   assert.equal(spawnCalls, 0);
 });
 
 test("runs the selected E2E flow with the explicit device in fixture mode", () => {
   const calls = [];
-  const e2eArgs = ["e2e/qa-full-features.ad", "--device", "RN Expo MidRange", "--retries", "1"];
+  const e2eArgs = [
+    "e2e/qa-full-features.ad",
+    "--device",
+    "RN Expo MidRange",
+    "--retries",
+    "1",
+  ];
   const status = runExampleSmoke({
     env: fixtureEnv("1"),
     e2eArgs,
-    spawn: (...args) => { calls.push(args); return { status: 9 }; },
+    spawn: (...args) => {
+      calls.push(args);
+      return { status: 9 };
+    },
   });
   assert.equal(status, 9);
   assert.equal(calls[0][0], "agent-device");

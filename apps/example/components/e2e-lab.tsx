@@ -10,6 +10,7 @@ import {
   createInstance,
   flushWithResult,
   getDeviceId,
+  getConnectorIdentity,
   getDiagnostics,
   getSafeDiagnostics,
   getSessionId,
@@ -528,9 +529,56 @@ export function AmplitudeE2eLab({ fixtureUrl, runId }: AmplitudeE2eLabProps) {
             testID="e2e-screen-run"
             title="Screen"
             onPress={() => {
+              clearDryRunTransportRecords();
               const instance = createInstance();
-              instance.trackScreenView("E2E Lab");
-              setScreenStatus("ok:screen");
+              const navigationState = {
+                index: 0,
+                routes: [{ key: "e2e-lab", name: "e2e-lab" }],
+              };
+              void (async () => {
+                try {
+                  await instance.init(ANALYTICS_API_KEY, "e2e-user", {
+                    instanceName: "e2e-screen",
+                    trackingSessionEvents: false,
+                    flushIntervalMillis: 60000,
+                    transportProvider: new DryRunTransport(),
+                  }).promise;
+                  instance.trackScreenView("E2E Lab");
+                  instance.trackScreenViewOnNavigationStateChange(
+                    navigationState,
+                  );
+                  const duplicate =
+                    await instance.trackScreenViewOnNavigationStateChange(
+                      navigationState,
+                    ).promise;
+                  const result = await instance.flushWithResult();
+                  const screens = getDryRunAnalyticsEvents()
+                    .flatMap((record) => record.payload.events)
+                    .filter(
+                      (event) =>
+                        event.event_type === "[Amplitude] Screen Viewed",
+                    )
+                    .map(
+                      (event) =>
+                        Object.entries(event.event_properties ?? {}).find(
+                          ([key]) => key === "[Amplitude] Screen Name",
+                        )?.[1],
+                    );
+                  setScreenStatus(
+                    result.ok &&
+                      duplicate === undefined &&
+                      screens.length === 2 &&
+                      screens.includes("E2E Lab") &&
+                      screens.includes("e2e-lab")
+                      ? "ok:screen=e2e-lab:dedup=1"
+                      : `fail:screen=count=${screens.length}`,
+                  );
+                } catch {
+                  setScreenStatus("fail:screen=flush");
+                } finally {
+                  instance.shutdown();
+                }
+              })();
             }}
             style={styles.flex1}
           />
@@ -735,13 +783,26 @@ export function AmplitudeE2eLab({ fixtureUrl, runId }: AmplitudeE2eLabProps) {
           testID="e2e-run-stress"
           title="Stress 50 tracks"
           onPress={() => {
-            const started = globalThis.performance?.now?.() ?? Date.now();
+            clearDryRunTransportRecords();
             for (let index = 0; index < 50; index += 1) {
               track("e2e_stress_track", { index });
             }
-            const elapsed =
-              (globalThis.performance?.now?.() ?? Date.now()) - started;
-            setStressStatus(`ok:tracks=50:ms=${elapsed.toFixed(1)}`);
+            void flushWithResult()
+              .then((result) => {
+                const delivered = getDryRunAnalyticsEvents()
+                  .flatMap((record) => record.payload.events)
+                  .filter(
+                    (event) => event.event_type === "e2e_stress_track",
+                  ).length;
+                setStressStatus(
+                  result.ok && delivered === 50
+                    ? "ok:stress=50:delivered=50"
+                    : `fail:stress=50:delivered=${delivered}`,
+                );
+              })
+              .catch(() => {
+                setStressStatus("fail:stress=flush");
+              });
           }}
         />
         <Button
@@ -755,18 +816,42 @@ export function AmplitudeE2eLab({ fixtureUrl, runId }: AmplitudeE2eLabProps) {
               dryRun: true,
               instanceName: "e2e-combined",
             });
-            void client
-              .init({ user_id: "e2e-combined" })
-              .then(() => {
-                setClientStatus(
-                  client.getUserId() === "e2e-combined" && DRY_RUN
-                    ? "ok:user=e2e-combined:dry=1"
-                    : "fail:client",
+            clearDryRunTransportRecords();
+            void (async () => {
+              try {
+                await client.init({ user_id: "e2e-combined" });
+                const userReady =
+                  client.getUserId() === "e2e-combined" &&
+                  getConnectorIdentity("e2e-combined").userId ===
+                    "e2e-combined";
+                client.analytics.track("e2e_combined_probe");
+                const result = await client.analytics.flushWithResult();
+                const recorded = getDryRunAnalyticsEvents().some((record) =>
+                  record.payload.events.some(
+                    (event) =>
+                      event.event_type === "e2e_combined_probe" &&
+                      event.user_id === "e2e-combined",
+                  ),
                 );
-              })
-              .catch(() => {
-                setClientStatus("fail:client");
-              });
+                client.reset();
+                const connectorCleared =
+                  client.getUserId() === undefined &&
+                  getConnectorIdentity("e2e-combined").userId === undefined;
+                setClientStatus(
+                  DRY_RUN &&
+                    userReady &&
+                    result.ok &&
+                    recorded &&
+                    connectorCleared
+                    ? "ok:combined=user+connector+event"
+                    : `fail:combined=user=${userReady}:event=${recorded}:reset=${connectorCleared}`,
+                );
+              } catch {
+                setClientStatus("fail:combined");
+              } finally {
+                client.analytics.shutdown();
+              }
+            })();
           }}
         />
         <View

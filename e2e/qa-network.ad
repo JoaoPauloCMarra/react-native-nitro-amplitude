@@ -1,0 +1,14 @@
+open "com.nitroamplitude.example" "nitroamplitude://e2e-network?fixtureUrl=${FIXTURE_URL}&runId=${RUN_ID}" --relaunch
+wait "stable"
+wait text "dry-run fixture"
+wait id="e2e-network-screen"
+wait id="e2e-network-results"
+wait text "ok:native-http=timeout"
+wait text "ok:native-http=refused"
+wait text "ok:native-http=invalid-url"
+wait text "ok:native-transport=ingested"
+wait text "ok:native-transport=status=503:dropped+diagnosed"
+wait text "ok:experiment-native=flag=on"
+wait text "ok:diagnostics=native+worker+timings"
+wait text "network-done:fail=0;"
+close

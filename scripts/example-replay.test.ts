@@ -134,6 +134,97 @@ test("runtime source drift fails freshness until the reviewed lock is refreshed"
   }
 });
 
+function updateFreshnessFixtureFeature(
+  root: string,
+  update: (feature: Record<string, unknown>) => Record<string, unknown>,
+): void {
+  const manifestFile = path.join(root, "e2e/coverage.json");
+  const manifest = JSON.parse(fs.readFileSync(manifestFile, "utf8"));
+  manifest.features = manifest.features.map(update);
+  fs.writeFileSync(manifestFile, `${JSON.stringify(manifest, null, 2)}\n`);
+}
+
+test("load-triggered features need a status wait instead of a press", () => {
+  const root = createFreshnessFixture();
+  const manifestPath = "e2e/coverage.json";
+  const lockPath = "e2e/lock.json";
+  try {
+    writeFile(
+      root,
+      "apps/example/components/e2e-lab.tsx",
+      '<View testID="probe-results" accessibilityLabel="ok:probe" />\n',
+    );
+    updateFreshnessFixtureFeature(root, (feature) => {
+      const { controlId, ...rest } = feature;
+      void controlId;
+      return { ...rest, trigger: "load", statusId: "probe-results" };
+    });
+    writeFile(
+      root,
+      "e2e/replay.ad",
+      'wait text "dry-run fixture"\nwait id="probe-results"\nwait text "ok:probe"\n',
+    );
+    refreshReplayLock({ root, manifestPath, lockPath });
+    assert.equal(
+      checkReplayFreshness({ root, manifestPath, lockPath }).fresh,
+      true,
+    );
+
+    writeFile(
+      root,
+      "e2e/replay.ad",
+      'wait text "dry-run fixture"\nwait text "ok:probe"\n',
+    );
+    assert.throws(
+      () => refreshReplayLock({ root, manifestPath, lockPath }),
+      /no load status wait/,
+    );
+
+    updateFreshnessFixtureFeature(root, (feature) => ({
+      ...feature,
+      trigger: "timer",
+    }));
+    assert.throws(
+      () => refreshReplayLock({ root, manifestPath, lockPath }),
+      /unsupported trigger/,
+    );
+
+    updateFreshnessFixtureFeature(root, (feature) => ({
+      ...feature,
+      trigger: "load",
+      controlId: "probe-run",
+    }));
+    assert.throws(
+      () => refreshReplayLock({ root, manifestPath, lockPath }),
+      /load-triggered and has a controlId/,
+    );
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("press-triggered features still need a press step", () => {
+  const root = createFreshnessFixture();
+  try {
+    writeFile(
+      root,
+      "e2e/replay.ad",
+      'wait text "dry-run fixture"\nwait text "ok:probe"\n',
+    );
+    assert.throws(
+      () =>
+        refreshReplayLock({
+          root,
+          manifestPath: "e2e/coverage.json",
+          lockPath: "e2e/lock.json",
+        }),
+      /is not pressed by/,
+    );
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("missing platform or exact target fails before agent-device can spawn", () => {
   const calls: unknown[][] = [];
   const spawn = (...args: unknown[]) => {
@@ -286,6 +377,8 @@ test("runner uses the manifest suites, exact target, unique OS temp artifacts, a
       "e2e/qa-full-features.ad",
       "e2e/qa-persistence-relaunch.ad",
       "e2e/qa-deeplink.ad",
+      "e2e/qa-network.ad",
+      "e2e/qa-analytics-lab.ad",
       "--udid",
       "device-123",
       "--session",
@@ -429,6 +522,80 @@ test("local fixture serves health, echoes POST data, and preserves an HTTP 503",
       fixture: "nitro-amplitude-replay",
       status: 503,
     });
+  } finally {
+    await fixture.close();
+  }
+});
+
+test("local fixture accepts Analytics batches, Experiment fetches, delays, and upload 503s", async () => {
+  const fixture = createExampleReplayHttpFixture({
+    bindHost: "127.0.0.1",
+    advertiseHost: "127.0.0.1",
+    port: 0,
+  });
+  const { baseUrl } = await fixture.listen();
+  try {
+    const batch = await fetch(`${baseUrl}/2/httpapi`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        api_key: "fixture-key",
+        events: [{ event_type: "probe" }, { event_type: "probe" }],
+      }),
+    });
+    assert.equal(batch.status, 200);
+    assert.deepEqual(await batch.json(), { code: 200, events_ingested: 2 });
+
+    const invalidBatch = await fetch(`${baseUrl}/2/httpapi`, {
+      method: "POST",
+      body: JSON.stringify({ events: [] }),
+    });
+    assert.equal(invalidBatch.status, 400);
+    await invalidBatch.text();
+
+    const unavailableUpload = await fetch(`${baseUrl}/2/httpapi/503`, {
+      method: "POST",
+      body: "{}",
+    });
+    assert.equal(unavailableUpload.status, 503);
+    assert.deepEqual(await unavailableUpload.json(), { code: 503 });
+
+    const unauthorized = await fetch(`${baseUrl}/sdk/v2/vardata?v=0`);
+    assert.equal(unauthorized.status, 401);
+    await unauthorized.text();
+
+    const headers = { Authorization: "Api-Key fixture-deployment-key" };
+    const flags = await fetch(`${baseUrl}/sdk/v2/flags`, { headers });
+    assert.equal(flags.status, 200);
+    assert.deepEqual(await flags.json(), []);
+
+    for (const method of ["GET", "POST"]) {
+      const variants = await fetch(`${baseUrl}/sdk/v2/vardata?v=0`, {
+        method,
+        headers,
+      });
+      assert.equal(variants.status, 200);
+      assert.deepEqual(await variants.json(), {
+        "demo-flag": { key: "on", value: "on" },
+      });
+    }
+
+    const startedAt = Date.now();
+    const delayed = await fetch(`${baseUrl}/delay/50`);
+    assert.equal(delayed.status, 200);
+    assert.ok(Date.now() - startedAt >= 40);
+    assert.deepEqual(await delayed.json(), {
+      ok: true,
+      fixture: "nitro-amplitude-replay",
+      delayMillis: 50,
+    });
+
+    const capped = new AbortController();
+    const cappedRequest = fetch(`${baseUrl}/delay/999999`, {
+      signal: capped.signal,
+    }).catch((error: unknown) => error);
+    capped.abort();
+    assert.ok((await cappedRequest) instanceof Error);
   } finally {
     await fixture.close();
   }

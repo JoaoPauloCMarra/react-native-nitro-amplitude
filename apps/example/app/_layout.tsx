@@ -9,6 +9,9 @@ export default function RootLayout() {
         <Stack.Screen name="index" />
         <Stack.Screen name="e2e" />
         <Stack.Screen name="e2e-identity" />
+        <Stack.Screen name="e2e-network" />
+        <Stack.Screen name="e2e-analytics" />
+        <Stack.Screen name="e2e-persistence" />
       </Stack>
     </>
   );

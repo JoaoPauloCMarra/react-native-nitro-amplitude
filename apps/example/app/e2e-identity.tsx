@@ -7,7 +7,7 @@ import {
   getConnectorIdentity,
 } from "react-native-nitro-amplitude";
 import { DryRunTransport } from "react-native-nitro-amplitude/network";
-import { Card, Page, StatusRow } from "../components/shared";
+import { Button, Card, Page, StatusRow } from "../components/shared";
 
 const ANALYTICS_API_KEY = "nitro-amplitude-dry-run-analytics-key";
 const EXPERIMENT_API_KEY = "nitro-amplitude-dry-run-experiment-key";
@@ -121,6 +121,7 @@ async function runIdentitySweep(): Promise<IdentityReport> {
 
 export default function AmplitudeIdentityLabScreen() {
   const [report, setReport] = useState<IdentityReport | null>(null);
+  const [sweepStatus, setSweepStatus] = useState("(idle)");
   const dryRun = process.env.EXPO_PUBLIC_AMPLITUDE_DRY_RUN === "1";
 
   useEffect(() => {
@@ -178,6 +179,30 @@ export default function AmplitudeIdentityLabScreen() {
           testID="e2e-identity-summary"
           label="summary"
           value={summary}
+        />
+        <StatusRow
+          testID="e2e-identity-sweep-status"
+          label="sweep"
+          value={sweepStatus}
+        />
+        <Button
+          testID="e2e-identity-run"
+          title="Run identity sweep"
+          onPress={() => {
+            setSweepStatus("running");
+            void runIdentitySweep()
+              .then((next) => {
+                setReport(next);
+                setSweepStatus(
+                  next.fail === 0 && next.pass === next.cases.length
+                    ? "ok:identity-sweep=pass"
+                    : `fail:identity-sweep=fail=${next.fail}`,
+                );
+              })
+              .catch(() => {
+                setSweepStatus("fail:identity-sweep=error");
+              });
+          }}
         />
         <Card
           title="Reset / identify"

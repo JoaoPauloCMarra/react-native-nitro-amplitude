@@ -73,3 +73,10 @@ projects; apps must not call `setContext` manually.
 - Web uses browser fetch and storage fallbacks without native Nitro bindings.
 - Smoke flows run deterministically in dry-run fixture mode; real-network
   example flows require keys from `apps/example/.env.local`.
+
+## Replay maintenance
+
+- Package runtime or example changes must include a review of `e2e/amplitude-replay-coverage.json` and the affected `.ad` flows. Update assertions for changed behavior before running `bun run example:replay:refresh`.
+- `bun run example:replay:check` validates coverage and source freshness without using a device. Keep it in the package quality gate; a refreshed source lock is not runtime verification.
+- Run `bun run example:replay` against an explicit platform and device after building the matching example. Keep device execution out of CI and store run artifacts in OS temp.
+- Fixture transport, native HTTP, and provider-dependent evidence must remain distinct. A required blocked or skipped case must not produce a full-validation PASS.

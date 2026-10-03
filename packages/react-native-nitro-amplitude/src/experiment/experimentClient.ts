@@ -99,6 +99,7 @@ export class ExperimentClient implements Client {
     flagPollerIntervalMillis,
   );
   private isRunning = false;
+  private lifecycleGeneration = 0;
   private readonly flagsAndVariantsLoadedPromise: Promise<void>[];
   private readonly initialFlags: EvaluationFlag[] | undefined;
   private fetchSequenceNumber = 0;
@@ -109,6 +110,7 @@ export class ExperimentClient implements Client {
   private readonly inFlightFetches = new Map<string, Promise<Variants>>();
   private lastFetchTime: number | undefined;
   private lastFetchFailure: string | undefined;
+  private lastFetchMetadataSequenceNumber = 0;
 
   /**
    * Creates a new ExperimentClient instance.
@@ -179,9 +181,9 @@ export class ExperimentClient implements Client {
   public async start(user?: ExperimentUser): Promise<void> {
     if (this.isRunning) {
       return;
-    } else {
-      this.isRunning = true;
     }
+    this.isRunning = true;
+    const lifecycleGeneration = ++this.lifecycleGeneration;
     try {
       this.defaultUserProvider.start();
       this.setUser(user ?? {});
@@ -192,19 +194,26 @@ export class ExperimentClient implements Client {
       } else {
         await flagsReadyPromise;
       }
+      if (lifecycleGeneration !== this.lifecycleGeneration || !this.isRunning) {
+        return;
+      }
       if (this.config.pollOnStart) {
         this.poller.start();
       }
     } catch (e) {
-      this.stop();
+      if (lifecycleGeneration === this.lifecycleGeneration) {
+        this.stop();
+      }
       throw e;
     }
   }
 
   /**
-   * Stop background polling and retry work started by the client.
+   * Stop background polling and retry work started by the client. Stopping a
+   * running client also discards the responses of fetches still in flight.
    */
   public stop(): void {
+    this.lifecycleGeneration += 1;
     this.stopRetries();
     this.defaultUserProvider.stop();
     for (const callback of this.stopCallbacks) {
@@ -218,6 +227,7 @@ export class ExperimentClient implements Client {
     if (!this.isRunning) {
       return;
     }
+    this.invalidateFetches();
     this.poller.stop();
     this.isRunning = false;
   }
@@ -278,7 +288,6 @@ export class ExperimentClient implements Client {
       };
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
-      this.lastFetchFailure = reason;
       return {
         fetched: false,
         flagKeys: options?.flagKeys ?? Object.keys(this.variants.getAll()),
@@ -798,9 +807,29 @@ export class ExperimentClient implements Client {
 
     try {
       const variants = await this.doFetch(user, timeoutMillis, options);
-      await this.storeVariants(variants, sequenceNumber, options);
+      const stored = await this.storeVariants(
+        variants,
+        sequenceNumber,
+        options,
+      );
+      if (
+        stored &&
+        this.storedFetchSequenceNumber === sequenceNumber &&
+        sequenceNumber >= this.lastFetchMetadataSequenceNumber
+      ) {
+        this.lastFetchMetadataSequenceNumber = sequenceNumber;
+        this.lastFetchTime = Date.now();
+        this.lastFetchFailure = undefined;
+      }
       return variants;
     } catch (e: unknown) {
+      if (
+        sequenceNumber >= this.storedFetchSequenceNumber &&
+        sequenceNumber >= this.lastFetchMetadataSequenceNumber
+      ) {
+        this.lastFetchMetadataSequenceNumber = sequenceNumber;
+        this.lastFetchFailure = e instanceof Error ? e.message : String(e);
+      }
       if (
         retry &&
         generation === this.fetchGeneration &&
@@ -829,22 +858,11 @@ export class ExperimentClient implements Client {
       this.config.fetchTimeoutMillis,
       this.config.retryFetchOnFailure,
       options,
-    )
-      .then((variants) => {
-        this.lastFetchTime = Date.now();
-        this.lastFetchFailure = undefined;
-        return variants;
-      })
-      .catch((error: unknown) => {
-        this.lastFetchFailure =
-          error instanceof Error ? error.message : String(error);
-        throw error;
-      })
-      .finally(() => {
-        if (this.inFlightFetches.get(key) === fetch) {
-          this.inFlightFetches.delete(key);
-        }
-      });
+    ).finally(() => {
+      if (this.inFlightFetches.get(key) === fetch) {
+        this.inFlightFetches.delete(key);
+      }
+    });
     this.inFlightFetches.set(key, fetch);
     return await fetch;
   }
@@ -872,11 +890,15 @@ export class ExperimentClient implements Client {
   }
 
   private async doFlags(): Promise<void> {
+    const lifecycleGeneration = this.lifecycleGeneration;
     const flags = await this.flagApi.getFlags({
       libraryName: "experiment-nitro-ts",
       libraryVersion: PACKAGE_VERSION,
       timeoutMillis: this.config.fetchTimeoutMillis,
     });
+    if (lifecycleGeneration !== this.lifecycleGeneration || !this.isRunning) {
+      return;
+    }
     this.flags.clear();
     this.flags.putAll(flags);
     await this.flags.store();
@@ -895,12 +917,12 @@ export class ExperimentClient implements Client {
     variants: Variants,
     sequenceNumber: number,
     options?: FetchOptions,
-  ): Promise<void> {
+  ): Promise<boolean> {
     if (sequenceNumber <= this.storedFetchSequenceNumber) {
       this.logger.debug(
         `[Experiment] Ignoring stale fetch response (sequence ${sequenceNumber} <= ${this.storedFetchSequenceNumber})`,
       );
-      return;
+      return false;
     }
 
     let failedFlagKeys = options?.flagKeys ? options.flagKeys : [];
@@ -920,6 +942,7 @@ export class ExperimentClient implements Client {
     this.storedFetchSequenceNumber = sequenceNumber;
     await this.variants.store();
     this.logger.debug("[Experiment] Stored variants: ", variants);
+    return true;
   }
 
   private startRetries(user: ExperimentUser, options?: FetchOptions): void {

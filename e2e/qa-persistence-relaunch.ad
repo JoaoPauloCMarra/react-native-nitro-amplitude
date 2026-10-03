@@ -1,0 +1,18 @@
+open "nitroamplitude://e2e?fixtureUrl=${FIXTURE_URL}&runId=${RUN_ID}"
+wait text "dry-run fixture"
+wait id="e2e-screen"
+wait text "e2e-ready"
+scroll down
+press id="e2e-storage-write"
+scroll top
+wait text "ok:storage=written"
+close
+open "com.nitroamplitude.example" "nitroamplitude://e2e?fixtureUrl=${FIXTURE_URL}&runId=${RUN_ID}" --relaunch
+wait text "dry-run fixture"
+wait id="e2e-screen"
+wait text "e2e-ready"
+scroll down
+press id="e2e-storage-read"
+scroll top
+wait text "ok:storage=restored"
+close

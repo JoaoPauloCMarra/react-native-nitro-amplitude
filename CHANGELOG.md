@@ -4,6 +4,28 @@ All notable changes to this project are documented in this file.
 
 The format follows Keep a Changelog and the project adheres to SemVer.
 
+## [0.10.1] - 2026-10-03
+
+### Fixed
+
+- Stopping Experiment during startup no longer restarts background polling
+  when the pending request finishes. Starting again creates a fresh request
+  and can retry it even when the previous request used the same user. A late
+  startup response cannot replace flags loaded by the restarted client.
+- `stop()` on a running Experiment client discards the responses of fetches
+  still in flight. Stopping a client that never started keeps them.
+- Successful background retries update Experiment cache freshness and clear
+  the previous failure. Older results cannot replace newer fetch metadata.
+
+### Documentation
+
+- Clarify that `durableStorage: false` skips the combined storage preset;
+  it does not disable the clients' default persistence.
+- Document awaiting `flushWithResult()` before synchronous `shutdown()`
+  when the caller needs the flush result.
+
+Breaking changes: None.
+
 ## [0.10.0] - 2026-10-01
 
 ### Breaking changes

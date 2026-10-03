@@ -1,55 +1,67 @@
+const replayFixture = process.env.EXPO_PUBLIC_AMPLITUDE_DRY_RUN === "1";
+
 module.exports = {
-  "expo": {
-    "name": "Nitro Amplitude",
-    "slug": "nitro-amplitude-example",
-    "version": "1.0.0",
-    "orientation": "portrait",
-    "icon": "./assets/icon.png",
-    "scheme": "nitroamplitude",
-    "userInterfaceStyle": "automatic",
-    "ios": {
-      "supportsTablet": true,
-      "bundleIdentifier": "com.nitroamplitude.example",
-      "icon": "./assets/icon.png"
+  expo: {
+    name: "Nitro Amplitude",
+    slug: "nitro-amplitude-example",
+    version: "1.0.0",
+    orientation: "portrait",
+    icon: "./assets/icon.png",
+    scheme: "nitroamplitude",
+    userInterfaceStyle: "automatic",
+    ios: {
+      supportsTablet: true,
+      bundleIdentifier: "com.nitroamplitude.example",
+      icon: "./assets/icon.png",
+      ...(replayFixture
+        ? {
+            infoPlist: {
+              NSAppTransportSecurity: {
+                NSAllowsArbitraryLoads: true,
+              },
+            },
+          }
+        : {}),
     },
-    "android": {
-      "package": "com.nitroamplitude.example",
-      "icon": "./assets/icon.png",
-      "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#07131E",
-        "monochromeImage": "./assets/adaptive-icon-monochrome.png"
-      }
+    android: {
+      package: "com.nitroamplitude.example",
+      icon: "./assets/icon.png",
+      adaptiveIcon: {
+        foregroundImage: "./assets/adaptive-icon.png",
+        backgroundColor: "#07131E",
+        monochromeImage: "./assets/adaptive-icon-monochrome.png",
+      },
     },
-    "plugins": [
+    plugins: [
       "expo-router",
       [
         "expo-splash-screen",
         {
-          "image": "./assets/splash-icon.png",
-          "resizeMode": "contain",
-          "backgroundColor": "#07131E"
-        }
+          image: "./assets/splash-icon.png",
+          resizeMode: "contain",
+          backgroundColor: "#07131E",
+        },
       ],
       [
         "expo-build-properties",
         {
-          "ios": {
-            "enableSceneSupport": true
+          ios: {
+            enableSceneSupport: true,
           },
-          "android": {
-            "usePrecompiledHeaders": true
-          }
-        }
+          android: {
+            usePrecompiledHeaders: true,
+            ...(replayFixture ? { usesCleartextTraffic: true } : {}),
+          },
+        },
       ],
       "react-native-nitro-amplitude",
       "expo-font",
       "expo-asset",
-      "expo-status-bar"
+      "expo-status-bar",
     ],
-    "experiments": {
-      "reactCompiler": true,
-      "typedRoutes": true
-    }
-  }
+    experiments: {
+      reactCompiler: true,
+      typedRoutes: true,
+    },
+  },
 };

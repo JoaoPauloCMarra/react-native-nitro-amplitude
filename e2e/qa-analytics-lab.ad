@@ -1,0 +1,12 @@
+open "com.nitroamplitude.example" "nitroamplitude://e2e-analytics" --relaunch
+wait "stable"
+wait text "dry-run fixture"
+wait id="e2e-analytics-screen"
+wait id="e2e-analytics-results"
+wait text "ok:exposure=demo-flag"
+wait text "ok:session=start+end:extended"
+wait text "ok:plugin=added+removed:device=e2e-device"
+wait text "ok:shutdown=flushed"
+wait text "ok:experiment-helpers=all"
+wait text "analytics-done:fail=0;"
+close

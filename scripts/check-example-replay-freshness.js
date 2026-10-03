@@ -308,8 +308,15 @@ function readCoverageManifest(root, manifestPath = manifestRelativePath) {
       throw new Error(`${feature.id} must point at an example source file`);
     }
     const source = fs.readFileSync(sourcePath, "utf8");
+    if (feature.trigger !== undefined && feature.trigger !== "load") {
+      throw new Error(`${feature.id} has an unsupported trigger`);
+    }
+    const loadTriggered = feature.trigger === "load";
+    if (loadTriggered && Object.hasOwn(feature, "controlId")) {
+      throw new Error(`${feature.id} is load-triggered and has a controlId`);
+    }
     for (const [name, value] of [
-      ["controlId", feature.controlId],
+      ...(loadTriggered ? [] : [["controlId", feature.controlId]]),
       ["statusId", feature.statusId],
       ["expectedText", feature.expectedText],
       ["statusFragment", feature.statusFragment],
@@ -323,7 +330,7 @@ function readCoverageManifest(root, manifestPath = manifestRelativePath) {
         `${feature.id} must state its transport and replay coverage`,
       );
     }
-    if (!source.includes(`testID="${feature.controlId}"`)) {
+    if (!loadTriggered && !source.includes(`testID="${feature.controlId}"`)) {
       throw new Error(
         `${feature.id} control is missing from ${feature.source}`,
       );
@@ -338,7 +345,13 @@ function readCoverageManifest(root, manifestPath = manifestRelativePath) {
         `${feature.id} status assertion is missing from ${feature.source}`,
       );
     }
-    if (!suite.includes(`press id="${feature.controlId}"`)) {
+    if (loadTriggered) {
+      if (!suite.includes(`wait id="${feature.statusId}"`)) {
+        throw new Error(
+          `${feature.id} has no load status wait in ${feature.suite}`,
+        );
+      }
+    } else if (!suite.includes(`press id="${feature.controlId}"`)) {
       throw new Error(`${feature.id} is not pressed by ${feature.suite}`);
     }
     if (!suite.includes(`wait text "${feature.expectedText}"`)) {

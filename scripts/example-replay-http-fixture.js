@@ -1,6 +1,8 @@
 const http = require("node:http");
 
 const maxRequestBytes = 16 * 1024;
+const maxDelayMillis = 5000;
+const demoFlagVariants = { "demo-flag": { key: "on", value: "on" } };
 
 function json(response, statusCode, value) {
   response.writeHead(statusCode, {
@@ -10,7 +12,25 @@ function json(response, statusCode, value) {
   response.end(JSON.stringify(value));
 }
 
-function handleRequest(request, response) {
+function parseBatch(body) {
+  try {
+    const batch = JSON.parse(body);
+    if (
+      batch &&
+      typeof batch.api_key === "string" &&
+      batch.api_key.length > 0 &&
+      Array.isArray(batch.events) &&
+      batch.events.length > 0
+    ) {
+      return batch;
+    }
+  } catch {
+    return undefined;
+  }
+  return undefined;
+}
+
+function handleRequest(request, response, timers) {
   let body = "";
   let tooLarge = false;
   request.setEncoding("utf8");
@@ -50,6 +70,55 @@ function handleRequest(request, response) {
       });
       return;
     }
+    const delay = /^\/delay\/(\d+)$/.exec(url.pathname);
+    if (delay && request.method === "GET") {
+      const delayMillis = Math.min(Number(delay[1]), maxDelayMillis);
+      const timer = setTimeout(() => {
+        timers.delete(timer);
+        if (response.destroyed || response.writableEnded) return;
+        json(response, 200, {
+          ok: true,
+          fixture: "nitro-amplitude-replay",
+          delayMillis,
+        });
+      }, delayMillis);
+      timers.add(timer);
+      return;
+    }
+    if (url.pathname === "/2/httpapi" && request.method === "POST") {
+      const batch = parseBatch(body);
+      if (!batch) {
+        json(response, 400, { code: 400, error: "invalid batch" });
+        return;
+      }
+      json(response, 200, {
+        code: 200,
+        events_ingested: batch.events.length,
+      });
+      return;
+    }
+    if (url.pathname === "/2/httpapi/503" && request.method === "POST") {
+      json(response, 503, { code: 503 });
+      return;
+    }
+    if (
+      url.pathname.startsWith("/sdk/v2/") &&
+      (request.method === "GET" || request.method === "POST")
+    ) {
+      const authorization = request.headers.authorization ?? "";
+      if (!/^Api-Key \S+$/.test(authorization)) {
+        json(response, 401, { error: "missing deployment key" });
+        return;
+      }
+      if (url.pathname === "/sdk/v2/flags") {
+        json(response, 200, []);
+        return;
+      }
+      if (url.pathname === "/sdk/v2/vardata") {
+        json(response, 200, demoFlagVariants);
+        return;
+      }
+    }
     json(response, 404, { ok: false, fixture: true, status: 404 });
   });
 }
@@ -63,7 +132,10 @@ function createExampleReplayHttpFixture({
   advertiseHost = bindHost,
   port = 0,
 } = {}) {
-  const server = http.createServer(handleRequest);
+  const timers = new Set();
+  const server = http.createServer((request, response) =>
+    handleRequest(request, response, timers),
+  );
 
   return {
     async listen() {
@@ -93,12 +165,15 @@ function createExampleReplayHttpFixture({
       };
     },
     async close() {
+      for (const timer of timers) clearTimeout(timer);
+      timers.clear();
       if (!server.listening) return;
       await new Promise((resolve, reject) => {
         server.close((error) => {
           if (error) reject(error);
           else resolve();
         });
+        server.closeAllConnections?.();
       });
     },
   };

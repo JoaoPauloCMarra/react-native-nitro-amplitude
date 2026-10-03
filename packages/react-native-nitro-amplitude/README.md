@@ -552,7 +552,8 @@ in one terminal, launch the installed example, then run
 environment variable only for Maestro does not change an existing bundle.
 
 The maintained Agent Device replay covers Analytics, Experiment, diagnostics,
-native HTTP against a local fixture, and storage across an app relaunch. Build
+native HTTP and the default native Analytics transport against a local fixture,
+and storage and identity across an app relaunch. Build
 the example with `EXPO_PUBLIC_AMPLITUDE_DRY_RUN=1`, start the local HTTP fixture,
 then select the exact installed target:
 

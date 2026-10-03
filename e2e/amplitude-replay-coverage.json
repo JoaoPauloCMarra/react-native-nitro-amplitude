@@ -10,15 +10,23 @@
   "suites": [
     {
       "path": "e2e/qa-full-features.ad",
-      "purpose": "Public Analytics, Experiment, diagnostics, network policy, and local native HTTP behavior"
+      "purpose": "Public Analytics, Experiment, diagnostics, network policy, local native HTTP, and smoke-runner behavior on the main E2E lab"
     },
     {
       "path": "e2e/qa-persistence-relaunch.ad",
-      "purpose": "Native durable storage write followed by an app process relaunch and read"
+      "purpose": "Native durable storage, durable Analytics identity, and Experiment disk/memory storage written before and read after an app process relaunch"
     },
     {
       "path": "e2e/qa-deeplink.ad",
       "purpose": "App and identity deep-link routes"
+    },
+    {
+      "path": "e2e/qa-network.ad",
+      "purpose": "Run-on-load native HTTP errors, nitroTransport delivery, native Experiment fetch, and diagnostics against the local fixture"
+    },
+    {
+      "path": "e2e/qa-analytics-lab.ad",
+      "purpose": "Run-on-load Experiment exposure, session, plugin, shutdown, and Experiment helper behavior in dry-run fixture mode"
     }
   ],
   "fixtureMarker": {
@@ -28,7 +36,9 @@
     "suites": [
       "e2e/qa-full-features.ad",
       "e2e/qa-persistence-relaunch.ad",
-      "e2e/qa-deeplink.ad"
+      "e2e/qa-deeplink.ad",
+      "e2e/qa-network.ad",
+      "e2e/qa-analytics-lab.ad"
     ]
   },
   "features": [
@@ -151,7 +161,7 @@
       "controlId": "e2e-flush-run",
       "statusId": "e2e-analytics-status",
       "statusFragment": "ok:flush=ok:event=flush-probe:sent=",
-      "expectedText": "ok:flush=ok"
+      "expectedText": "ok:flush=ok:event=flush-probe:sent="
     },
     {
       "id": "experiment.variant",
@@ -196,13 +206,255 @@
       "statusId": "e2e-storage-status",
       "statusFragment": "ok:storage=restored",
       "expectedText": "ok:storage=restored"
+    },
+    {
+      "id": "analytics.runtime-ready",
+      "coverage": "replay-asserted",
+      "trigger": "load",
+      "transport": "Default Analytics init with DryRunTransport plus the lab Experiment client start; asserts the runtime ready marker",
+      "suite": "e2e/qa-full-features.ad",
+      "source": "apps/example/components/e2e-lab.tsx",
+      "statusId": "e2e-results",
+      "statusFragment": "ok:ready",
+      "expectedText": "ok:ready"
+    },
+    {
+      "id": "analytics.screen-view",
+      "coverage": "replay-asserted",
+      "transport": "DryRunTransport fixture; dedicated instance asserts one direct screen view plus one navigation-state screen view and the deduplicated repeat",
+      "suite": "e2e/qa-full-features.ad",
+      "source": "apps/example/components/e2e-lab.tsx",
+      "controlId": "e2e-screen-run",
+      "statusId": "e2e-screen-status",
+      "statusFragment": "ok:screen=e2e-lab:dedup=1",
+      "expectedText": "ok:screen=e2e-lab:dedup=1"
+    },
+    {
+      "id": "analytics.combined-client",
+      "coverage": "replay-asserted",
+      "transport": "createAmplitudeClient in dry-run mode; asserts user, connector identity, recorded event, and connector reset",
+      "suite": "e2e/qa-full-features.ad",
+      "source": "apps/example/components/e2e-lab.tsx",
+      "controlId": "e2e-client-run",
+      "statusId": "e2e-client-status",
+      "statusFragment": "ok:combined=user+connector+event",
+      "expectedText": "ok:combined=user+connector+event"
+    },
+    {
+      "id": "analytics.stress-delivery",
+      "coverage": "replay-asserted",
+      "transport": "DryRunTransport fixture; 50 tracks followed by flushWithResult and a recorded-event count",
+      "suite": "e2e/qa-full-features.ad",
+      "source": "apps/example/components/e2e-lab.tsx",
+      "controlId": "e2e-run-stress",
+      "statusId": "e2e-stress-result",
+      "statusFragment": "ok:stress=50:delivered=50",
+      "expectedText": "ok:stress=50:delivered=50"
+    },
+    {
+      "id": "smoke.run-all",
+      "coverage": "replay-asserted",
+      "transport": "Example smoke runner over public APIs in dry-run fixture mode; asserts the PASS summary",
+      "suite": "e2e/qa-full-features.ad",
+      "source": "apps/example/components/smoke-test.tsx",
+      "controlId": "smoke-run-all",
+      "statusId": "smoke-summary",
+      "statusFragment": "Complete: PASS",
+      "expectedText": "Complete: PASS"
+    },
+    {
+      "id": "analytics.identity-sweep",
+      "coverage": "replay-asserted",
+      "transport": "Identity lab instance and combined-client reset sweep with DryRunTransport; pressed rerun asserts all cases pass",
+      "suite": "e2e/qa-deeplink.ad",
+      "source": "apps/example/app/e2e-identity.tsx",
+      "controlId": "e2e-identity-run",
+      "statusId": "e2e-identity-sweep-status",
+      "statusFragment": "ok:identity-sweep=pass",
+      "expectedText": "ok:identity-sweep=pass"
+    },
+    {
+      "id": "native.http-timeout",
+      "coverage": "replay-asserted",
+      "trigger": "load",
+      "transport": "nitroHttpClient through the native worker; 500 ms timeout against the fixture's delayed response must reject with AmplitudeError code timeout",
+      "suite": "e2e/qa-network.ad",
+      "source": "apps/example/app/e2e-network.tsx",
+      "statusId": "e2e-network-results",
+      "statusFragment": "ok:native-http=timeout",
+      "expectedText": "ok:native-http=timeout"
+    },
+    {
+      "id": "native.http-network-error",
+      "coverage": "replay-asserted",
+      "trigger": "load",
+      "transport": "nitroHttpClient through the native worker to the fixture host on closed port 1; must reject with code network_error",
+      "suite": "e2e/qa-network.ad",
+      "source": "apps/example/app/e2e-network.tsx",
+      "statusId": "e2e-network-results",
+      "statusFragment": "ok:native-http=refused",
+      "expectedText": "ok:native-http=refused"
+    },
+    {
+      "id": "native.http-invalid-url",
+      "coverage": "replay-asserted",
+      "trigger": "load",
+      "transport": "nitroHttpClient with a malformed URL; native invalid_url or network_error must map to code network_error",
+      "suite": "e2e/qa-network.ad",
+      "source": "apps/example/app/e2e-network.tsx",
+      "statusId": "e2e-network-results",
+      "statusFragment": "ok:native-http=invalid-url",
+      "expectedText": "ok:native-http=invalid-url"
+    },
+    {
+      "id": "analytics.native-transport",
+      "coverage": "replay-asserted",
+      "trigger": "load",
+      "transport": "Default nitroTransport (no transportProvider) posts a batch to the fixture's /2/httpapi, which validates api_key and events before returning code 200",
+      "suite": "e2e/qa-network.ad",
+      "source": "apps/example/app/e2e-network.tsx",
+      "statusId": "e2e-network-results",
+      "statusFragment": "ok:native-transport=ingested",
+      "expectedText": "ok:native-transport=ingested"
+    },
+    {
+      "id": "analytics.native-transport-503",
+      "coverage": "replay-asserted",
+      "trigger": "load",
+      "transport": "Default nitroTransport against the fixture's /2/httpapi/503; explicit flushWithResult reports not ok, drops the batch, and records an http_status 503 diagnostic failure",
+      "suite": "e2e/qa-network.ad",
+      "source": "apps/example/app/e2e-network.tsx",
+      "statusId": "e2e-network-results",
+      "statusFragment": "ok:native-transport=status=503:dropped+diagnosed",
+      "expectedText": "ok:native-transport=status=503:dropped+diagnosed"
+    },
+    {
+      "id": "experiment.native-http",
+      "coverage": "replay-asserted",
+      "trigger": "load",
+      "transport": "Experiment client with the default nitroHttpClient fetches /sdk/v2/flags and /sdk/v2/vardata from the fixture, which requires the deployment key header",
+      "suite": "e2e/qa-network.ad",
+      "source": "apps/example/app/e2e-network.tsx",
+      "statusId": "e2e-network-results",
+      "statusFragment": "ok:experiment-native=flag=on",
+      "expectedText": "ok:experiment-native=flag=on"
+    },
+    {
+      "id": "diagnostics.native-timings",
+      "coverage": "replay-asserted",
+      "trigger": "load",
+      "transport": "createTimedHttpClient on fixture /health plus createTimedAnalyticsTransport on DryRunTransport; asserts native startup diagnostics, no last native error, worker metrics, timings, and clearDiagnosticFailures",
+      "suite": "e2e/qa-network.ad",
+      "source": "apps/example/app/e2e-network.tsx",
+      "statusId": "e2e-network-results",
+      "statusFragment": "ok:diagnostics=native+worker+timings",
+      "expectedText": "ok:diagnostics=native+worker+timings"
+    },
+    {
+      "id": "experiment.exposure",
+      "coverage": "replay-asserted",
+      "trigger": "load",
+      "transport": "Experiment client wired to a dry-run Analytics instance through the connector; explicit exposure must record a $exposure event for demo-flag",
+      "suite": "e2e/qa-analytics-lab.ad",
+      "source": "apps/example/app/e2e-analytics.tsx",
+      "statusId": "e2e-analytics-results",
+      "statusFragment": "ok:exposure=demo-flag",
+      "expectedText": "ok:exposure=demo-flag"
+    },
+    {
+      "id": "analytics.session",
+      "coverage": "replay-asserted",
+      "trigger": "load",
+      "transport": "DryRunTransport fixture; setSessionId must record session_end and session_start, and extendSession must keep the session id",
+      "suite": "e2e/qa-analytics-lab.ad",
+      "source": "apps/example/app/e2e-analytics.tsx",
+      "statusId": "e2e-analytics-results",
+      "statusFragment": "ok:session=start+end:extended",
+      "expectedText": "ok:session=start+end:extended"
+    },
+    {
+      "id": "analytics.plugin-device-logevent",
+      "coverage": "replay-asserted",
+      "trigger": "load",
+      "transport": "DryRunTransport fixture; enrichment plugin add and remove, setDeviceId, and logEvent with the device id restored afterward",
+      "suite": "e2e/qa-analytics-lab.ad",
+      "source": "apps/example/app/e2e-analytics.tsx",
+      "statusId": "e2e-analytics-results",
+      "statusFragment": "ok:plugin=added+removed:device=e2e-device",
+      "expectedText": "ok:plugin=added+removed:device=e2e-device"
+    },
+    {
+      "id": "analytics.shutdown",
+      "coverage": "replay-asserted",
+      "trigger": "load",
+      "transport": "DryRunTransport fixture; shutdown must flush the queued event and report the instance as not initialized",
+      "suite": "e2e/qa-analytics-lab.ad",
+      "source": "apps/example/app/e2e-analytics.tsx",
+      "statusId": "e2e-analytics-results",
+      "statusFragment": "ok:shutdown=flushed",
+      "expectedText": "ok:shutdown=flushed"
+    },
+    {
+      "id": "experiment.helpers",
+      "coverage": "replay-asserted",
+      "trigger": "load",
+      "transport": "JS-only Experiment helpers: typed variants, parseVariantJson, isFallback and VariantSource, fallbackVariant, clearVariants, setUserProvider, StubExperimentClient, reinitialize, createExperimentUser, and createPersistentAmplitudeConfig",
+      "suite": "e2e/qa-analytics-lab.ad",
+      "source": "apps/example/app/e2e-analytics.tsx",
+      "statusId": "e2e-analytics-results",
+      "statusFragment": "ok:experiment-helpers=all",
+      "expectedText": "ok:experiment-helpers=all"
+    },
+    {
+      "id": "analytics.durable-identity-write",
+      "coverage": "replay-asserted",
+      "trigger": "load",
+      "transport": "createAmplitudeClient durable dry-run namespace; setDeviceId to a replay run value before relaunch",
+      "suite": "e2e/qa-persistence-relaunch.ad",
+      "source": "apps/example/app/e2e-persistence.tsx",
+      "statusId": "e2e-persistence-results",
+      "statusFragment": "ok:durable-identity=written",
+      "expectedText": "ok:durable-identity=written"
+    },
+    {
+      "id": "analytics.durable-identity-relaunch",
+      "coverage": "replay-asserted",
+      "trigger": "load",
+      "transport": "createAmplitudeClient durable namespace after a new app process starts; restored device id must match the replay run value",
+      "suite": "e2e/qa-persistence-relaunch.ad",
+      "source": "apps/example/app/e2e-persistence.tsx",
+      "statusId": "e2e-persistence-results",
+      "statusFragment": "ok:durable-identity=restored",
+      "expectedText": "ok:durable-identity=restored"
+    },
+    {
+      "id": "native.experiment-storage-write",
+      "coverage": "replay-asserted",
+      "trigger": "load",
+      "transport": "NitroExperimentStorage disk and NitroMemoryStorage memory values written with the replay run id",
+      "suite": "e2e/qa-persistence-relaunch.ad",
+      "source": "apps/example/app/e2e-persistence.tsx",
+      "statusId": "e2e-persistence-results",
+      "statusFragment": "ok:exp-storage=written",
+      "expectedText": "ok:exp-storage=written"
+    },
+    {
+      "id": "native.experiment-storage-relaunch",
+      "coverage": "replay-asserted",
+      "trigger": "load",
+      "transport": "After a new app process starts, the NitroExperimentStorage disk value must remain and the NitroMemoryStorage value must be gone",
+      "suite": "e2e/qa-persistence-relaunch.ad",
+      "source": "apps/example/app/e2e-persistence.tsx",
+      "statusId": "e2e-persistence-results",
+      "statusFragment": "ok:exp-storage=disk-kept:memory-cleared",
+      "expectedText": "ok:exp-storage=disk-kept:memory-cleared"
     }
   ],
   "pending": [
     {
       "id": "analytics.live-ingestion",
       "state": "pending-prerequisites",
-      "reason": "Local fixture delivery does not validate the live Amplitude ingestion endpoint or account-side receipt.",
+      "reason": "The local fixture accepts default nitroTransport batches (analytics.native-transport) but does not validate the live Amplitude ingestion endpoint, API key, or account-side receipt.",
       "prerequisites": [
         "Approved staging analytics key",
         "Separate opt-in live-ingestion replay and account-side event evidence"
@@ -211,7 +463,7 @@
     {
       "id": "experiment.live-provider",
       "state": "pending-prerequisites",
-      "reason": "The in-process flag fixture does not validate Amplitude Experiment provider authentication or live assignment freshness.",
+      "reason": "The local fixture serves Experiment flags and variants over native HTTP (experiment.native-http) but does not validate provider authentication or live assignment freshness.",
       "prerequisites": [
         "Approved staging deployment key",
         "Separate opt-in provider replay with the returned flag assignment recorded"

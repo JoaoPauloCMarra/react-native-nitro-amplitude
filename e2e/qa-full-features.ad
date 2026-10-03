@@ -35,7 +35,7 @@ press id="e2e-network-policy-run"
 wait text "ok:network=blocked"
 scroll bottom
 press id="e2e-screen-run"
-wait text "ok:screen"
+wait text "ok:screen=e2e-lab:dedup=1"
 scroll bottom
 press id="e2e-health-run"
 wait text "ok:health=true:safe=true:full=true"
@@ -44,7 +44,7 @@ press id="e2e-records-run"
 wait text "ok:events=record-probe"
 scroll bottom
 press id="e2e-flush-run"
-wait text "ok:flush=ok"
+wait text "ok:flush=ok:event=flush-probe:sent="
 scroll bottom
 press id="e2e-variant-run"
 wait text "ok:flag=on"
@@ -53,10 +53,10 @@ press id="e2e-lifecycle-run"
 wait text "ok:lifecycle=stale-then-fresh"
 scroll bottom
 press id="e2e-client-run"
-wait text "ok:user=e2e-combined:dry=1"
+wait text "ok:combined=user+connector+event"
 scroll bottom
 press id="e2e-run-stress"
-wait text "ok:tracks=50:ms="
+wait text "ok:stress=50:delivered=50"
 scroll top
 wait id="smoke-run-all"
 press id="smoke-run-all"

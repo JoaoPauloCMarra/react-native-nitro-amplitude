@@ -6,6 +6,15 @@ scroll bottom
 press id="e2e-storage-write"
 wait text "ok:storage=written"
 close
+open "com.nitroamplitude.example" "nitroamplitude://e2e-persistence?phase=write&runId=${RUN_ID}" --relaunch
+wait "stable"
+wait text "dry-run fixture"
+wait id="e2e-persistence-screen"
+wait id="e2e-persistence-results"
+wait text "ok:durable-identity=written"
+wait text "ok:exp-storage=written"
+wait text "persistence-write-done:fail=0;"
+close
 open "com.nitroamplitude.example" "nitroamplitude://e2e?fixtureUrl=${FIXTURE_URL}&runId=${RUN_ID}" --relaunch
 wait text "dry-run fixture"
 wait id="e2e-screen"
@@ -13,4 +22,13 @@ wait text "e2e-ready"
 scroll bottom
 press id="e2e-storage-read"
 wait text "ok:storage=restored"
+close
+open "com.nitroamplitude.example" "nitroamplitude://e2e-persistence?phase=read&runId=${RUN_ID}" --relaunch
+wait "stable"
+wait text "dry-run fixture"
+wait id="e2e-persistence-screen"
+wait id="e2e-persistence-results"
+wait text "ok:durable-identity=restored"
+wait text "ok:exp-storage=disk-kept:memory-cleared"
+wait text "persistence-read-done:fail=0;"
 close

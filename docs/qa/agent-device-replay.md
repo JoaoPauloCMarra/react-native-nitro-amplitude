@@ -10,15 +10,23 @@ suite paths listed in `e2e/amplitude-replay-coverage.json` in order:
 | `e2e/qa-deeplink.ad`             | `nitroamplitude://e2e-identity`                                                 | Identity lab load run and a pressed rerun                                                                                                              |
 | `e2e/qa-network.ad`              | `nitroamplitude://e2e-network`                                                  | Native HTTP timeout, refused, and invalid URL errors; default `nitroTransport` delivery and HTTP 503; native Experiment fetch; diagnostics and timings |
 | `e2e/qa-analytics-lab.ad`        | `nitroamplitude://e2e-analytics`                                                | Experiment exposure, sessions, plugins, device ID, shutdown, and Experiment helpers                                                                    |
+| `e2e/qa-background.ad`           | `nitroamplitude://e2e-background`                                               | A queued dry-run event is uploaded by the AppState background flush after the app goes to the home screen and is reopened                              |
 
 The main lab uses public controls and waits for their semantic results. The
-network, analytics, and persistence screens run their cases when they load and
+network, analytics, persistence, and background screens run their cases when they load and
 report every result in one accessibility probe at the top of the screen, so
 the waits do not depend on the viewport size. Coverage rows for these screens
 use `"trigger": "load"`: they have no `controlId`, and the suite must wait for
 the probe's `statusId` before it waits for the expected text. The persistence
 flow relaunches the app before it reads the values written by that same replay
 run.
+
+The background flow is the only flow that uses a device action. It queues one
+probe event on an instance with a 600000 ms flush interval, sends the app to
+the home screen with `home`, and reopens the same process with a plain `open`
+(no `--relaunch`). The screen then requires exactly one recorded probe event,
+recorded less than 120000 ms after it was queued. The reopen can take about
+25 seconds on an iOS simulator, so its waits use longer timeouts.
 
 `replay-asserted` in the coverage manifest describes an assertion authored in
 the suite. It does not say that a device replay has run or passed. Fixture rows

@@ -379,6 +379,7 @@ test("runner uses the manifest suites, exact target, unique OS temp artifacts, a
       "e2e/qa-deeplink.ad",
       "e2e/qa-network.ad",
       "e2e/qa-analytics-lab.ad",
+      "e2e/qa-background.ad",
       "--udid",
       "device-123",
       "--session",

@@ -27,6 +27,10 @@
     {
       "path": "e2e/qa-analytics-lab.ad",
       "purpose": "Run-on-load Experiment exposure, session, plugin, shutdown, and Experiment helper behavior in dry-run fixture mode"
+    },
+    {
+      "path": "e2e/qa-background.ad",
+      "purpose": "Run-on-load dry-run probe event queued before a home-screen background and recorded by the AppState background flush when the app is reopened"
     }
   ],
   "fixtureMarker": {
@@ -38,7 +42,8 @@
       "e2e/qa-persistence-relaunch.ad",
       "e2e/qa-deeplink.ad",
       "e2e/qa-network.ad",
-      "e2e/qa-analytics-lab.ad"
+      "e2e/qa-analytics-lab.ad",
+      "e2e/qa-background.ad"
     ]
   },
   "features": [
@@ -448,6 +453,18 @@
       "statusId": "e2e-persistence-results",
       "statusFragment": "ok:exp-storage=disk-kept:memory-cleared",
       "expectedText": "ok:exp-storage=disk-kept:memory-cleared"
+    },
+    {
+      "id": "analytics.background-flush",
+      "coverage": "replay-asserted",
+      "trigger": "load",
+      "transport": "DryRunTransport fixture with a 600000 ms flush interval; one queued probe event must not be recorded before the app leaves the foreground and must be recorded after the replay sends the app home and reopens it, within 120000 ms of being queued",
+      "suite": "e2e/qa-background.ad",
+      "source": "apps/example/app/e2e-background.tsx",
+      "statusId": "e2e-background-results",
+      "statusFragment": ":latency-ok;",
+      "expectedText": "bg:flushed=1:latency-ok;",
+      "claimLimit": "Uses the home device action and a plain open (no relaunch) to resume the same process; the screen reads records after the next return to active, so it proves the flush happened while the app was out of the foreground, not the exact background instant. Asserts the JS dry-run transport only, not native upload or durable-storage writes."
     }
   ],
   "pending": [

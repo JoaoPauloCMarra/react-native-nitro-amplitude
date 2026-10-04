@@ -1,0 +1,10 @@
+open "com.nitroamplitude.example" "nitroamplitude://e2e-background?fixtureUrl=${FIXTURE_URL}&runId=${RUN_ID}" --relaunch
+wait text "dry-run fixture"
+wait id="e2e-background-results"
+wait text "bg:armed;"
+wait text "bg:pending=0;"
+home
+open "com.nitroamplitude.example"
+wait text "dry-run fixture" 60000
+wait text "bg:flushed=1:latency-ok;" 30000
+close

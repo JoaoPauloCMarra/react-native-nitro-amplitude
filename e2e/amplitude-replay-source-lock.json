@@ -1,10 +1,11 @@
 {
   "version": 1,
-  "runtimeSourceSha256": "d07a63e0c951194c19802b6a93005deb79be1d1dda6b5ebe4b314694d813306b",
+  "runtimeSourceSha256": "87460ac97e5869f188a16150e2ff94703b91422961237093b3088200314e8ec6",
   "runtimeSourceFiles": [
     "apps/example/app.config.js",
     "apps/example/app/_layout.tsx",
     "apps/example/app/e2e-analytics.tsx",
+    "apps/example/app/e2e-background.tsx",
     "apps/example/app/e2e-identity.tsx",
     "apps/example/app/e2e-network.tsx",
     "apps/example/app/e2e-persistence.tsx",
@@ -137,13 +138,14 @@
     "packages/react-native-nitro-amplitude/src/presets.ts",
     "packages/react-native-nitro-amplitude/src/testing.ts"
   ],
-  "coverageManifestSha256": "9409aad1dd882b1bfa2929bff9f23f92ddc7174a3e59caaa183938ba7da5e2c1",
-  "suiteFilesSha256": "aeedae643b4978a150af96e2057a3cae38dceb1f66bd963f54efc9d4710e7c70",
+  "coverageManifestSha256": "0e0358ebb2362a98f121cadcd98286f75e6656fdb7a3ec5c2dc1528efbf33536",
+  "suiteFilesSha256": "50c0e5e960f3098978f32c0829269067fc82e29f16f7931bdbab6654dae6f0f8",
   "suites": [
     "e2e/qa-full-features.ad",
     "e2e/qa-persistence-relaunch.ad",
     "e2e/qa-deeplink.ad",
     "e2e/qa-network.ad",
-    "e2e/qa-analytics-lab.ad"
+    "e2e/qa-analytics-lab.ad",
+    "e2e/qa-background.ad"
   ]
 }

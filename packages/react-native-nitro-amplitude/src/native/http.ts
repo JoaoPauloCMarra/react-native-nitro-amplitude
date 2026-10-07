@@ -1,5 +1,10 @@
 import type { HttpClient, SimpleResponse } from "../experiment/types/transport";
-import { createAmplitudeError, getAmplitudeErrorCode } from "../errors";
+import {
+  createAmplitudeError,
+  getAmplitudeErrorCode,
+  parseNativeError,
+} from "../errors";
+import type { AmplitudeError } from "../errors";
 import { assertNetworkEnabled } from "../network";
 import { getAmplitudeWorker } from "./hybrid";
 import type { AmplitudeWorker } from "../AmplitudeWorker.nitro";
@@ -10,6 +15,20 @@ type PendingRequest = {
 };
 
 const DEFAULT_TIMEOUT_MILLIS = 10000;
+
+function createNativeError(
+  raw: string,
+  cause: unknown,
+  message?: string,
+): AmplitudeError {
+  const parsed = parseNativeError(raw);
+  return createAmplitudeError(
+    getAmplitudeErrorCode(new Error(raw)),
+    message ?? parsed.nativeCode,
+    cause,
+    parsed,
+  );
+}
 
 function createRequestId(): string {
   return `req_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
@@ -34,9 +53,7 @@ export class NitroHttpClient implements HttpClient {
       }
       this.pendingRequests.delete(requestId);
       if (error) {
-        pending.reject(
-          createAmplitudeError(getAmplitudeErrorCode(new Error(error)), error),
-        );
+        pending.reject(createNativeError(error, new Error(error)));
         return;
       }
       pending.resolve({
@@ -70,13 +87,8 @@ export class NitroHttpClient implements HttpClient {
         );
       } catch (error) {
         this.pendingRequests.delete(requestId);
-        reject(
-          createAmplitudeError(
-            getAmplitudeErrorCode(error),
-            error instanceof Error ? error.message : String(error),
-            error,
-          ),
-        );
+        const raw = error instanceof Error ? error.message : String(error);
+        reject(createNativeError(raw, error, raw));
       }
     });
   }

@@ -79,6 +79,7 @@ namespace NitroAmplitude {
 static NSString* const kDiskSuiteName = @"com.nitroamplitude.disk";
 static constexpr size_t kMaxCachedContexts = 8;
 static constexpr NSUInteger kMaxResponseBodyBytes = 4 * 1024 * 1024;
+static constexpr NSUInteger kMaxTransportDetailLength = 200;
 
 #ifdef NITRO_AMPLITUDE_TESTING
 static NSString* (^gIdentifierForVendorOverride)(void) = nil;
@@ -126,6 +127,57 @@ static std::optional<std::string> ToStdString(id value) {
 
 static NSString* ToNSString(const std::string& value) {
   return [[NSString alloc] initWithBytes:value.data() length:value.size() encoding:NSUTF8StringEncoding];
+}
+
+static NSRegularExpression* DetailRegex(NSString* pattern, NSRegularExpressionOptions options = 0) {
+  return [NSRegularExpression regularExpressionWithPattern:pattern options:options error:nil];
+}
+
+static NSString* SanitizeTransportDetail(NSString* value) {
+  static NSString* const group = @"[0-9A-Fa-f]{1,4}";
+  static NSArray<NSArray*>* rules = ^{
+    const NSRegularExpressionOptions secretOptions =
+        NSRegularExpressionCaseInsensitive | NSRegularExpressionDotMatchesLineSeparators;
+    NSString* ipv6 = [NSString
+        stringWithFormat:@"(?<![\\w:])(?:(?:%1$@:){7}%1$@|%1$@(?::%1$@){0,6}::(?:%1$@(?::%1$@){0,6})?|::%1$@(?::%1$@){0,6})(?![\\w:])(?:%%\\w+)?",
+                         group];
+    return @[
+      @[ DetailRegex(@"[|\\r\\n]+"), @" " ],
+      @[ DetailRegex(@"\\?\\S*"), @"" ],
+      @[ DetailRegex(@"//[^/\\s@]+@"), @"//" ],
+      @[ DetailRegex(@"\\bvalue:\\s.*", secretOptions), @"value: [redacted]" ],
+      @[
+        DetailRegex(@"(authorization|api[-_ ]?keys?|deployment[-_ ]?key|bearer|basic|tokens?|password|passwd|secret|cookie|(?<!url)session)\\b.*",
+                    secretOptions),
+        @"[redacted]"
+      ],
+      @[ DetailRegex(@"[A-Za-z0-9+/=_-]{32,}"), @"[redacted]" ],
+      @[ DetailRegex(@" from /\\S+ \\(port \\d+\\)"), @"" ],
+      @[ DetailRegex(@"\\b\\d{1,3}(?:\\.\\d{1,3}){3}\\b"), @"[ip]" ],
+      @[ DetailRegex(ipv6), @"[ip]" ],
+    ];
+  }();
+  NSMutableString* text = [(value ?: @"") mutableCopy];
+  for (NSArray* rule in rules) {
+    [(NSRegularExpression*)rule[0] replaceMatchesInString:text
+                                                  options:0
+                                                    range:NSMakeRange(0, text.length)
+                                             withTemplate:rule[1]];
+  }
+  NSString* trimmed = [text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+  if (trimmed.length <= kMaxTransportDetailLength) {
+    return trimmed;
+  }
+  const NSRange lastKept = [trimmed rangeOfComposedCharacterSequenceAtIndex:kMaxTransportDetailLength - 1];
+  return [trimmed substringToIndex:NSMaxRange(lastKept)];
+}
+
+static std::string FormatNetworkError(NSError* error) {
+  NSString* detail = [NSString stringWithFormat:@"network_error|nsurl:%ld|%@|%@",
+                                                (long)error.code,
+                                                SanitizeTransportDetail(error.domain),
+                                                SanitizeTransportDetail(error.localizedDescription)];
+  return ToStdString(detail).value_or("network_error");
 }
 
 static NSString* IdentifierForVendor() {
@@ -417,7 +469,7 @@ HttpResult IOSAmplitudeAdapterCpp::performHttpRequest(
         (error.code == NSURLErrorTimedOut || error.code == NSURLErrorCancelled)) {
       result.error = error.code == NSURLErrorTimedOut ? "timeout" : "cancelled";
     } else {
-      result.error = "network_error";
+      result.error = FormatNetworkError(error);
     }
   } else if ([collector.response isKindOfClass:[NSHTTPURLResponse class]]) {
     result.statusCode = static_cast<int>(((NSHTTPURLResponse*)collector.response).statusCode);

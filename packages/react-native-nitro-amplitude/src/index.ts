@@ -137,7 +137,11 @@ export {
   createAmplitudeError,
   getAmplitudeErrorCode,
 } from "./errors";
-export type { AmplitudeErrorCode } from "./errors";
+export type {
+  AmplitudeErrorCode,
+  AmplitudeErrorDetails,
+  NativeErrorInfo,
+} from "./errors";
 export {
   createAmplitudeClient,
   createDurableAmplitudeStoragePreset,

@@ -25,6 +25,24 @@ object AndroidAmplitudeAdapter {
   private const val MAX_RESPONSE_BODY_BYTES = 4 * 1024 * 1024
   private const val LEGACY_DISK_PREFS = "NitroAmplitude"
   private const val STORAGE_DIRECTORY = "nitro-amplitude"
+  private const val MAX_TRANSPORT_DETAIL_LENGTH = 200
+  private val DETAIL_SEPARATORS = Regex("[|\\r\\n]+")
+  private val DETAIL_QUERY = Regex("\\?\\S*")
+  private val DETAIL_USERINFO = Regex("//[^/\\s@]+@")
+  private val DETAIL_VALUE = Regex("\\bvalue:\\s.*", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
+  private val DETAIL_SECRET = Regex(
+    "(authorization|api[-_ ]?keys?|deployment[-_ ]?key|bearer|basic|tokens?|password|passwd|secret|cookie|(?<!url)session)\\b.*",
+    setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL),
+  )
+  private val DETAIL_LONG_TOKEN = Regex("[A-Za-z0-9+/=_-]{32,}")
+  private val DETAIL_LOCAL_ADDRESS = Regex(" from /\\S+ \\(port \\d+\\)")
+  private val DETAIL_IPV4 = Regex("\\b\\d{1,3}(?:\\.\\d{1,3}){3}\\b")
+  private const val IPV6_GROUP = "[0-9A-Fa-f]{1,4}"
+  private val DETAIL_IPV6 = Regex(
+    "(?<![\\w:])(?:(?:$IPV6_GROUP:){7}$IPV6_GROUP" +
+      "|$IPV6_GROUP(?::$IPV6_GROUP){0,6}::(?:$IPV6_GROUP(?::$IPV6_GROUP){0,6})?" +
+      "|::$IPV6_GROUP(?::$IPV6_GROUP){0,6})(?![\\w:])(?:%\\w+)?",
+  )
 
   private var appContext: Context? = null
   private val executor = Executors.newSingleThreadExecutor()
@@ -161,6 +179,30 @@ object AndroidAmplitudeAdapter {
     return String(buffer.toByteArray(), Charsets.UTF_8)
   }
 
+  private fun sanitizeTransportDetail(value: String?): String {
+    val text = (value ?: "")
+      .replace(DETAIL_SEPARATORS, " ")
+      .replace(DETAIL_QUERY, "")
+      .replace(DETAIL_USERINFO, "//")
+      .replace(DETAIL_VALUE, "value: [redacted]")
+      .replace(DETAIL_SECRET, "[redacted]")
+      .replace(DETAIL_LONG_TOKEN, "[redacted]")
+      .replace(DETAIL_LOCAL_ADDRESS, "")
+      .replace(DETAIL_IPV4, "[ip]")
+      .replace(DETAIL_IPV6, "[ip]")
+      .trim()
+    if (text.length <= MAX_TRANSPORT_DETAIL_LENGTH) {
+      return text
+    }
+    val end =
+      if (text[MAX_TRANSPORT_DETAIL_LENGTH - 1].isHighSurrogate()) MAX_TRANSPORT_DETAIL_LENGTH - 1
+      else MAX_TRANSPORT_DETAIL_LENGTH
+    return text.substring(0, end)
+  }
+
+  internal fun formatTransportError(error: Throwable): String =
+    "network_error|${sanitizeTransportDetail(error.javaClass.name)}|${sanitizeTransportDetail(error.message)}"
+
   @JvmStatic
   fun performHttpRequest(
     url: String,
@@ -188,7 +230,7 @@ object AndroidAmplitudeAdapter {
     } catch (error: MalformedURLException) {
       return arrayOf("0", "", "invalid_url")
     } catch (error: Exception) {
-      return arrayOf("0", "", "network_error")
+      return arrayOf("0", "", formatTransportError(error))
     }
 
     val timedOut = AtomicBoolean(false)
@@ -208,7 +250,7 @@ object AndroidAmplitudeAdapter {
     } catch (error: SocketTimeoutException) {
       arrayOf("0", "", "timeout")
     } catch (error: Exception) {
-      arrayOf("0", "", if (timedOut.get()) "timeout" else "network_error")
+      arrayOf("0", "", if (timedOut.get()) "timeout" else formatTransportError(error))
     } finally {
       timeoutTask.cancel(false)
       connection.disconnect()

@@ -242,6 +242,129 @@ class AndroidAmplitudeAdapterTest {
     }
   }
 
+  private fun assertTransportFailure(exception: String?, result: Array<String>) {
+    assertEquals("0", result[0])
+    assertEquals("", result[1])
+    assertTrue(result[2], result[2].startsWith("network_error|"))
+    if (exception != null) {
+      assertEquals(exception, result[2].split("|")[1])
+    }
+  }
+
+  @Test
+  fun formatsUnknownHostException() {
+    assertEquals(
+      "network_error|java.net.UnknownHostException|Unable to resolve host \"api.lab.amplitude.com\"",
+      AndroidAmplitudeAdapter.formatTransportError(
+        java.net.UnknownHostException("Unable to resolve host \"api.lab.amplitude.com\""),
+      ),
+    )
+  }
+
+  @Test
+  fun formatsSslHandshakeException() {
+    assertEquals(
+      "network_error|javax.net.ssl.SSLHandshakeException|Trust anchor for certification path not found.",
+      AndroidAmplitudeAdapter.formatTransportError(
+        javax.net.ssl.SSLHandshakeException("Trust anchor for certification path not found."),
+      ),
+    )
+  }
+
+  @Test
+  fun formatsConnectExceptionAndMissingMessage() {
+    assertEquals(
+      "network_error|java.net.ConnectException|failed to connect to /[ip] (port 443)",
+      AndroidAmplitudeAdapter.formatTransportError(
+        java.net.ConnectException("failed to connect to /10.0.0.1 (port 443)"),
+      ),
+    )
+    val full = AndroidAmplitudeAdapter.formatTransportError(
+      java.net.ConnectException(
+        "failed to connect to api.lab.amplitude.com/93.184.216.34 (port 443) from /10.0.2.15 (port 51234) after 10000ms: isConnected failed: ECONNREFUSED (Connection refused)",
+      ),
+    )
+    assertEquals(
+      "network_error|java.net.ConnectException|failed to connect to api.lab.amplitude.com/[ip] (port 443) after 10000ms: isConnected failed: ECONNREFUSED (Connection refused)",
+      full,
+    )
+    assertFalse(full, full.contains("10.0.2.15"))
+    assertFalse(full, full.contains("51234"))
+    assertTrue(full, full.contains("ECONNREFUSED"))
+    val unreachable = AndroidAmplitudeAdapter.formatTransportError(
+      java.net.ConnectException("failed to connect to /fe80::1%wlan0 (port 443) from /2001:db8::7 (port 4000): connect failed: ENETUNREACH (Network is unreachable)"),
+    )
+    assertEquals(
+      "network_error|java.net.ConnectException|failed to connect to /[ip] (port 443): connect failed: ENETUNREACH (Network is unreachable)",
+      unreachable,
+    )
+    assertEquals(
+      "network_error|java.net.ConnectException|",
+      AndroidAmplitudeAdapter.formatTransportError(java.net.ConnectException()),
+    )
+  }
+
+  @Test
+  fun transportErrorDetailIsSanitized() {
+    val injected = AndroidAmplitudeAdapter.formatTransportError(
+      java.io.IOException("a|b\nc\r\nd"),
+    )
+    assertEquals("network_error|java.io.IOException|a b c d", injected)
+
+    val words = "ab ".repeat(200)
+    val capped = AndroidAmplitudeAdapter.formatTransportError(
+      java.io.IOException(words),
+    )
+    assertEquals(words.take(200), capped.removePrefix("network_error|java.io.IOException|"))
+
+    val longRun = AndroidAmplitudeAdapter.formatTransportError(
+      java.io.IOException("x".repeat(500)),
+    )
+    assertEquals("network_error|java.io.IOException|[redacted]", longRun)
+
+    val surrogate = AndroidAmplitudeAdapter.formatTransportError(
+      java.io.IOException("ab ".repeat(66) + "c" + "\uD83D\uDE00" + " tail"),
+    )
+    val surrogateDetail = surrogate.removePrefix("network_error|java.io.IOException|")
+    assertEquals(199, surrogateDetail.length)
+    assertFalse(surrogateDetail, surrogateDetail.last().isHighSurrogate())
+
+    val withQuery = AndroidAmplitudeAdapter.formatTransportError(
+      java.io.IOException("failed https://api.lab.amplitude.com/v1/vardata?user_id=u1&device=d1 after 10s"),
+    )
+    assertFalse(withQuery, withQuery.contains("?"))
+    assertFalse(withQuery, withQuery.contains("user_id"))
+
+    val withKey = AndroidAmplitudeAdapter.formatTransportError(
+      java.lang.IllegalArgumentException("Unexpected char 0x0a at 3 in Authorization value: Api-Key client-secret-123"),
+    )
+    assertFalse(withKey, withKey.contains("client-secret-123"))
+    assertFalse(withKey, withKey.contains("Api-Key"))
+  }
+
+  @Test
+  fun transportErrorDetailRedactionParity() {
+    val cases = listOf(
+      "https://user:pw@amplitude.test/p failed" to "https://amplitude.test/p failed",
+      "Authorization: Api-Key abc" to "[redacted]",
+      "bad Cookie: a=b" to "bad [redacted]",
+      "set Password 123 now" to "set [redacted]",
+      "NSURLSession load failed" to "NSURLSession load failed",
+      "header value: top-secret-thing" to "header value: [redacted]",
+      "key abcdefghijklmnopqrstuvwxyzABCDEF0123456789 end" to "key [redacted] end",
+      "Error: x at 10:30 and 10:30:15" to "Error: x at 10:30 and 10:30:15",
+      "peer 192.168.1.20 and ::1 and 2001:db8:0:0:0:0:0:1 and fe80::1%en0" to "peer [ip] and [ip] and [ip] and [ip]",
+      "std::string failed" to "std::string failed",
+    )
+    for ((input, expected) in cases) {
+      assertEquals(
+        input,
+        "network_error|java.io.IOException|$expected",
+        AndroidAmplitudeAdapter.formatTransportError(java.io.IOException(input)),
+      )
+    }
+  }
+
   @Test
   fun invalidUtf8ResponseBodyDoesNotThrow() {
     StubServer { _, output ->
@@ -276,7 +399,7 @@ class AndroidAmplitudeAdapterTest {
     val result = AndroidAmplitudeAdapter.performHttpRequest(
       "http://127.0.0.1:$port/closed", "POST", emptyArray(), emptyArray(), "{}".toByteArray(), 5000,
     )
-    assertArrayEquals(arrayOf("0", "", "network_error"), result)
+    assertTransportFailure("java.net.ConnectException", result)
   }
 
   @Test
@@ -285,7 +408,7 @@ class AndroidAmplitudeAdapterTest {
       val result = AndroidAmplitudeAdapter.performHttpRequest(
         server.url("/drop"), "POST", emptyArray(), emptyArray(), "{}".toByteArray(), 5000,
       )
-      assertArrayEquals(arrayOf("0", "", "network_error"), result)
+      assertTransportFailure(null, result)
     }
   }
 
@@ -302,12 +425,12 @@ class AndroidAmplitudeAdapterTest {
         val result = AndroidAmplitudeAdapter.performHttpRequest(
           server.url("/method"), method, emptyArray(), emptyArray(), "{}".toByteArray(), 5000,
         )
-        assertArrayEquals(arrayOf("0", "", "network_error"), result)
+        assertTransportFailure("java.net.ProtocolException", result)
       }
       val invalidHeader = AndroidAmplitudeAdapter.performHttpRequest(
         server.url("/header"), "POST", arrayOf("Bad Header\n"), arrayOf("value"), "{}".toByteArray(), 5000,
       )
-      assertArrayEquals(arrayOf("0", "", "network_error"), invalidHeader)
+      assertTransportFailure("java.lang.IllegalArgumentException", invalidHeader)
       assertTrue(server.requests.isEmpty())
     }
   }

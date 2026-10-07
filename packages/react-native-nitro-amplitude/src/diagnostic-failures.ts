@@ -1,6 +1,8 @@
 import type { Payload, Response, Transport } from "@amplitude/analytics-core";
 import { Status } from "@amplitude/analytics-core";
 import type { HttpClient, SimpleResponse } from "./experiment/types/transport";
+import { AmplitudeError, parseNativeError } from "./errors";
+import type { AmplitudeErrorDetails } from "./errors";
 import { PACKAGE_VERSION } from "./package-version";
 import {
   isNetworkGuardedTransport,
@@ -16,6 +18,10 @@ export type AmplitudeDiagnosticFailureKind =
   | "network_error"
   | "timeout"
   | "dns_or_hostname_resolution"
+  | "offline"
+  | "connect_failed"
+  | "connection_lost"
+  | "tls_failure"
   | "http_status"
   | "unknown";
 
@@ -140,12 +146,66 @@ function isHttpFailure(statusCode: number | undefined): statusCode is number {
   );
 }
 
+const ANDROID_TLS_EXCEPTION =
+  /(?:^|\.)(?:SSL\w*|Certificate\w*|CertPath\w*)Exception$/;
+
+function classifyNativeDetails(
+  details: AmplitudeErrorDetails,
+): AmplitudeDiagnosticFailureKind | undefined {
+  const { code, exception } = details;
+  if (code !== undefined) {
+    if (code === -1003 || code === -1006) return "dns_or_hostname_resolution";
+    if (code === -1009) return "offline";
+    if (code === -1004) return "connect_failed";
+    if (code === -1005) return "connection_lost";
+    if ((code <= -1200 && code >= -1206) || code === -2000) {
+      return "tls_failure";
+    }
+    return undefined;
+  }
+  if (exception === undefined) {
+    return undefined;
+  }
+  if (exception.endsWith("UnknownHostException")) {
+    return "dns_or_hostname_resolution";
+  }
+  if (ANDROID_TLS_EXCEPTION.test(exception)) {
+    return "tls_failure";
+  }
+  if (exception.endsWith("ConnectException")) {
+    return /ENETUNREACH|network is unreachable/i.test(details.description ?? "")
+      ? "offline"
+      : "connect_failed";
+  }
+  if (
+    exception.endsWith("SocketException") ||
+    exception.endsWith("EOFException")
+  ) {
+    return "connection_lost";
+  }
+  return undefined;
+}
+
+function readNativeDetails(input: unknown): AmplitudeErrorDetails | undefined {
+  if (input instanceof AmplitudeError) {
+    return input.details;
+  }
+  return input instanceof Error
+    ? parseNativeError(input.message).details
+    : undefined;
+}
+
 export function classifyDiagnosticFailure(
   input: unknown,
   statusCode?: number,
 ): AmplitudeDiagnosticFailureKind {
   if (isHttpFailure(statusCode)) {
     return "http_status";
+  }
+  const nativeDetails = readNativeDetails(input);
+  const nativeKind = nativeDetails && classifyNativeDetails(nativeDetails);
+  if (nativeKind) {
+    return nativeKind;
   }
   const message =
     input instanceof Error

@@ -4,6 +4,55 @@ All notable changes to this project are documented in this file.
 
 The format follows Keep a Changelog and the project adheres to SemVer.
 
+## [0.11.0] - 2026-10-07
+
+### Added
+
+- Native HTTP failures keep the OS-level cause. iOS reports the `NSURLError`
+  code, domain, and description; Android reports the exception class and
+  message. Descriptions are capped at 200 characters and exclude `|`, line
+  breaks, URL query strings, URL credentials, credential-like values, long
+  token-like strings, and local socket addresses. The remote hostname is kept.
+  IPv4 and IPv6 addresses are replaced with `[ip]`.
+- `AmplitudeError` has `nativeCode` and `details` (`domain`, `code`,
+  `description`, `exception`) for native HTTP failures, and sets `cause`.
+  `nativeCode` distinguishes `cancelled`, `queue_full`, `invalid_url`,
+  `invalid_http_response`, and `native_http_exception`, which all still use
+  `code: "network_error"`. `AmplitudeErrorDetails` is exported.
+- Diagnostic failure kinds `offline`, `connect_failed`, `connection_lost`, and
+  `tls_failure`. DNS failures (`-1003`, `-1006`, `UnknownHostException`) report
+  `dns_or_hostname_resolution`.
+
+### Fixed
+
+- `queue_full` is now reported as `code: "network_error"` with
+  `nativeCode: "queue_full"`. Before, the function name Nitro adds in front of
+  the native message hid the native code, so this error surfaced as
+  `native_unavailable`. `getAmplitudeErrorCode` and `parseNativeError` now read
+  the native code after the first `NitroAmplitude:`.
+- `error.details` is set only for `network_error` native strings, so error
+  messages from other libraries that contain `|` are not parsed as native
+  detail.
+- Android no longer cuts a surrogate pair in half when it caps a description at
+  200 characters.
+
+### Documentation
+
+- `NativeErrorInfo` is exported.
+- Document that Android offline usually surfaces as `UnknownHostException`
+  (`dns_or_hostname_resolution`) while iOS reports `-1009` (`offline`).
+- Document `nativeCode` and `details`, the transport timing facts
+  (`fetchTimeoutMillis` excludes queue time, the iOS wait limit is the timeout
+  plus 5 seconds, 2 native workers), and replacing the Experiment `httpClient`.
+
+Breaking changes: None. `error.message` (the bare native code, for example
+`network_error`) is unchanged. `queue_full` now reports `code: "network_error"`
+where it reported `native_unavailable`; this matches the documented contract
+and the `NATIVE_ERROR_CODES` mapping, and the new `nativeCode` and `details`
+fields did not exist before this release. The added
+`AmplitudeDiagnosticFailureKind` values can reach code that switches over the
+kind exhaustively; handle the new values or add a default branch.
+
 ## [0.10.1] - 2026-10-03
 
 ### Fixed

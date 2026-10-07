@@ -5,10 +5,10 @@ and the on-disk event/experiment queue.
 
 ## Kept
 
-| Library | Where | Why |
-| --- | --- | --- |
-| zlib gzip | `cpp/core/Gzip.cpp`, `HybridAmplitudeWorker` | Amplitude HTTP V2 accepts `Content-Encoding: gzip`. Bodies ≥ 1 KiB to `*.amplitude.com` are compressed on the worker thread. |
-| JSONL segments + tombstones | `JsonlSegmentStore` | Deletes append a tombstone instead of rewriting the segment. Compaction runs when a segment is more than 50% dead. Compaction keeps a tombstone while any lower segment still holds data, so a deleted key cannot reappear after relaunch, and it aborts without changes when a live row cannot be read. A delete throws `storage_error` when its tombstone cannot be written. Segment files are named `segment-<id>.jsonl` with a decimal id from 0 to 4294967295; a file with a larger id is ignored. Opening the store removes leftover `segment-<id>.jsonl.tmp.*` files from an interrupted compaction and removes empty segment files. A write that fails while the segment file is open (disk full, quota) is rolled back: the segment keeps its last complete record and its id. A segment that cannot be opened for writing is retired and the next id is used. If the storage directory is removed while the app runs, the next write re-creates it and reloads the index from disk. The key `\x7fDEL` is reserved for tombstones; a write with that key throws `storage_error`. |
+| Library                     | Where                                        | Why                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| --------------------------- | -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| zlib gzip                   | `cpp/core/Gzip.cpp`, `HybridAmplitudeWorker` | Amplitude HTTP V2 accepts `Content-Encoding: gzip`. Bodies ≥ 1 KiB to `*.amplitude.com` are compressed on the worker thread.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| JSONL segments + tombstones | `JsonlSegmentStore`                          | Deletes append a tombstone instead of rewriting the segment. Compaction runs when a segment is more than 50% dead. Compaction keeps a tombstone while any lower segment still holds data, so a deleted key cannot reappear after relaunch, and it aborts without changes when a live row cannot be read. A delete throws `storage_error` when its tombstone cannot be written. Segment files are named `segment-<id>.jsonl` with a decimal id from 0 to 4294967295; a file with a larger id is ignored. Opening the store removes leftover `segment-<id>.jsonl.tmp.*` files from an interrupted compaction and removes empty segment files. A write that fails while the segment file is open (disk full, quota) is rolled back: the segment keeps its last complete record and its id. A segment that cannot be opened for writing is retired and the next id is used. If the storage directory is removed while the app runs, the next write re-creates it and reloads the index from disk. The key `\x7fDEL` is reserved for tombstones; a write with that key throws `storage_error`. |
 
 ## Limits and durability
 
@@ -46,6 +46,12 @@ and the on-disk event/experiment queue.
   `HttpURLConnection`, which sends `GET`, `HEAD`, `POST`, `PUT`, `DELETE`,
   `OPTIONS`, and `TRACE`; `PATCH` and custom methods are not supported on
   Android and complete with `network_error`.
+- **Error detail.** A `network_error` carries platform detail after the code,
+  separated by `|`: `network_error|nsurl:<code>|<domain>|<description>` on iOS
+  and `network_error|<exception class>|<message>` on Android. Free text drops
+  `|` and line breaks, URL query strings, and credential-like values, and is
+  capped at 200 characters. `timeout` and `cancelled` stay bare. JavaScript
+  parses the string into `AmplitudeError.nativeCode` and `details`.
 - **HTTP responses.** A response body is read up to 4 MiB. A longer body is
   cut at 4 MiB and the request still completes with its HTTP status code and
   no error.
@@ -53,11 +59,11 @@ and the on-disk event/experiment queue.
 
 ## Evaluated and not shipped
 
-| Library | Decision |
-| --- | --- |
-| yyjson | Rejected for event encode. Payload shape is owned by `@amplitude/analytics-core` in JavaScript. |
-| SQLite queue | Rejected for this pass. Tombstones give durable deletes without a second store format. |
-| libcurl | Rejected. Platform HTTP adapters already run off the JS thread. |
+| Library      | Decision                                                                                        |
+| ------------ | ----------------------------------------------------------------------------------------------- |
+| yyjson       | Rejected for event encode. Payload shape is owned by `@amplitude/analytics-core` in JavaScript. |
+| SQLite queue | Rejected for this pass. Tombstones give durable deletes without a second store format.          |
+| libcurl      | Rejected. Platform HTTP adapters already run off the JS thread.                                 |
 
 Custom `serverUrl` hosts are not gzipped so local and mock transports keep
 plain JSON. An existing `Content-Encoding` header is left untouched.

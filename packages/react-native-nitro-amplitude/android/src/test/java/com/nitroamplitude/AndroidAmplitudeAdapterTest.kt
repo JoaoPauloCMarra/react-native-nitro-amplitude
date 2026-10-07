@@ -242,6 +242,74 @@ class AndroidAmplitudeAdapterTest {
     }
   }
 
+  private fun assertTransportFailure(exception: String?, result: Array<String>) {
+    assertEquals("0", result[0])
+    assertEquals("", result[1])
+    assertTrue(result[2], result[2].startsWith("network_error|"))
+    if (exception != null) {
+      assertEquals(exception, result[2].split("|")[1])
+    }
+  }
+
+  @Test
+  fun formatsUnknownHostException() {
+    assertEquals(
+      "network_error|java.net.UnknownHostException|Unable to resolve host \"api.lab.amplitude.com\"",
+      AndroidAmplitudeAdapter.formatTransportError(
+        java.net.UnknownHostException("Unable to resolve host \"api.lab.amplitude.com\""),
+      ),
+    )
+  }
+
+  @Test
+  fun formatsSslHandshakeException() {
+    assertEquals(
+      "network_error|javax.net.ssl.SSLHandshakeException|Trust anchor for certification path not found.",
+      AndroidAmplitudeAdapter.formatTransportError(
+        javax.net.ssl.SSLHandshakeException("Trust anchor for certification path not found."),
+      ),
+    )
+  }
+
+  @Test
+  fun formatsConnectExceptionAndMissingMessage() {
+    assertEquals(
+      "network_error|java.net.ConnectException|failed to connect to /10.0.0.1 (port 443)",
+      AndroidAmplitudeAdapter.formatTransportError(
+        java.net.ConnectException("failed to connect to /10.0.0.1 (port 443)"),
+      ),
+    )
+    assertEquals(
+      "network_error|java.net.ConnectException|",
+      AndroidAmplitudeAdapter.formatTransportError(java.net.ConnectException()),
+    )
+  }
+
+  @Test
+  fun transportErrorDetailIsSanitized() {
+    val injected = AndroidAmplitudeAdapter.formatTransportError(
+      java.io.IOException("a|b\nc\r\nd"),
+    )
+    assertEquals("network_error|java.io.IOException|a b c d", injected)
+
+    val capped = AndroidAmplitudeAdapter.formatTransportError(
+      java.io.IOException("x".repeat(500)),
+    )
+    assertEquals("x".repeat(200), capped.removePrefix("network_error|java.io.IOException|"))
+
+    val withQuery = AndroidAmplitudeAdapter.formatTransportError(
+      java.io.IOException("failed https://api.lab.amplitude.com/v1/vardata?user_id=u1&device=d1 after 10s"),
+    )
+    assertFalse(withQuery, withQuery.contains("?"))
+    assertFalse(withQuery, withQuery.contains("user_id"))
+
+    val withKey = AndroidAmplitudeAdapter.formatTransportError(
+      java.lang.IllegalArgumentException("Unexpected char 0x0a at 3 in Authorization value: Api-Key client-secret-123"),
+    )
+    assertFalse(withKey, withKey.contains("client-secret-123"))
+    assertFalse(withKey, withKey.contains("Api-Key"))
+  }
+
   @Test
   fun invalidUtf8ResponseBodyDoesNotThrow() {
     StubServer { _, output ->
@@ -276,7 +344,7 @@ class AndroidAmplitudeAdapterTest {
     val result = AndroidAmplitudeAdapter.performHttpRequest(
       "http://127.0.0.1:$port/closed", "POST", emptyArray(), emptyArray(), "{}".toByteArray(), 5000,
     )
-    assertArrayEquals(arrayOf("0", "", "network_error"), result)
+    assertTransportFailure("java.net.ConnectException", result)
   }
 
   @Test
@@ -285,7 +353,7 @@ class AndroidAmplitudeAdapterTest {
       val result = AndroidAmplitudeAdapter.performHttpRequest(
         server.url("/drop"), "POST", emptyArray(), emptyArray(), "{}".toByteArray(), 5000,
       )
-      assertArrayEquals(arrayOf("0", "", "network_error"), result)
+      assertTransportFailure(null, result)
     }
   }
 
@@ -302,12 +370,12 @@ class AndroidAmplitudeAdapterTest {
         val result = AndroidAmplitudeAdapter.performHttpRequest(
           server.url("/method"), method, emptyArray(), emptyArray(), "{}".toByteArray(), 5000,
         )
-        assertArrayEquals(arrayOf("0", "", "network_error"), result)
+        assertTransportFailure("java.net.ProtocolException", result)
       }
       val invalidHeader = AndroidAmplitudeAdapter.performHttpRequest(
         server.url("/header"), "POST", arrayOf("Bad Header\n"), arrayOf("value"), "{}".toByteArray(), 5000,
       )
-      assertArrayEquals(arrayOf("0", "", "network_error"), invalidHeader)
+      assertTransportFailure("java.lang.IllegalArgumentException", invalidHeader)
       assertTrue(server.requests.isEmpty())
     }
   }

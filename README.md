@@ -24,7 +24,7 @@ bun add react-native-nitro-amplitude react-native-nitro-modules
 
 ## Requirements and compatibility
 
-Compatibility for `0.10.1`:
+Compatibility for `0.11.0`:
 
 | Dependency                   | Supported range    | Tested baseline     |
 | ---------------------------- | ------------------ | ------------------- |
@@ -46,14 +46,14 @@ Expo app.
 
 ### Upgrade from 0.7.x and earlier
 
-The `0.8.x`, `0.9.x`, and `0.10.x` lines keep the native peer boundary introduced in `0.7.0`:
+The `0.8.x`, `0.9.x`, `0.10.x`, and `0.11.x` lines keep the native peer boundary introduced in `0.7.0`:
 `react-native-nitro-amplitude` requires `react-native-nitro-modules`
 `>=0.37.0 <0.38.0`. Upgrade the Nitro package together with this package, then
 regenerate and rebuild native projects so the committed Nitro 0.37.1 bindings
 are compiled into the app:
 
 ```sh
-bun add react-native-nitro-amplitude@0.10.1 react-native-nitro-modules@0.37.1
+bun add react-native-nitro-amplitude@0.11.0 react-native-nitro-modules@0.37.1
 bunx expo prebuild
 ```
 
@@ -395,13 +395,102 @@ try {
 
 Error codes cover initialization, network, storage, credentials, Experiment
 fetches, native availability, serialization, event size, timeouts, and unknown
-failures. Native transport and storage failures carry stable machine-readable
-codes (`invalid_url`, `timeout`, `network_error`, `invalid_http_response`,
-`cancelled`, `queue_full`, `disk_adapter_unavailable`); classification does not
-depend on localized message text. Native startup failures are also available
-through `getLastNativeError()` and diagnostics. Do not expose raw error
-messages to end users without reviewing them for application-specific
-sensitive data.
+failures. `error.code` stays a stable category and `error.message` stays the
+bare native code (for example `network_error`), so grouping and deduplication
+keep working. Classification does not depend on localized message text.
+Native startup failures are also available through `getLastNativeError()` and
+diagnostics. Do not expose raw error messages to end users without reviewing
+them for application-specific sensitive data.
+
+### Native transport detail
+
+Native HTTP failures expose the exact native outcome on two extra fields:
+
+- `error.nativeCode`: the native code, one of `network_error`, `timeout`,
+  `invalid_url`, `invalid_http_response`, `cancelled`, `queue_full`, or
+  `native_http_exception`. All except `timeout` keep
+  `error.code` as `network_error`; use `nativeCode` to tell them apart.
+- `error.details`: OS-level detail for `network_error`, when the platform
+  reports it. iOS sets `domain`, `code` (an `NSURLError` code such as `-1003`),
+  and `description`. Android sets `exception` (the exception class, such as
+  `java.net.UnknownHostException`) and `description`. `details` is `undefined`
+  for other native codes.
+- `error.cause`: an `Error` whose message is the raw native string.
+
+```ts
+try {
+  await experiment.fetchOrThrow();
+} catch (error) {
+  if (error instanceof AmplitudeError && error.details) {
+    report({
+      code: error.code,
+      nativeCode: error.nativeCode,
+      domain: error.details.domain,
+      osCode: error.details.code,
+      exception: error.details.exception,
+    });
+  }
+}
+```
+
+`description` is the platform's own text, capped at 200 characters, with `|`,
+line breaks, URL query strings, and credential-like values removed. It is not
+localized or stable across OS versions. Group on `nativeCode`, `domain`,
+`code`, and `exception`, not on `description`.
+
+`getDiagnostics().diagnosticFailures[].kind` uses the same detail. Besides
+`network_error`, `timeout`, `dns_or_hostname_resolution`, and `http_status`, it
+can report `offline` (`-1009`, or an unreachable network on Android),
+`connect_failed` (`-1004`, `ConnectException`), `connection_lost` (`-1005`,
+`SocketException`, `EOFException`), and `tls_failure` (`-1200` to `-1206`,
+`-2000`, `SSLException` and certificate exceptions). DNS covers `-1003`,
+`-1006`, and `UnknownHostException`.
+
+### Transport behavior
+
+- `fetchTimeoutMillis` (default `10000`) starts when a native worker begins
+  the request. Time spent waiting in the native queue is not counted.
+- The native worker runs 2 requests at a time. Analytics uploads and Experiment
+  fetches share it, so a burst of uploads can delay a fetch before its timeout
+  starts.
+- iOS also stops waiting after `fetchTimeoutMillis + 5000` ms and reports
+  `timeout`, even if `URLSession` has not finished.
+- The worker caps any timeout at 300000 ms.
+
+### Replace the Experiment HTTP client
+
+Pass `httpClient` to route Experiment fetches through your own transport, for
+example the platform `fetch`, to compare it with the native client:
+
+```ts
+import { Experiment } from "react-native-nitro-amplitude";
+
+const httpClient = {
+  async request(url, method, headers, data, timeoutMillis = 10000) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMillis);
+    try {
+      const response = await fetch(url, {
+        method,
+        headers,
+        body: data ?? undefined,
+        signal: controller.signal,
+      });
+      return { status: response.status, body: await response.text() };
+    } finally {
+      clearTimeout(timer);
+    }
+  },
+};
+
+const experiment = Experiment.initialize("EXPERIMENT_DEPLOYMENT_KEY", {
+  httpClient,
+});
+```
+
+The default is the Nitro HTTP client (browser `fetch` on web). A custom client
+bypasses the native worker, so `nativeCode` and `details` are not set on its
+errors; diagnostics classify them from the error message.
 
 ## Experiment lifecycle and freshness
 

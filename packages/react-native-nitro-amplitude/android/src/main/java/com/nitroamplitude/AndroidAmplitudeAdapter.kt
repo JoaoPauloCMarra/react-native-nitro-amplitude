@@ -25,6 +25,13 @@ object AndroidAmplitudeAdapter {
   private const val MAX_RESPONSE_BODY_BYTES = 4 * 1024 * 1024
   private const val LEGACY_DISK_PREFS = "NitroAmplitude"
   private const val STORAGE_DIRECTORY = "nitro-amplitude"
+  private const val MAX_TRANSPORT_DETAIL_LENGTH = 200
+  private val DETAIL_SEPARATORS = Regex("[|\\r\\n]+")
+  private val DETAIL_QUERY = Regex("\\?\\S*")
+  private val DETAIL_SECRET = Regex(
+    "(authorization|api[-_ ]?key|deployment[-_ ]?key|bearer|token)\\b.*",
+    setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL),
+  )
 
   private var appContext: Context? = null
   private val executor = Executors.newSingleThreadExecutor()
@@ -161,6 +168,17 @@ object AndroidAmplitudeAdapter {
     return String(buffer.toByteArray(), Charsets.UTF_8)
   }
 
+  private fun sanitizeTransportDetail(value: String?): String =
+    (value ?: "")
+      .replace(DETAIL_SEPARATORS, " ")
+      .replace(DETAIL_QUERY, "")
+      .replace(DETAIL_SECRET, "[redacted]")
+      .trim()
+      .take(MAX_TRANSPORT_DETAIL_LENGTH)
+
+  internal fun formatTransportError(error: Throwable): String =
+    "network_error|${sanitizeTransportDetail(error.javaClass.name)}|${sanitizeTransportDetail(error.message)}"
+
   @JvmStatic
   fun performHttpRequest(
     url: String,
@@ -188,7 +206,7 @@ object AndroidAmplitudeAdapter {
     } catch (error: MalformedURLException) {
       return arrayOf("0", "", "invalid_url")
     } catch (error: Exception) {
-      return arrayOf("0", "", "network_error")
+      return arrayOf("0", "", formatTransportError(error))
     }
 
     val timedOut = AtomicBoolean(false)
@@ -208,7 +226,7 @@ object AndroidAmplitudeAdapter {
     } catch (error: SocketTimeoutException) {
       arrayOf("0", "", "timeout")
     } catch (error: Exception) {
-      arrayOf("0", "", if (timedOut.get()) "timeout" else "network_error")
+      arrayOf("0", "", if (timedOut.get()) "timeout" else formatTransportError(error))
     } finally {
       timeoutTask.cancel(false)
       connection.disconnect()

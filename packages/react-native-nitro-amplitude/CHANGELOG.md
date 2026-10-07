@@ -4,6 +4,34 @@ All notable changes to this project are documented in this file.
 
 The format follows Keep a Changelog and the project adheres to SemVer.
 
+## [0.11.0] - 2026-10-07
+
+### Added
+
+- Native HTTP failures keep the OS-level cause. iOS reports the `NSURLError`
+  code, domain, and description; Android reports the exception class and
+  message. Descriptions are capped at 200 characters and exclude `|`, line
+  breaks, URL query strings, and credential-like values.
+- `AmplitudeError` has `nativeCode` and `details` (`domain`, `code`,
+  `description`, `exception`) for native HTTP failures, and sets `cause`.
+  `nativeCode` distinguishes `cancelled`, `queue_full`, `invalid_url`,
+  `invalid_http_response`, and `native_http_exception`, which all still use
+  `code: "network_error"`. `AmplitudeErrorDetails` is exported.
+- Diagnostic failure kinds `offline`, `connect_failed`, `connection_lost`, and
+  `tls_failure`. DNS failures (`-1003`, `-1006`, `UnknownHostException`) report
+  `dns_or_hostname_resolution`.
+
+### Documentation
+
+- Document `nativeCode` and `details`, the transport timing facts
+  (`fetchTimeoutMillis` excludes queue time, the iOS wait limit is the timeout
+  plus 5 seconds, 2 native workers), and replacing the Experiment `httpClient`.
+
+Breaking changes: None. `error.code` values and `error.message` (the bare
+native code, for example `network_error`) are unchanged. The added
+`AmplitudeDiagnosticFailureKind` values can reach code that switches over the
+kind exhaustively; handle the new values or add a default branch.
+
 ## [0.10.1] - 2026-10-03
 
 ### Fixed

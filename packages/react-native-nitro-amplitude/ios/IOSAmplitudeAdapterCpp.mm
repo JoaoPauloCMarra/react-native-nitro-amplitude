@@ -79,6 +79,7 @@ namespace NitroAmplitude {
 static NSString* const kDiskSuiteName = @"com.nitroamplitude.disk";
 static constexpr size_t kMaxCachedContexts = 8;
 static constexpr NSUInteger kMaxResponseBodyBytes = 4 * 1024 * 1024;
+static constexpr NSUInteger kMaxTransportDetailLength = 200;
 
 #ifdef NITRO_AMPLITUDE_TESTING
 static NSString* (^gIdentifierForVendorOverride)(void) = nil;
@@ -126,6 +127,36 @@ static std::optional<std::string> ToStdString(id value) {
 
 static NSString* ToNSString(const std::string& value) {
   return [[NSString alloc] initWithBytes:value.data() length:value.size() encoding:NSUTF8StringEncoding];
+}
+
+static NSString* SanitizeTransportDetail(NSString* value) {
+  static NSRegularExpression* separators =
+      [NSRegularExpression regularExpressionWithPattern:@"[|\\r\\n]+" options:0 error:nil];
+  static NSRegularExpression* query =
+      [NSRegularExpression regularExpressionWithPattern:@"\\?\\S*" options:0 error:nil];
+  static NSRegularExpression* secret = [NSRegularExpression
+      regularExpressionWithPattern:@"(authorization|api[-_ ]?key|deployment[-_ ]?key|bearer|token)\\b.*"
+                           options:NSRegularExpressionCaseInsensitive | NSRegularExpressionDotMatchesLineSeparators
+                             error:nil];
+  NSMutableString* text = [(value ?: @"") mutableCopy];
+  for (NSRegularExpression* expression in @[ separators, query, secret ]) {
+    NSString* replacement = expression == separators ? @" " : (expression == secret ? @"[redacted]" : @"");
+    [expression replaceMatchesInString:text options:0 range:NSMakeRange(0, text.length) withTemplate:replacement];
+  }
+  NSString* trimmed = [text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+  if (trimmed.length <= kMaxTransportDetailLength) {
+    return trimmed;
+  }
+  const NSRange lastKept = [trimmed rangeOfComposedCharacterSequenceAtIndex:kMaxTransportDetailLength - 1];
+  return [trimmed substringToIndex:NSMaxRange(lastKept)];
+}
+
+static std::string FormatNetworkError(NSError* error) {
+  NSString* detail = [NSString stringWithFormat:@"network_error|nsurl:%ld|%@|%@",
+                                                (long)error.code,
+                                                SanitizeTransportDetail(error.domain),
+                                                SanitizeTransportDetail(error.localizedDescription)];
+  return ToStdString(detail).value_or("network_error");
 }
 
 static NSString* IdentifierForVendor() {
@@ -417,7 +448,7 @@ HttpResult IOSAmplitudeAdapterCpp::performHttpRequest(
         (error.code == NSURLErrorTimedOut || error.code == NSURLErrorCancelled)) {
       result.error = error.code == NSURLErrorTimedOut ? "timeout" : "cancelled";
     } else {
-      result.error = "network_error";
+      result.error = FormatNetworkError(error);
     }
   } else if ([collector.response isKindOfClass:[NSHTTPURLResponse class]]) {
     result.statusCode = static_cast<int>(((NSHTTPURLResponse*)collector.response).statusCode);

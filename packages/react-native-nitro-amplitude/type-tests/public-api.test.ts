@@ -1,4 +1,5 @@
 import {
+  AmplitudeError,
   Experiment,
   NitroExperimentStorage,
   Source,
@@ -18,7 +19,7 @@ import {
   type ExperimentConfig as ExperimentSubpathConfig,
   type VariantFreshness as SubpathVariantFreshness,
 } from "../src/experiment";
-import type { ExperimentClient } from "../src";
+import type { AmplitudeErrorDetails, ExperimentClient } from "../src";
 import type { ExperimentConfig } from "../src/experiment/types/config";
 import type { Variant } from "../src/experiment/types/variant";
 import {
@@ -50,7 +51,10 @@ type ExperimentExportSurface = typeof import("../src/experiment");
 type AnalyticsExportSurface = typeof import("../src/analytics");
 
 type HasDryRunSingleton = Assert<
-  Equals<"dryRunHttpClient" extends keyof RootExportSurface ? true : false, true>
+  Equals<
+    "dryRunHttpClient" extends keyof RootExportSurface ? true : false,
+    true
+  >
 >;
 type HasDryRunTransportSingleton = Assert<
   Equals<"dryRunTransport" extends keyof RootExportSurface ? true : false, true>
@@ -59,28 +63,49 @@ type HasWebDryRunSingleton = Assert<
   Equals<"dryRunHttpClient" extends keyof WebExportSurface ? true : false, true>
 >;
 type HasNetworkControlInRoot = Assert<
-  Equals<"setNetworkEnabled" extends keyof RootExportSurface ? true : false, true>
+  Equals<
+    "setNetworkEnabled" extends keyof RootExportSurface ? true : false,
+    true
+  >
 >;
 type HasNetworkControlInWebRoot = Assert<
-  Equals<"getNetworkEnabled" extends keyof WebExportSurface ? true : false, true>
+  Equals<
+    "getNetworkEnabled" extends keyof WebExportSurface ? true : false,
+    true
+  >
 >;
 type HasTimingHelpersInRoot = Assert<
-  Equals<"createNetworkTimingBuffer" extends keyof RootExportSurface ? true : false, true>
+  Equals<
+    "createNetworkTimingBuffer" extends keyof RootExportSurface ? true : false,
+    true
+  >
 >;
 type HasTimingHelpersInWebRoot = Assert<
-  Equals<"createTimedHttpClient" extends keyof WebExportSurface ? true : false, true>
+  Equals<
+    "createTimedHttpClient" extends keyof WebExportSurface ? true : false,
+    true
+  >
 >;
 type HasDryRunClassesInRoot = Assert<
   Equals<"DryRunTransport" extends keyof RootExportSurface ? true : false, true>
 >;
 type HasTestingHelpersInRoot = Assert<
-  Equals<"createMockExperimentClient" extends keyof RootExportSurface ? true : false, true>
+  Equals<
+    "createMockExperimentClient" extends keyof RootExportSurface ? true : false,
+    true
+  >
 >;
 type HasTestingHelpersInWebRoot = Assert<
-  Equals<"createFakeExperimentStorage" extends keyof WebExportSurface ? true : false, true>
+  Equals<
+    "createFakeExperimentStorage" extends keyof WebExportSurface ? true : false,
+    true
+  >
 >;
 type NoBareExperiment = Assert<
-  Equals<"experimentClient" extends keyof ExperimentExportSurface ? true : false, false>
+  Equals<
+    "experimentClient" extends keyof ExperimentExportSurface ? true : false,
+    false
+  >
 >;
 type NoBareFactory = Assert<
   Equals<"factory" extends keyof ExperimentExportSurface ? true : false, false>
@@ -89,12 +114,16 @@ type HasAnalyticsCompat = Assert<
   Extends<AnalyticsExportSurface["init"], RootExportSurface["init"]>
 >;
 type HasExperimentCompat = Assert<
-  Extends<ExperimentExportSurface["Experiment"], RootExportSurface["Experiment"]>
+  Extends<
+    ExperimentExportSurface["Experiment"],
+    RootExportSurface["Experiment"]
+  >
 >;
 type HasWorkerMetrics = Assert<
   Extends<
     ReturnType<RootExportSurface["getDiagnostics"]>["workerMetrics"],
-    { queueSize: number; inFlightCount: number; pendingBodyBytes: number } | undefined
+    | { queueSize: number; inFlightCount: number; pendingBodyBytes: number }
+    | undefined
   >
 >;
 const hasDryRunSingleton: HasDryRunSingleton = true;
@@ -291,3 +320,27 @@ const analyticsTypeValues = [
   Types.SpecialEventType.IDENTIFY,
 ] as const;
 void analyticsTypeValues;
+
+declare const amplitudeError: AmplitudeError;
+const nativeCode: string | undefined = amplitudeError.nativeCode;
+const errorDetails:
+  | {
+      readonly domain?: string;
+      readonly code?: number;
+      readonly description?: string;
+      readonly exception?: string;
+    }
+  | undefined = amplitudeError.details;
+const detailCode: number | undefined = amplitudeError.details?.code;
+void nativeCode;
+void errorDetails;
+void detailCode;
+// @ts-expect-error nativeCode is readonly
+amplitudeError.nativeCode = "network_error";
+// @ts-expect-error details is readonly
+amplitudeError.details = {};
+// @ts-expect-error detail fields are readonly
+if (amplitudeError.details) amplitudeError.details.code = 1;
+// @ts-expect-error detail code is numeric
+const badDetails: AmplitudeErrorDetails = { code: "x" };
+void badDetails;

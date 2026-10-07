@@ -35,7 +35,11 @@ static const NSUInteger kResponseCap = 4 * 1024 * 1024;
 }
 
 - (void)failWithCode:(NSInteger)code {
-  [self.client URLProtocol:self didFailWithError:[NSError errorWithDomain:NSURLErrorDomain code:code userInfo:nil]];
+  [self failWithCode:code userInfo:nil];
+}
+
+- (void)failWithCode:(NSInteger)code userInfo:(NSDictionary*)userInfo {
+  [self.client URLProtocol:self didFailWithError:[NSError errorWithDomain:NSURLErrorDomain code:code userInfo:userInfo]];
 }
 
 - (void)respondWithStatus:(NSInteger)status body:(NSData*)body {
@@ -60,6 +64,21 @@ static const NSUInteger kResponseCap = 4 * 1024 * 1024;
     [self failWithCode:NSURLErrorCancelled];
   } else if ([path isEqualToString:@"/offline"]) {
     [self failWithCode:NSURLErrorNotConnectedToInternet];
+  } else if ([path isEqualToString:@"/dns"]) {
+    [self failWithCode:NSURLErrorCannotFindHost
+              userInfo:@{
+                NSLocalizedDescriptionKey : @"A server with the specified hostname could not be found.",
+                NSURLErrorFailingURLErrorKey : [NSURL URLWithString:@"https://amplitude.test/dns?secret=abc"],
+              }];
+  } else if ([path isEqualToString:@"/inject"]) {
+    [self failWithCode:NSURLErrorCannotConnectToHost
+              userInfo:@{
+                NSLocalizedDescriptionKey :
+                    @"bad|inject\r\nline https://amplitude.test/p?user=u1 Authorization: Api-Key client-xyz",
+              }];
+  } else if ([path isEqualToString:@"/long"]) {
+    [self failWithCode:NSURLErrorNetworkConnectionLost
+              userInfo:@{NSLocalizedDescriptionKey : [@"" stringByPaddingToLength:400 withString:@"x" startingAtIndex:0]}];
   } else if ([path isEqualToString:@"/tls"]) {
     [self failWithCode:NSURLErrorSecureConnectionFailed];
   } else if ([path isEqualToString:@"/non-http"]) {
@@ -324,8 +343,24 @@ void testHttpRequests() {
   const HttpResult timeout = adapter.performHttpRequest(base + "/timeout", "POST", {}, "{}", 2000);
   assert(timeout.statusCode == 0 && timeout.body.empty() && timeout.error == "timeout");
   assert(adapter.performHttpRequest(base + "/cancelled", "POST", {}, "{}", 2000).error == "cancelled");
-  assert(adapter.performHttpRequest(base + "/offline", "POST", {}, "{}", 2000).error == "network_error");
-  assert(adapter.performHttpRequest(base + "/tls", "POST", {}, "{}", 2000).error == "network_error");
+  const std::string offline = adapter.performHttpRequest(base + "/offline", "POST", {}, "{}", 2000).error;
+  assert(offline.rfind("network_error|nsurl:-1009|NSURLErrorDomain|", 0) == 0);
+  const std::string tls = adapter.performHttpRequest(base + "/tls", "POST", {}, "{}", 2000).error;
+  assert(tls.rfind("network_error|nsurl:-1200|NSURLErrorDomain|", 0) == 0);
+
+  const std::string dns = adapter.performHttpRequest(base + "/dns", "POST", {}, "{}", 2000).error;
+  assert(dns == "network_error|nsurl:-1003|NSURLErrorDomain|A server with the specified hostname could not be found.");
+  assert(dns.find("secret") == std::string::npos && dns.find('?') == std::string::npos);
+
+  const std::string injectedPrefix = "network_error|nsurl:-1004|NSURLErrorDomain|";
+  const std::string injected = adapter.performHttpRequest(base + "/inject", "POST", {}, "{}", 2000).error;
+  assert(injected == injectedPrefix + "bad inject line https://amplitude.test/p [redacted]");
+  assert(injected.find('\n') == std::string::npos && injected.find('\r') == std::string::npos);
+  assert(std::count(injected.begin(), injected.end(), '|') == 3);
+
+  const std::string longDetail = adapter.performHttpRequest(base + "/long", "POST", {}, "{}", 2000).error;
+  assert(longDetail == "network_error|nsurl:-1005|NSURLErrorDomain|" + std::string(200, 'x'));
+
   const HttpResult nonHttp = adapter.performHttpRequest(base + "/non-http", "GET", {}, "", 2000);
   assert(nonHttp.statusCode == 0 && nonHttp.error == "invalid_http_response");
 

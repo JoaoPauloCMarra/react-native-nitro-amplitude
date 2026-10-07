@@ -274,10 +274,29 @@ class AndroidAmplitudeAdapterTest {
   @Test
   fun formatsConnectExceptionAndMissingMessage() {
     assertEquals(
-      "network_error|java.net.ConnectException|failed to connect to /10.0.0.1 (port 443)",
+      "network_error|java.net.ConnectException|failed to connect to /[ip] (port 443)",
       AndroidAmplitudeAdapter.formatTransportError(
         java.net.ConnectException("failed to connect to /10.0.0.1 (port 443)"),
       ),
+    )
+    val full = AndroidAmplitudeAdapter.formatTransportError(
+      java.net.ConnectException(
+        "failed to connect to api.lab.amplitude.com/93.184.216.34 (port 443) from /10.0.2.15 (port 51234) after 10000ms: isConnected failed: ECONNREFUSED (Connection refused)",
+      ),
+    )
+    assertEquals(
+      "network_error|java.net.ConnectException|failed to connect to api.lab.amplitude.com/[ip] (port 443) after 10000ms: isConnected failed: ECONNREFUSED (Connection refused)",
+      full,
+    )
+    assertFalse(full, full.contains("10.0.2.15"))
+    assertFalse(full, full.contains("51234"))
+    assertTrue(full, full.contains("ECONNREFUSED"))
+    val unreachable = AndroidAmplitudeAdapter.formatTransportError(
+      java.net.ConnectException("failed to connect to /fe80::1%wlan0 (port 443) from /2001:db8::7 (port 4000): connect failed: ENETUNREACH (Network is unreachable)"),
+    )
+    assertEquals(
+      "network_error|java.net.ConnectException|failed to connect to /[ip] (port 443): connect failed: ENETUNREACH (Network is unreachable)",
+      unreachable,
     )
     assertEquals(
       "network_error|java.net.ConnectException|",
@@ -292,10 +311,23 @@ class AndroidAmplitudeAdapterTest {
     )
     assertEquals("network_error|java.io.IOException|a b c d", injected)
 
+    val words = "ab ".repeat(200)
     val capped = AndroidAmplitudeAdapter.formatTransportError(
+      java.io.IOException(words),
+    )
+    assertEquals(words.take(200), capped.removePrefix("network_error|java.io.IOException|"))
+
+    val longRun = AndroidAmplitudeAdapter.formatTransportError(
       java.io.IOException("x".repeat(500)),
     )
-    assertEquals("x".repeat(200), capped.removePrefix("network_error|java.io.IOException|"))
+    assertEquals("network_error|java.io.IOException|[redacted]", longRun)
+
+    val surrogate = AndroidAmplitudeAdapter.formatTransportError(
+      java.io.IOException("ab ".repeat(66) + "c" + "\uD83D\uDE00" + " tail"),
+    )
+    val surrogateDetail = surrogate.removePrefix("network_error|java.io.IOException|")
+    assertEquals(199, surrogateDetail.length)
+    assertFalse(surrogateDetail, surrogateDetail.last().isHighSurrogate())
 
     val withQuery = AndroidAmplitudeAdapter.formatTransportError(
       java.io.IOException("failed https://api.lab.amplitude.com/v1/vardata?user_id=u1&device=d1 after 10s"),
@@ -308,6 +340,29 @@ class AndroidAmplitudeAdapterTest {
     )
     assertFalse(withKey, withKey.contains("client-secret-123"))
     assertFalse(withKey, withKey.contains("Api-Key"))
+  }
+
+  @Test
+  fun transportErrorDetailRedactionParity() {
+    val cases = listOf(
+      "https://user:pw@amplitude.test/p failed" to "https://amplitude.test/p failed",
+      "Authorization: Api-Key abc" to "[redacted]",
+      "bad Cookie: a=b" to "bad [redacted]",
+      "set Password 123 now" to "set [redacted]",
+      "NSURLSession load failed" to "NSURLSession load failed",
+      "header value: top-secret-thing" to "header value: [redacted]",
+      "key abcdefghijklmnopqrstuvwxyzABCDEF0123456789 end" to "key [redacted] end",
+      "Error: x at 10:30 and 10:30:15" to "Error: x at 10:30 and 10:30:15",
+      "peer 192.168.1.20 and ::1 and 2001:db8:0:0:0:0:0:1 and fe80::1%en0" to "peer [ip] and [ip] and [ip] and [ip]",
+      "std::string failed" to "std::string failed",
+    )
+    for ((input, expected) in cases) {
+      assertEquals(
+        input,
+        "network_error|java.io.IOException|$expected",
+        AndroidAmplitudeAdapter.formatTransportError(java.io.IOException(input)),
+      )
+    }
   }
 
   @Test

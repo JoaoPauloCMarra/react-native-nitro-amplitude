@@ -434,7 +434,10 @@ try {
 ```
 
 `description` is the platform's own text, capped at 200 characters, with `|`,
-line breaks, URL query strings, and credential-like values removed. It is not
+line breaks, URL query strings, URL credentials, credential-like values, long
+token-like strings, and local socket addresses (` from /<address> (port N)`)
+removed. The remote hostname is kept. IPv4 and IPv6 addresses are replaced with
+`[ip]`. It is not
 localized or stable across OS versions. Group on `nativeCode`, `domain`,
 `code`, and `exception`, not on `description`.
 
@@ -445,6 +448,11 @@ can report `offline` (`-1009`, or an unreachable network on Android),
 `SocketException`, `EOFException`), and `tls_failure` (`-1200` to `-1206`,
 `-2000`, `SSLException` and certificate exceptions). DNS covers `-1003`,
 `-1006`, and `UnknownHostException`.
+
+Offline detection differs by platform. iOS reports `-1009` (`offline`). Android
+usually reports an `UnknownHostException` when the device has no connection, so
+it surfaces as `dns_or_hostname_resolution`; `offline` appears on Android only
+for an `ENETUNREACH` or "network is unreachable" `ConnectException`.
 
 ### Transport behavior
 

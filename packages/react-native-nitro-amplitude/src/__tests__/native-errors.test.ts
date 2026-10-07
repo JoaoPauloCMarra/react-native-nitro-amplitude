@@ -60,6 +60,24 @@ describe("parseNativeError", () => {
     });
   });
 
+  it("strips the Nitro function name prefix before NitroAmplitude:", () => {
+    expect(
+      parseNativeError(
+        "HybridAmplitudeWorker.enqueue: NitroAmplitude: queue_full",
+      ),
+    ).toEqual({ nativeCode: "queue_full" });
+  });
+
+  it("parses details only for network_error", () => {
+    expect(parseNativeError("invalid_url|x|y")).toEqual({
+      nativeCode: "invalid_url",
+    });
+    expect(parseNativeError("third party | pipe | text")).toEqual({
+      nativeCode: "third party ",
+    });
+    expect(parseNativeError("timeout|x")).toEqual({ nativeCode: "timeout" });
+  });
+
   it("parses the iOS shape", () => {
     expect(parseNativeError(IOS_DNS)).toEqual({
       nativeCode: "network_error",
@@ -104,6 +122,13 @@ describe("getAmplitudeErrorCode with native detail", () => {
     ["cancelled|x", "network_error"],
     ["invalid_http_response|x", "network_error"],
     ["NitroAmplitude: queue_full", "network_error"],
+    [
+      "HybridAmplitudeWorker.enqueue: NitroAmplitude: queue_full",
+      "network_error",
+    ],
+    ["some library | network issue", "network_error"],
+    ["Failed | to read storage", "storage_error"],
+    ["Nitro module | missing", "native_unavailable"],
     ["native_http_exception|x", "network_error"],
     ["timeout|x", "timeout"],
     [IOS_DNS, "network_error"],
@@ -164,7 +189,9 @@ describe("NitroHttpClient native failures", () => {
     listeners.length = 0;
     enqueue.mockReset();
     enqueue.mockImplementation(() => {
-      throw new Error("NitroAmplitude: queue_full");
+      throw new Error(
+        "HybridAmplitudeWorker.enqueue: NitroAmplitude: queue_full",
+      );
     });
     const error = await new NitroHttpClient()
       .request("https://api.lab.amplitude.com/v1", "GET", {}, null)
@@ -172,6 +199,7 @@ describe("NitroHttpClient native failures", () => {
     const amplitudeError = error as AmplitudeError;
     expect(amplitudeError.code).toBe("network_error");
     expect(amplitudeError.nativeCode).toBe("queue_full");
+    expect(amplitudeError.details).toBeUndefined();
     expect(amplitudeError.cause).toBeInstanceOf(Error);
   });
 });

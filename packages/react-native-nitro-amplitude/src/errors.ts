@@ -55,6 +55,7 @@ export function createAmplitudeError(
 
 const NATIVE_ERROR_PREFIX = "NitroAmplitude:";
 const IOS_DETAIL_PREFIX = "nsurl:";
+const TRANSPORT_NATIVE_CODE = "network_error";
 
 function compactDetails(
   details: Record<string, string | number | undefined>,
@@ -70,10 +71,14 @@ export function parseNativeError(raw: string): {
   details?: AmplitudeErrorDetails;
 } {
   let text = raw.trim();
-  if (text.startsWith(NATIVE_ERROR_PREFIX)) {
-    text = text.slice(NATIVE_ERROR_PREFIX.length).trim();
+  const prefixAt = text.indexOf(NATIVE_ERROR_PREFIX);
+  if (prefixAt >= 0) {
+    text = text.slice(prefixAt + NATIVE_ERROR_PREFIX.length).trim();
   }
   const [nativeCode = "", first = "", ...rest] = text.split("|");
+  if (nativeCode !== TRANSPORT_NATIVE_CODE) {
+    return { nativeCode };
+  }
   if (first.startsWith(IOS_DETAIL_PREFIX)) {
     const [domain, ...description] = rest;
     const code = Number(first.slice(IOS_DETAIL_PREFIX.length) || Number.NaN);

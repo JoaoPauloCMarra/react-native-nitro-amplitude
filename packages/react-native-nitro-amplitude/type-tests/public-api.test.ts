@@ -19,7 +19,11 @@ import {
   type ExperimentConfig as ExperimentSubpathConfig,
   type VariantFreshness as SubpathVariantFreshness,
 } from "../src/experiment";
-import type { AmplitudeErrorDetails, ExperimentClient } from "../src";
+import type {
+  AmplitudeErrorDetails,
+  ExperimentClient,
+  NativeErrorInfo,
+} from "../src";
 import type { ExperimentConfig } from "../src/experiment/types/config";
 import type { Variant } from "../src/experiment/types/variant";
 import {
@@ -344,3 +348,11 @@ if (amplitudeError.details) amplitudeError.details.code = 1;
 // @ts-expect-error detail code is numeric
 const badDetails: AmplitudeErrorDetails = { code: "x" };
 void badDetails;
+const nativeErrorInfo: NativeErrorInfo = {
+  nativeCode: "queue_full",
+  details: { code: -1003 },
+};
+void nativeErrorInfo;
+// @ts-expect-error nativeCode is a string
+const badInfo: NativeErrorInfo = { nativeCode: 1 };
+void badInfo;

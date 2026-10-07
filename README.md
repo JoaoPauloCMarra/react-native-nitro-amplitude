@@ -31,7 +31,7 @@ Compatibility for `0.11.0`:
 | `react`                      | `>=18.2.0`         | `19.2.3`            |
 | `react-native`               | `>=0.77`           | `0.86.3`            |
 | `react-native-nitro-modules` | `>=0.37.0 <0.38.0` | `0.37.1`            |
-| Expo development builds      | SDK `>=53`         | SDK 57 (`~57.0.26`) |
+| Expo development builds      | SDK `>=53`         | SDK 57 (`~57.0.27`) |
 
 The package supports React Native `>=0.77` and Expo SDK `>=53`, the Nitro
 Modules `0.37` minimum. It is tested on React Native `0.86.3` and Expo SDK 57.

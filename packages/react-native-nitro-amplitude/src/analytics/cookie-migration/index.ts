@@ -7,6 +7,7 @@ import {
   createCookieStorage,
   getDefaultConfig,
   getTopLevelDomain,
+  ignoreCookieStorageFailure,
 } from "../config";
 
 export const parseOldCookies = async (
@@ -23,7 +24,9 @@ export const parseOldCookies = async (
       : (options?.domain ?? (await getTopLevelDomain())),
   });
   const oldCookieName = getOldCookieName(apiKey);
-  const cookies = await storage.getRaw(oldCookieName);
+  const cookies = await ignoreCookieStorageFailure(() =>
+    storage.getRaw(oldCookieName),
+  );
 
   if (!cookies) {
     return {
@@ -32,7 +35,7 @@ export const parseOldCookies = async (
   }
 
   if (options?.cookieUpgrade ?? getDefaultConfig().cookieUpgrade) {
-    await storage.remove(oldCookieName);
+    await ignoreCookieStorageFailure(() => storage.remove(oldCookieName));
   }
   const [deviceId, userId, optOut, sessionId, lastEventTime] =
     cookies.split(".");

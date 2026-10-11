@@ -263,7 +263,9 @@ export const useReactNativeConfig = async (
     disableCookies,
     domain,
   });
-  const previousCookies = await cookieStorage.get(getCookieName(apiKey));
+  const previousCookies = await ignoreCookieStorageFailure(() =>
+    cookieStorage.get(getCookieName(apiKey)),
+  );
   const queryParams = getQueryParams();
 
   // reconcile user session
@@ -313,6 +315,16 @@ export const useReactNativeConfig = async (
   );
 
   return config;
+};
+
+export const ignoreCookieStorageFailure = async <T>(
+  read: () => Promise<T | undefined>,
+): Promise<T | undefined> => {
+  try {
+    return await read();
+  } catch {
+    return undefined;
+  }
 };
 
 export const createCookieStorage = async <T>(

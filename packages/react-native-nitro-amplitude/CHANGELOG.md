@@ -4,6 +4,16 @@ All notable changes to this project are documented in this file.
 
 The format follows Keep a Changelog and the project adheres to SemVer.
 
+## [Unreleased]
+
+### Fixed
+
+- Analytics `init` no longer fails when the cookie storage cannot be read,
+  for example when a device's disk is full. The old-cookie migration and the
+  stored session read now treat an unreadable store as empty, and a failed
+  old-cookie removal no longer stops `init`. `init` starts a fresh session
+  instead.
+
 ## [0.11.0] - 2026-10-07
 
 ### Added

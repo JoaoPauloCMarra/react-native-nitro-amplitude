@@ -39,7 +39,10 @@ describe("NitroTransport status mapping", () => {
   });
 
   test("falls back to the HTTP status for a non-JSON body", async () => {
-    request.mockResolvedValue({ status: 502, body: "<html>Bad Gateway</html>" });
+    request.mockResolvedValue({
+      status: 502,
+      body: "<html>Bad Gateway</html>",
+    });
     const response = await new NitroTransport().send(URL, payload);
     expect(response?.status).toBe(Status.Failed);
     expect(response?.statusCode).toBe(502);

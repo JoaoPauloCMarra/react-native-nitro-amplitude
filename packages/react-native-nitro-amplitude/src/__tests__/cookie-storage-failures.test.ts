@@ -32,16 +32,16 @@ test("old cookie migration treats an unreadable cookie store as empty", async ()
       cookieStorage: createFailingReadStorage(),
       disableCookies: true,
     }),
-  ).resolves.toEqual({ optOut: false });
+  ).resolves.toEqual({});
 });
 
-test("config resolution starts a fresh session when the stored session is unreadable", async () => {
+test("config resolution fails closed and starts a fresh session when the stored session is unreadable", async () => {
   const config = await useReactNativeConfig("api-key", {
     cookieStorage: createFailingReadStorage(),
     disableCookies: true,
   });
 
   expect(config.deviceId).toEqual(expect.any(String));
-  expect(config.optOut).toBe(false);
+  expect(config.optOut).toBe(true);
   expect(config.sessionId).toBeUndefined();
 });

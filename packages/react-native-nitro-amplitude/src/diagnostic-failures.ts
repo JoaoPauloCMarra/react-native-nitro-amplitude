@@ -23,13 +23,17 @@ export type AmplitudeDiagnosticFailureKind =
   | "connection_lost"
   | "tls_failure"
   | "http_status"
+  | "storage_error"
   | "unknown";
 
 export type AmplitudeDiagnosticOperation =
-  "analytics_upload" | "experiment_fetch";
+  "analytics_upload" | "experiment_fetch" | "session_storage_read";
 
 export type AmplitudeDiagnosticSurface =
-  "analytics_upload" | "experiment_variant_fetch" | "experiment_flag_fetch";
+  | "analytics_upload"
+  | "experiment_variant_fetch"
+  | "experiment_flag_fetch"
+  | "session_storage";
 
 export type AmplitudeDiagnosticFailure = {
   operation: AmplitudeDiagnosticOperation;

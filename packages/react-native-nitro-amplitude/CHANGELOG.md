@@ -9,10 +9,16 @@ The format follows Keep a Changelog and the project adheres to SemVer.
 ### Fixed
 
 - Analytics `init` no longer fails when the cookie storage cannot be read,
-  for example when a device's disk is full. The old-cookie migration and the
-  stored session read now treat an unreadable store as empty, and a failed
-  old-cookie removal no longer stops `init`. `init` starts a fresh session
-  instead.
+  for example when a device's disk is full. A failed old-cookie read or
+  removal no longer stops `init`. When the stored session cannot be read,
+  `init` logs the failure, records a `session_storage_read` diagnostic
+  failure, and starts a fresh session. It treats the client as opted out for
+  that init unless you pass `optOut`, so no events are sent. The client does
+  not overwrite the stored session while reads fail. On the next successful
+  read it merges the stored session with changes made since, restores the
+  stored opt-out choice, and saves the result.
+- A stored opt-out is no longer reset to `false` on every `init`. A persisted
+  `optOut: true` now survives a restart unless you pass `optOut` in `init`.
 - `createMockAmplitudeClient()` now includes `trackScreenView` and
   `trackScreenViewOnNavigationStateChange`, and is checked against the client
   type at compile time. The mock's `init`, `add`, `remove` and `flush` now

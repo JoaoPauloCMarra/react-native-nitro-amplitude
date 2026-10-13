@@ -4,6 +4,7 @@ const { execSync } = require("child_process");
 const fs = require("fs");
 const path = require("path");
 const readline = require("readline");
+const { findSupportedLineFailures } = require("./release-docs");
 
 const colors = {
   green: (text) => `\x1b[32m${text}\x1b[0m`,
@@ -223,7 +224,12 @@ function assertReleaseDocs(version) {
   const changelogVersion = getFirstChangelogVersion();
   const nitroPeer = packageJson.peerDependencies?.["react-native-nitro-modules"];
 
-  const failures = [];
+  const securityText = fs.readFileSync(
+    path.join(projectRoot, "SECURITY.md"),
+    "utf-8",
+  );
+
+  const failures = [...findSupportedLineFailures(version, securityText)];
   if (changelogVersion !== version) {
     failures.push(
       `CHANGELOG.md top entry is ${changelogVersion ?? "missing"}, expected ${version}`,

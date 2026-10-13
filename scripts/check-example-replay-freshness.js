@@ -93,15 +93,23 @@ function sourceDeclaresTestId(root, source, testId) {
   if (source.includes(`testID="${testId}"`)) {
     return true;
   }
+  const match = /^e2e-([a-z]+)-(.+)$/.exec(testId);
+  if (!match) {
+    return false;
+  }
+  const [, prefix, suffix] = match;
   const labRunner = fs.readFileSync(
     inside(root, "apps/example/components/lab-runner.tsx"),
     "utf8",
   );
-  const match = /^e2e-([a-z]+)-(.+)$/.exec(testId);
-  if (!match || !source.includes(`prefix="${match[1]}"`)) {
-    return false;
-  }
-  return labRunner.includes(`testID={\`e2e-\${prefix}-${match[2]}\`}`);
+  const component = suffix === "blocked" ? "LabBlockedPage" : "LabCasesScreen";
+  const usesComponent = new RegExp(
+    `<${component}\\s[^>]*?prefix="${prefix}"`,
+  ).test(source);
+  return (
+    usesComponent &&
+    labRunner.includes(`testID={\`e2e-\${prefix}-${suffix}\`}`)
+  );
 }
 
 function inside(root, relativePath) {
@@ -513,4 +521,5 @@ module.exports = {
   collectRuntimeFiles,
   inside,
   refreshReplayLock,
+  sourceDeclaresTestId,
 };

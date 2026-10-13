@@ -8,6 +8,7 @@ import {
   checkReplayFreshness,
   collectRuntimeFiles,
   refreshReplayLock,
+  sourceDeclaresTestId,
 } from "./check-example-replay-freshness.js";
 import { createExampleReplayHttpFixture } from "./example-replay-http-fixture.js";
 import {
@@ -692,4 +693,36 @@ test("external symlink flows fail before a runner spawn or lock refresh", () => 
     fs.rmSync(root, { recursive: true, force: true });
     fs.rmSync(outside, { recursive: true, force: true });
   }
+});
+
+test("shared lab test ids resolve only for the component that renders them", () => {
+  const identity = fs.readFileSync(
+    path.join(projectRoot, "apps/example/app/e2e-identity.tsx"),
+    "utf8",
+  );
+  const network = fs.readFileSync(
+    path.join(projectRoot, "apps/example/app/e2e-network.tsx"),
+    "utf8",
+  );
+
+  assert.equal(
+    sourceDeclaresTestId(projectRoot, network, "e2e-network-results"),
+    true,
+  );
+  assert.equal(
+    sourceDeclaresTestId(projectRoot, network, "e2e-network-blocked"),
+    true,
+  );
+  assert.equal(
+    sourceDeclaresTestId(projectRoot, identity, "e2e-identity-blocked"),
+    true,
+  );
+  assert.equal(
+    sourceDeclaresTestId(projectRoot, identity, "e2e-identity-results"),
+    false,
+  );
+  assert.equal(
+    sourceDeclaresTestId(projectRoot, network, "e2e-persistence-results"),
+    false,
+  );
 });

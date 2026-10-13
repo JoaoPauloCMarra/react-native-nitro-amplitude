@@ -29,8 +29,11 @@ export class NitroTransport extends BaseTransport implements Transport {
       30000,
     );
     try {
+      const parsed = JSON.parse(response.body) as Record<string, unknown>;
       return this.buildResponse(
-        JSON.parse(response.body) as Record<string, unknown>,
+        typeof parsed.code === "number"
+          ? parsed
+          : { ...parsed, code: response.status },
       );
     } catch {
       return this.buildResponse({ code: response.status });

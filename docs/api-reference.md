@@ -113,9 +113,10 @@ See `src/AmplitudeContext.nitro.ts`, `src/AmplitudeStorage.nitro.ts`,
 - The legacy session and event methods remain in the native ABI as deprecated
   no-op compatibility stubs. They do not import legacy Amplitude SDK SQLite
   data.
-- `AmplitudeStorage.setBatch` and `getBatch` remain deprecated ABI wrappers.
-  Durable analytics flushes use one `setBatch` call for each pending write batch;
-  public storage adapters continue to expose individual `get`/`set` methods.
+- `AmplitudeStorage.setBatch` is the batched write that durable analytics
+  flushes use, one call for each pending write batch. `getBatch` remains a
+  compatibility wrapper around repeated `get` calls. Public storage adapters
+  continue to expose individual `get`/`set` methods.
 - `migrateLegacyData` remains accepted as a no-op compatibility option and does
   not import legacy Amplitude SDK data. Migrate that data before switching SDKs
   if it is required.

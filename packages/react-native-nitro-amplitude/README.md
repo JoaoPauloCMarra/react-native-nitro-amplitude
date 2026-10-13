@@ -556,8 +556,9 @@ Native HybridObject types:
 - `AmplitudeContext` (context JSON + prefetch, cached by normalized option
   set on both platforms). Its legacy session/event methods remain as deprecated
   no-op compatibility stubs; they do not import legacy Amplitude SQLite data.
-- `AmplitudeStorage` (sync memory/disk KV with deprecated `setBatch`/`getBatch`
-  wrappers and `removeBatch` for bulk cleanup).
+- `AmplitudeStorage` (sync memory/disk KV with `setBatch` for batched durable
+  writes, a `getBatch` compatibility wrapper, and `removeBatch` for bulk
+  cleanup).
 - `AmplitudeWorker` (bounded queue, 2 concurrent workers, request-scoped
   completion, cancellation of queued requests, queue/in-flight/byte metrics).
 

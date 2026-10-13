@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 const mockMemory = new Map<string, string>();
 const mockDisk = new Map<string, string>();
 const mockHybridObjects: Record<string, Record<string, jest.Mock>> = {};
@@ -383,7 +386,7 @@ describe("react-native-nitro-amplitude", () => {
     expect(normalized.osName).toBeUndefined();
   });
 
-  it("retains deprecated legacy ABI stubs without SQLite migration", () => {
+  it("keeps the context fixture in step with the Nitro spec", () => {
     expect(mockHybridObjects.AmplitudeContext).toBeUndefined();
     const context = getNativeApplicationContext({
       platform: true,
@@ -400,19 +403,17 @@ describe("react-native-nitro-amplitude", () => {
       country: false,
     });
     expect(context).toEqual({ platform: "iOS", version: "1.0.0" });
+    const specSource = readFileSync(
+      join(__dirname, "..", "AmplitudeContext.nitro.ts"),
+      "utf8",
+    );
+    const specMethods = [...specSource.matchAll(/^ {2}(\w+)\(/gm)]
+      .map((match) => match[1])
+      .sort();
+    expect(specMethods).toContain("getLegacySessionDataJson");
     expect(
       Object.keys(mockHybridObjects.AmplitudeContext ?? {}).sort(),
-    ).toEqual([
-      "getApplicationContextJson",
-      "getLegacyEventsJson",
-      "getLegacySessionDataJson",
-      "prefetch",
-      "removeLegacyEvent",
-    ]);
-    expect(mockMethod("AmplitudeContext", "getLegacySessionDataJson")()).toBe(
-      "{}",
-    );
-    expect(mockMethod("AmplitudeContext", "getLegacyEventsJson")()).toEqual([]);
+    ).toEqual(specMethods);
   });
 
   it("clears stale native diagnostics after successful probes", () => {
@@ -2557,10 +2558,12 @@ describe("react-native-nitro-amplitude", () => {
         }).promise;
         const handler = latestAppStateHandler();
         const failure = Promise.reject(new Error("offline"));
+        const handled = jest.spyOn(failure, "catch");
         jest.spyOn(analytics, "flush").mockReturnValue({ promise: failure });
 
         expect(() => handler("background")).not.toThrow();
-        await expect(failure).rejects.toThrow("offline");
+        expect(handled).toHaveBeenCalledTimes(1);
+        await Promise.resolve();
       } finally {
         analytics.shutdown();
       }

@@ -36,31 +36,35 @@ function createRequestId(): string {
 
 export class NitroHttpClient implements HttpClient {
   private readonly pendingRequests = new Map<string, PendingRequest>();
-  private listenerInstalled = false;
   private listenerWorker: AmplitudeWorker | undefined;
+  private removeListener: (() => void) | undefined;
 
   private ensureListener(): void {
     const worker = getAmplitudeWorker();
-    if (this.listenerInstalled && this.listenerWorker === worker) {
+    if (this.listenerWorker === worker) {
       return;
     }
-    this.listenerInstalled = true;
+    this.removeListener?.();
+    this.removeListener = undefined;
+    this.listenerWorker = undefined;
+    this.removeListener = worker.addOnComplete(
+      (requestId, statusCode, body, error) => {
+        const pending = this.pendingRequests.get(requestId);
+        if (!pending) {
+          return;
+        }
+        this.pendingRequests.delete(requestId);
+        if (error) {
+          pending.reject(createNativeError(error, new Error(error)));
+          return;
+        }
+        pending.resolve({
+          status: statusCode,
+          body,
+        });
+      },
+    );
     this.listenerWorker = worker;
-    worker.addOnComplete((requestId, statusCode, body, error) => {
-      const pending = this.pendingRequests.get(requestId);
-      if (!pending) {
-        return;
-      }
-      this.pendingRequests.delete(requestId);
-      if (error) {
-        pending.reject(createNativeError(error, new Error(error)));
-        return;
-      }
-      pending.resolve({
-        status: statusCode,
-        body,
-      });
-    });
   }
 
   async request(

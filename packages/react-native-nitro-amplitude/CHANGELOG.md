@@ -40,6 +40,9 @@ The format follows Keep a Changelog and the project adheres to SemVer.
   after the next successful disk write, so reads and deletes never scan the
   legacy store again. iOS no longer leaves pending legacy entries invisible
   for the rest of the process after a failed first attempt.
+- `nitroHttpClient` registers its completion listener again after a failed
+  registration, and removes the previous listener when the native worker
+  instance changes.
 - `healthCheck().errors` lists each distinct native failure once instead of
   repeating the same message.
 

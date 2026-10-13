@@ -367,6 +367,7 @@ void IOSAmplitudeAdapterCpp::setDisk(const std::string& key, const std::string& 
   if (diskStore_ != nullptr) {
     migrator_.ensureMigrated(*diskStore_);
     diskStore_->setDisk(key, value);
+    migrator_.rearmAfterWrite();
     return;
   }
   NSString* nsKey = RequireNSString(key);

@@ -2093,7 +2093,7 @@ void testLegacyDiskMigrationResumesWithoutResurrectingKeys() {
   assert(sortedKeys(reloaded).size() == 5);
 }
 
-void testLegacyDiskMigratorRunsOnceAndRearmsOnlyOnFailure() {
+void testLegacyDiskMigratorRetriesOnlyAfterASuccessfulWrite() {
   auto files = std::make_shared<UnstableDirectoryFileAdapter>();
   JsonlSegmentStore store(files, "legacy-migrator", 4096);
   std::map<std::string, std::string> legacy = {{"legacy-a", "1"}, {"legacy-b", "2"}};
@@ -2124,14 +2124,23 @@ void testLegacyDiskMigratorRunsOnceAndRearmsOnlyOnFailure() {
   assert(entriesCalls == 1 && clearCalls == 0);
   sourceThrows = false;
 
+  migrator.ensureMigrated(store);
+  assert(entriesCalls == 1);
+
+  migrator.rearmAfterWrite();
   files->failDataAppends = true;
   migrator.ensureMigrated(store);
   assert(entriesCalls == 2 && clearCalls == 0 && legacy.size() == 2);
   files->failDataAppends = false;
 
+  migrator.ensureMigrated(store);
+  migrator.ensureMigrated(store);
+  assert(entriesCalls == 2);
+
   migrator.forget("legacy-a");
   assert(legacy.size() == 1);
 
+  migrator.rearmAfterWrite();
   migrator.ensureMigrated(store);
   assert(entriesCalls == 3 && clearCalls == 1 && legacy.empty());
   assert(store.getDisk("legacy-b").value_or("") == "2");
@@ -4329,7 +4338,7 @@ int main() {
   testPosixReopenWhileDiskIsFull();
   testPosixMigrationUnderDiskFullRetriesWithoutDuplicates();
   testLegacyDiskMigrationResumesWithoutResurrectingKeys();
-  testLegacyDiskMigratorRunsOnceAndRearmsOnlyOnFailure();
+  testLegacyDiskMigratorRetriesOnlyAfterASuccessfulWrite();
   testSegmentStoreMigrationInterruptedMidway();
   testPosixPermissionDenied();
   testPosixDirectoryRemovedWhileRunning();

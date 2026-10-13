@@ -46,9 +46,10 @@ public:
 
   void ensureMigrated(JsonlSegmentStore& store) {
     std::lock_guard<std::mutex> lock(mutex_);
-    if (migrated_) {
+    if (migrated_ || !armed_) {
       return;
     }
+    armed_ = false;
     try {
       const auto entries = source_.entries();
       if (!entries.empty()) {
@@ -66,6 +67,11 @@ public:
     }
   }
 
+  void rearmAfterWrite() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    armed_ = true;
+  }
+
   void forget(const std::string& key) {
     std::lock_guard<std::mutex> lock(mutex_);
     if (migrated_) {
@@ -81,6 +87,7 @@ private:
   LegacyDiskSource source_;
   std::mutex mutex_;
   bool migrated_ = false;
+  bool armed_ = true;
 };
 
 } // namespace NitroAmplitude

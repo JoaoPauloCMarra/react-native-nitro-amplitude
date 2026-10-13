@@ -119,6 +119,7 @@ void AndroidAmplitudeAdapterCpp::setDisk(const std::string& key, const std::stri
     throw std::runtime_error("NitroAmplitude: disk_adapter_unavailable");
   }
   store->setDisk(key, value);
+  migrator_.rearmAfterWrite();
 }
 
 std::optional<std::string> AndroidAmplitudeAdapterCpp::getDisk(const std::string& key) {

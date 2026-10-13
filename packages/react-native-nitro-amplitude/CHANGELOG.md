@@ -36,13 +36,10 @@ The format follows Keep a Changelog and the project adheres to SemVer.
   that later calls read. Android builds the application context once for all
   tracking options.
 - Legacy disk storage migration follows one rule on iOS and Android: it runs
-  once per process on first disk use and retries on a later call only when the
-  attempt failed. iOS no longer leaves pending legacy entries invisible after a
-  failed first attempt.
-- A request rejected for an empty URL or request id now reports `nativeCode`
-  `invalid_request` with `error.code` `network_error`, instead of an English
-  sentence classified as `native_unavailable`. A missing native adapter reports
-  `nativeCode` `adapter_unavailable`.
+  once per process on first disk use. After a failed attempt it retries only
+  after the next successful disk write, so reads and deletes never scan the
+  legacy store again. iOS no longer leaves pending legacy entries invisible
+  for the rest of the process after a failed first attempt.
 - `healthCheck().errors` lists each distinct native failure once instead of
   repeating the same message.
 

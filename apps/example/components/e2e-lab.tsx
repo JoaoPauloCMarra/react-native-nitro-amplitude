@@ -113,7 +113,7 @@ export function AmplitudeE2eLab({ fixtureUrl, runId }: AmplitudeE2eLabProps) {
   useEffect(() => {
     let cancelled = false;
     const initialize = getDiagnostics().initialized
-      ? Promise.resolve()
+      ? Promise.resolve().then(() => setUserId("e2e-user"))
       : init(ANALYTICS_API_KEY, "e2e-user", {
           instanceName: "e2e-lab",
           trackingSessionEvents: true,

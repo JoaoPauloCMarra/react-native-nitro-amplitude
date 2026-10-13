@@ -55,8 +55,16 @@ The format follows Keep a Changelog and the project adheres to SemVer.
   that later calls read. Android builds the application context once for all
   tracking options.
 
+- Update the pinned `@amplitude/analytics-core` dependency from `2.59.0` to
+  `2.60.2`. It resolves pending `track` promises for events the server rejects
+  as duplicate `insert_id` values during upload.
+
 ### Fixed
 
+- The default Analytics transport uses the HTTP status when the server's JSON
+  response has no `code` field, as it already did for non-JSON responses. A
+  proxy or gateway error such as `401` or `502` with a JSON body is now
+  classified by its status instead of being retried as an unknown response.
 - Analytics `init` no longer fails when the cookie storage cannot be read,
   for example when a device's disk is full. A failed old-cookie read or
   removal no longer stops `init`. On web, a failed attribution (campaign)

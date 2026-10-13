@@ -73,6 +73,13 @@ projects; apps must not call `setContext` manually.
 - Web uses browser fetch and storage fallbacks without native Nitro bindings.
 - Smoke flows run deterministically in dry-run fixture mode; real-network
   example flows require keys from `apps/example/.env.local`.
+- `apps/example/.env.local` holds a live key. Build every device or simulator
+  example with `EXPO_PUBLIC_AMPLITUDE_DRY_RUN=1` so the key is not inlined into
+  the bundle.
+- Example build speed lives in tracked config (`apps/example/app.config.js`,
+  `apps/example/plugins/with-fast-gradle.js`), never in the generated native
+  folders. `NITRO_ANDROID_ARCHS=x86_64` limits ABIs for emulator builds; leave
+  it unset for phone APKs.
 
 ## Replay maintenance
 

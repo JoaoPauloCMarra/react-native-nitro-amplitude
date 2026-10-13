@@ -29,12 +29,18 @@ const COOKIE = getCookieName(API_KEY);
 
 class FlakyReadStorage extends MemoryStorage<UserSession> {
   failingReads = 0;
+  failOtherKeys = false;
 
   override async getRaw(): Promise<string | undefined> {
     return undefined;
   }
 
   override async get(key: string): Promise<UserSession | undefined> {
+    if (key !== COOKIE && this.failOtherKeys) {
+      throw new Error(
+        "[nitro-error:storage_full] NitroStorage: Disk SQLite exec failed",
+      );
+    }
     if (key === COOKIE && this.failingReads > 0) {
       this.failingReads -= 1;
       throw new Error(
@@ -157,6 +163,52 @@ describe("session storage read failures", () => {
     const { client } = await initClient(store, { optOut: false });
 
     expect(client.config.optOut).toBe(false);
+    client.shutdown();
+  });
+
+  it("keeps init working and events flowing when the campaign read fails", async () => {
+    const store = new FlakyReadStorage();
+    store.failOtherKeys = true;
+    const { client, loggerProvider } = await initClient(store, {
+      optOut: false,
+    });
+
+    expect(loggerProvider.error).toHaveBeenCalledWith(
+      expect.stringContaining("Failed to read attribution storage"),
+    );
+    expect(
+      getDiagnosticFailures().some(
+        (failure) => failure.operation === "session_storage_read",
+      ),
+    ).toBe(true);
+
+    await client.track("flowing_event").promise;
+    await client.flush().promise;
+    expect(
+      getDryRunAnalyticsEvents().some((record) =>
+        record.payload.events.some(
+          (event) => event.event_type === "flowing_event",
+        ),
+      ),
+    ).toBe(true);
+    client.shutdown();
+  });
+
+  it("still suppresses events for a stored opt-out when the campaign read fails", async () => {
+    const store = new FlakyReadStorage();
+    await store.set(COOKIE, { deviceId: "stored-device", optOut: true });
+    store.failOtherKeys = true;
+    const { client } = await initClient(store);
+
+    await client.track("blocked_event").promise;
+    await client.flush().promise;
+    expect(
+      getDryRunAnalyticsEvents().some((record) =>
+        record.payload.events.some(
+          (event) => event.event_type === "blocked_event",
+        ),
+      ),
+    ).toBe(false);
     client.shutdown();
   });
 });

@@ -17,6 +17,9 @@ The format follows Keep a Changelog and the project adheres to SemVer.
   not overwrite the stored session while reads fail. On the next successful
   read it merges the stored session with changes made since, restores the
   stored opt-out choice, and saves the result.
+- On web, `init` no longer rejects when the attribution (campaign) read from
+  cookie storage fails. It logs the failure, records a `session_storage_read`
+  diagnostic failure, and skips attribution for that init.
 - A stored opt-out is no longer reset to `false` on every `init`. A persisted
   `optOut: true` now survives a restart unless you pass `optOut` in `init`.
 - `createMockAmplitudeClient()` now includes `trackScreenView` and

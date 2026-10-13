@@ -12,7 +12,6 @@ public:
   virtual ~FileAdapter() = default;
 
   virtual bool ensureDirectory(const std::string& directory) = 0;
-  virtual std::vector<std::string> listFiles(const std::string& directory) = 0;
   virtual std::optional<std::vector<std::string>> readDirectory(const std::string& directory) = 0;
   virtual std::optional<std::string> readFile(const std::string& path) = 0;
   virtual std::optional<std::string> readRange(

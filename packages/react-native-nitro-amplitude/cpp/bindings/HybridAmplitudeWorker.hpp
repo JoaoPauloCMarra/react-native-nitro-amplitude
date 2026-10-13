@@ -73,7 +73,6 @@ private:
   std::queue<WorkerRequest> queue_;
   std::unordered_map<std::string, std::vector<uint64_t>> activeGenerations_;
   std::unordered_set<uint64_t> cancelledGenerations_;
-  std::unordered_set<uint64_t> inFlightGenerations_;
   uint64_t nextGeneration_ = 0;
   std::atomic<bool> running_{true};
   std::atomic<size_t> queueSize_{0};

@@ -407,8 +407,8 @@ them for application-specific sensitive data.
 Native HTTP failures expose the exact native outcome on two extra fields:
 
 - `error.nativeCode`: the native code, one of `network_error`, `timeout`,
-  `invalid_url`, `invalid_http_response`, `cancelled`, `queue_full`, or
-  `native_http_exception`. All except `timeout` keep
+  `invalid_url`, `invalid_http_response`, `invalid_request`, `cancelled`,
+  `queue_full`, or `native_http_exception`. All except `timeout` keep
   `error.code` as `network_error`; use `nativeCode` to tell them apart.
 - `error.details`: OS-level detail for `network_error`, when the platform
   reports it. iOS sets `domain`, `code` (an `NSURLError` code such as `-1003`),

@@ -121,6 +121,24 @@ describe("parseNativeError", () => {
   });
 });
 
+describe("worker error codes", () => {
+  it("maps invalid_request to a network error with a bare nativeCode", () => {
+    const raw =
+      "HybridAmplitudeWorker.enqueue: NitroAmplitude: invalid_request";
+    expect(parseNativeError(raw)).toEqual({ nativeCode: "invalid_request" });
+    expect(getAmplitudeErrorCode(new Error(raw))).toBe("network_error");
+  });
+
+  it("maps adapter_unavailable to native_unavailable", () => {
+    expect(parseNativeError("adapter_unavailable")).toEqual({
+      nativeCode: "adapter_unavailable",
+    });
+    expect(getAmplitudeErrorCode(new Error("adapter_unavailable"))).toBe(
+      "native_unavailable",
+    );
+  });
+});
+
 describe("getAmplitudeErrorCode with native detail", () => {
   it.each([
     ["network_error", "network_error"],

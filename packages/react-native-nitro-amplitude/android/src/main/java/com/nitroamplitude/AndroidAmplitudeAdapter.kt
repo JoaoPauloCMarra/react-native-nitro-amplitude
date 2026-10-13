@@ -94,25 +94,14 @@ object AndroidAmplitudeAdapter {
 
   @JvmStatic
   fun getApplicationContextJson(optionsJson: String): String {
-    val canonicalOptions = canonicalOptions(optionsJson)
     synchronized(cachedContexts) {
-      cachedContexts[canonicalOptions]?.let { return it }
+      cachedContexts[DEFAULT_OPTIONS_JSON]?.let { return it }
     }
     val json = buildApplicationContextJson()
     synchronized(cachedContexts) {
-      cachedContexts[canonicalOptions] = json
+      cachedContexts[DEFAULT_OPTIONS_JSON] = json
     }
     return json
-  }
-
-  private fun canonicalOptions(optionsJson: String): String {
-    val options = try {
-      JSONObject(optionsJson)
-    } catch (_: Exception) {
-      return DEFAULT_OPTIONS_JSON
-    }
-    val sortedKeys = options.keys().asSequence().toList().sorted()
-    return sortedKeys.joinToString("&") { key -> "$key=${options.optString(key)}" }
   }
 
   private fun buildApplicationContextJson(): String {

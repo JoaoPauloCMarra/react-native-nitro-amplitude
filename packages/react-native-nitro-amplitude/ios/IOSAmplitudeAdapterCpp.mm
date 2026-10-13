@@ -229,6 +229,34 @@ static NSString* CanonicalOptions(NSDictionary* options) {
   return [parts componentsJoinedByString:@"&"];
 }
 
+static NSDictionary* BaseContext() {
+  static NSDictionary* base = []() {
+    NSString* systemName = nil;
+    NSString* systemVersion = nil;
+    NSString* deviceModel = nil;
+#if NITRO_AMPLITUDE_HAS_UIKIT
+    UIDevice* device = [UIDevice currentDevice];
+    systemName = device.systemName;
+    systemVersion = device.systemVersion;
+    deviceModel = device.model;
+#endif
+    NSLocale* locale = [NSLocale currentLocale];
+    NSString* version = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleShortVersionString"];
+    return @{
+      @"version": version ?: @"",
+      @"platform": @"iOS",
+      @"language": locale.languageCode ?: @"",
+      @"country": locale.countryCode ?: @"",
+      @"osName": systemName ?: @"iOS",
+      @"osVersion": systemVersion ?: @"",
+      @"deviceManufacturer": @"Apple",
+      @"deviceModel": deviceModel ?: @"",
+      @"deviceBrand": @"Apple",
+    };
+  }();
+  return base;
+}
+
 IOSAmplitudeAdapterCpp::IOSAmplitudeAdapterCpp() {
   NSString* applicationSupport =
       [NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory, NSUserDomainMask, YES) firstObject];
@@ -286,7 +314,7 @@ void IOSAmplitudeAdapterCpp::MigrateLegacyDisk() {
 }
 
 void IOSAmplitudeAdapterCpp::prefetchContext() {
-  getApplicationContextJson("{}");
+  BaseContext();
 }
 
 std::string IOSAmplitudeAdapterCpp::getApplicationContextJson(const std::string& optionsJson) {
@@ -305,28 +333,7 @@ std::string IOSAmplitudeAdapterCpp::getApplicationContextJson(const std::string&
     }
   }
 
-  NSString* systemName = nil;
-  NSString* systemVersion = nil;
-  NSString* deviceModel = nil;
-#if NITRO_AMPLITUDE_HAS_UIKIT
-  UIDevice* device = [UIDevice currentDevice];
-  systemName = device.systemName;
-  systemVersion = device.systemVersion;
-  deviceModel = device.model;
-#endif
-  NSLocale* locale = [NSLocale currentLocale];
-  NSString* version = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleShortVersionString"];
-  NSMutableDictionary* json = [@{
-    @"version": version ?: @"",
-    @"platform": @"iOS",
-    @"language": locale.languageCode ?: @"",
-    @"country": locale.countryCode ?: @"",
-    @"osName": systemName ?: @"iOS",
-    @"osVersion": systemVersion ?: @"",
-    @"deviceManufacturer": @"Apple",
-    @"deviceModel": deviceModel ?: @"",
-    @"deviceBrand": @"Apple",
-  } mutableCopy];
+  NSMutableDictionary* json = [BaseContext() mutableCopy];
 
   if ([options[@"carrier"] boolValue]) {
     json[@"carrier"] = @"";
@@ -468,6 +475,9 @@ HttpResult IOSAmplitudeAdapterCpp::performHttpRequest(
     if ([error.domain isEqualToString:NSURLErrorDomain] &&
         (error.code == NSURLErrorTimedOut || error.code == NSURLErrorCancelled)) {
       result.error = error.code == NSURLErrorTimedOut ? "timeout" : "cancelled";
+    } else if ([error.domain isEqualToString:NSURLErrorDomain] &&
+               (error.code == NSURLErrorBadURL || error.code == NSURLErrorUnsupportedURL)) {
+      result.error = "invalid_url";
     } else {
       result.error = FormatNetworkError(error);
     }

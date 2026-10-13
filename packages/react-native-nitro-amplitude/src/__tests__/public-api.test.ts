@@ -332,6 +332,15 @@ describe("react-native-nitro-amplitude", () => {
     expect(typeof ExperimentCompat.ExperimentClient).toBe("function");
   });
 
+  it("prefetches native context without reading an option-specific entry", () => {
+    prefetchNativeContext();
+
+    expect(mockMethod("AmplitudeContext", "prefetch")).toHaveBeenCalledTimes(1);
+    expect(
+      mockMethod("AmplitudeContext", "getApplicationContextJson"),
+    ).not.toHaveBeenCalled();
+  });
+
   it("reads native context through Nitro and normalizes null values", () => {
     prefetchNativeContext();
     const context = getNativeApplicationContext({

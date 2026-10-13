@@ -23,6 +23,12 @@ The format follows Keep a Changelog and the project adheres to SemVer.
 - `getNativeStartupDiagnostics().nitroModulesAvailable` now reports whether
   `react-native-nitro-modules` loads. It was always `true`; it is `false` on web
   and on a native build where the module is missing.
+- iOS now reports `nativeCode` `invalid_url` for a malformed or unsupported
+  `serverUrl` (for example a URL without a scheme), as Android does. It
+  previously reported `network_error` with `details.code` `-1002`.
+- `prefetchNativeContext()` and the native `prefetch()` warm the context data
+  that later calls read. Android builds the application context once for all
+  tracking options.
 
 ## [0.11.0] - 2026-10-07
 

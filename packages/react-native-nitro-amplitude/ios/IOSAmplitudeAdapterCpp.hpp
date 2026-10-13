@@ -1,9 +1,10 @@
 #pragma once
 
-#include "../../cpp/core/ContextAdapter.hpp"
-#include "../../cpp/core/HttpAdapter.hpp"
-#include "../../cpp/core/JsonlSegmentStore.hpp"
-#include "../../cpp/core/StorageAdapter.hpp"
+#include "ContextAdapter.hpp"
+#include "HttpAdapter.hpp"
+#include "JsonlSegmentStore.hpp"
+#include "LegacyDiskMigration.hpp"
+#include "StorageAdapter.hpp"
 
 #include <map>
 #include <mutex>
@@ -39,9 +40,9 @@ private:
   std::mutex contextCacheMutex_;
   std::map<std::string, std::string> contextCache_;
   std::shared_ptr<JsonlSegmentStore> diskStore_;
-  bool legacyDiskPending_ = false;
+  LegacyDiskMigrator migrator_;
 
-  void MigrateLegacyDisk();
+  static LegacyDiskSource MakeLegacyDiskSource();
 };
 
 } // namespace NitroAmplitude

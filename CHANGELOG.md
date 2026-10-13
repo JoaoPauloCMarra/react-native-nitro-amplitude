@@ -29,6 +29,10 @@ The format follows Keep a Changelog and the project adheres to SemVer.
 - `prefetchNativeContext()` and the native `prefetch()` warm the context data
   that later calls read. Android builds the application context once for all
   tracking options.
+- Legacy disk storage migration follows one rule on iOS and Android: it runs
+  once per process on first disk use and retries on a later call only when the
+  attempt failed. iOS no longer leaves pending legacy entries invisible after a
+  failed first attempt.
 
 ## [0.11.0] - 2026-10-07
 

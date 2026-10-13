@@ -1,9 +1,10 @@
 #pragma once
 
-#include "../../cpp/core/ContextAdapter.hpp"
-#include "../../cpp/core/HttpAdapter.hpp"
-#include "../../cpp/core/JsonlSegmentStore.hpp"
-#include "../../cpp/core/StorageAdapter.hpp"
+#include "ContextAdapter.hpp"
+#include "HttpAdapter.hpp"
+#include "JsonlSegmentStore.hpp"
+#include "LegacyDiskMigration.hpp"
+#include "StorageAdapter.hpp"
 #include <fbjni/fbjni.h>
 #include <memory>
 #include <mutex>
@@ -19,7 +20,7 @@ class AndroidAmplitudeAdapterCpp
       public StorageAdapter,
       public HttpAdapter {
 public:
-  AndroidAmplitudeAdapterCpp() = default;
+  AndroidAmplitudeAdapterCpp();
   ~AndroidAmplitudeAdapterCpp() override = default;
 
   void prefetchContext() override;
@@ -41,12 +42,9 @@ public:
 private:
   std::mutex diskStoreMutex_;
   std::shared_ptr<JsonlSegmentStore> diskStore_;
-  bool legacyDiskMigrated_ = false;
-  bool legacyDiskRetryAllowed_ = true;
+  LegacyDiskMigrator migrator_;
 
   std::shared_ptr<JsonlSegmentStore> EnsureDiskStore();
-  bool MigrateLegacyDisk(JsonlSegmentStore& store);
-  void ForgetLegacyDiskEntry(const std::string& key);
 };
 
 } // namespace NitroAmplitude

@@ -2087,6 +2087,58 @@ void testLegacyDiskMigrationResumesWithoutResurrectingKeys() {
   assert(sortedKeys(reloaded).size() == 5);
 }
 
+void testLegacyDiskMigratorRunsOnceAndRearmsOnlyOnFailure() {
+  auto files = std::make_shared<UnstableDirectoryFileAdapter>();
+  JsonlSegmentStore store(files, "legacy-migrator", 4096);
+  std::map<std::string, std::string> legacy = {{"legacy-a", "1"}, {"legacy-b", "2"}};
+  int entriesCalls = 0;
+  int clearCalls = 0;
+  bool sourceThrows = false;
+  NitroAmplitude::LegacyDiskSource source;
+  source.entries = [&]() {
+    ++entriesCalls;
+    if (sourceThrows) {
+      throw std::runtime_error("source unavailable");
+    }
+    return std::vector<std::pair<std::string, std::string>>(legacy.begin(), legacy.end());
+  };
+  source.remove = [&](const std::vector<std::string>& keys) {
+    for (const auto& key : keys) {
+      legacy.erase(key);
+    }
+  };
+  source.clear = [&]() {
+    ++clearCalls;
+    legacy.clear();
+  };
+  NitroAmplitude::LegacyDiskMigrator migrator(source);
+
+  sourceThrows = true;
+  migrator.ensureMigrated(store);
+  assert(entriesCalls == 1 && clearCalls == 0);
+  sourceThrows = false;
+
+  files->failDataAppends = true;
+  migrator.ensureMigrated(store);
+  assert(entriesCalls == 2 && clearCalls == 0 && legacy.size() == 2);
+  files->failDataAppends = false;
+
+  migrator.forget("legacy-a");
+  assert(legacy.size() == 1);
+
+  migrator.ensureMigrated(store);
+  assert(entriesCalls == 3 && clearCalls == 1 && legacy.empty());
+  assert(store.getDisk("legacy-b").value_or("") == "2");
+
+  store.setDisk("fresh", "value");
+  migrator.ensureMigrated(store);
+  legacy["late"] = "3";
+  migrator.forget("late");
+  migrator.ensureMigrated(store);
+  assert(entriesCalls == 3 && clearCalls == 1);
+  assert(legacy.size() == 1 && !store.hasDisk("late"));
+}
+
 void testSegmentStoreMigrationInterruptedMidway() {
   auto files = std::make_shared<FakeFileAdapter>();
   const std::vector<std::pair<std::string, std::string>> legacy = {
@@ -4271,6 +4323,7 @@ int main() {
   testPosixReopenWhileDiskIsFull();
   testPosixMigrationUnderDiskFullRetriesWithoutDuplicates();
   testLegacyDiskMigrationResumesWithoutResurrectingKeys();
+  testLegacyDiskMigratorRunsOnceAndRearmsOnlyOnFailure();
   testSegmentStoreMigrationInterruptedMidway();
   testPosixPermissionDenied();
   testPosixDirectoryRemovedWhileRunning();

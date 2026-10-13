@@ -1,7 +1,7 @@
 #include "AndroidAmplitudeAdapterCpp.hpp"
 
-#include "../../../cpp/core/LegacyDiskMigration.hpp"
-#include "../../../cpp/core/PosixFileAdapter.hpp"
+#include "LegacyDiskMigration.hpp"
+#include "PosixFileAdapter.hpp"
 
 #include <exception>
 #include <limits>
@@ -47,70 +47,58 @@ local_ref<JavaStringArray> toJavaStringArray(const std::vector<std::string>& val
 
 } // namespace
 
+AndroidAmplitudeAdapterCpp::AndroidAmplitudeAdapterCpp()
+    : migrator_(LegacyDiskSource{
+          []() {
+            static auto entriesMethod = AndroidAmplitudeAdapterJava::javaClassStatic()
+                ->getStaticMethod<JavaStringArray()>("getLegacyDiskEntries", "()[Ljava/lang/String;");
+            const std::vector<std::string> flattened =
+                fromJavaStringArray(entriesMethod(AndroidAmplitudeAdapterJava::javaClassStatic()));
+            std::vector<std::pair<std::string, std::string>> legacy;
+            if (flattened.size() % 2 != 0) {
+              return legacy;
+            }
+            legacy.reserve(flattened.size() / 2);
+            for (size_t i = 0; i + 1 < flattened.size(); i += 2) {
+              legacy.emplace_back(flattened[i], flattened[i + 1]);
+            }
+            return legacy;
+          },
+          [](const std::vector<std::string>& keys) {
+            static auto removeMethod = AndroidAmplitudeAdapterJava::javaClassStatic()
+                ->getStaticMethod<void(alias_ref<JavaStringArray>)>(
+                    "removeLegacyDiskEntries", "([Ljava/lang/String;)V");
+            removeMethod(AndroidAmplitudeAdapterJava::javaClassStatic(), toJavaStringArray(keys));
+          },
+          []() {
+            static auto clearMethod = AndroidAmplitudeAdapterJava::javaClassStatic()
+                ->getStaticMethod<void()>("clearLegacyDisk", "()V");
+            clearMethod(AndroidAmplitudeAdapterJava::javaClassStatic());
+          },
+      }) {}
+
 std::shared_ptr<JsonlSegmentStore> AndroidAmplitudeAdapterCpp::EnsureDiskStore() {
-  std::lock_guard<std::mutex> lock(diskStoreMutex_);
-  try {
-    if (diskStore_ == nullptr) {
-      static auto directoryMethod = AndroidAmplitudeAdapterJava::javaClassStatic()->getStaticMethod<jstring()>(
-          "getStorageDirectory", "()Ljava/lang/String;");
-      auto directory = directoryMethod(AndroidAmplitudeAdapterJava::javaClassStatic());
-      if (directory == nullptr) {
-        return nullptr;
+  std::shared_ptr<JsonlSegmentStore> store;
+  {
+    std::lock_guard<std::mutex> lock(diskStoreMutex_);
+    try {
+      if (diskStore_ == nullptr) {
+        static auto directoryMethod = AndroidAmplitudeAdapterJava::javaClassStatic()->getStaticMethod<jstring()>(
+            "getStorageDirectory", "()Ljava/lang/String;");
+        auto directory = directoryMethod(AndroidAmplitudeAdapterJava::javaClassStatic());
+        if (directory == nullptr) {
+          return nullptr;
+        }
+        diskStore_ = std::make_shared<JsonlSegmentStore>(
+            std::make_shared<PosixFileAdapter>(), directory->toStdString());
       }
-      diskStore_ = std::make_shared<JsonlSegmentStore>(
-          std::make_shared<PosixFileAdapter>(), directory->toStdString());
+    } catch (const std::exception&) {
+      return diskStore_;
     }
-    if (!legacyDiskMigrated_ && legacyDiskRetryAllowed_) {
-      legacyDiskRetryAllowed_ = false;
-      legacyDiskMigrated_ = MigrateLegacyDisk(*diskStore_);
-    }
-  } catch (const std::exception&) {
-    return diskStore_;
+    store = diskStore_;
   }
-  return diskStore_;
-}
-
-void AndroidAmplitudeAdapterCpp::ForgetLegacyDiskEntry(const std::string& key) {
-  std::lock_guard<std::mutex> lock(diskStoreMutex_);
-  if (legacyDiskMigrated_) {
-    return;
-  }
-  try {
-    static auto removeMethod = AndroidAmplitudeAdapterJava::javaClassStatic()
-        ->getStaticMethod<void(alias_ref<JavaStringArray>)>(
-            "removeLegacyDiskEntries", "([Ljava/lang/String;)V");
-    removeMethod(AndroidAmplitudeAdapterJava::javaClassStatic(), toJavaStringArray({key}));
-  } catch (const std::exception&) {
-  }
-}
-
-bool AndroidAmplitudeAdapterCpp::MigrateLegacyDisk(JsonlSegmentStore& store) {
-  static auto entriesMethod = AndroidAmplitudeAdapterJava::javaClassStatic()->getStaticMethod<JavaStringArray()>(
-      "getLegacyDiskEntries", "()[Ljava/lang/String;");
-  const std::vector<std::string> flattened =
-      fromJavaStringArray(entriesMethod(AndroidAmplitudeAdapterJava::javaClassStatic()));
-  if (flattened.empty() || flattened.size() % 2 != 0) {
-    return true;
-  }
-  std::vector<std::pair<std::string, std::string>> legacy;
-  legacy.reserve(flattened.size() / 2);
-  for (size_t i = 0; i + 1 < flattened.size(); i += 2) {
-    legacy.emplace_back(flattened[i], flattened[i + 1]);
-  }
-  const LegacyDiskMigrationResult result = migrateLegacyDiskEntries(store, legacy);
-  if (!result.complete) {
-    if (!result.handledKeys.empty()) {
-      static auto removeMethod = AndroidAmplitudeAdapterJava::javaClassStatic()
-          ->getStaticMethod<void(alias_ref<JavaStringArray>)>(
-              "removeLegacyDiskEntries", "([Ljava/lang/String;)V");
-      removeMethod(AndroidAmplitudeAdapterJava::javaClassStatic(), toJavaStringArray(result.handledKeys));
-    }
-    return false;
-  }
-  static auto clearMethod = AndroidAmplitudeAdapterJava::javaClassStatic()->getStaticMethod<void()>(
-      "clearLegacyDisk", "()V");
-  clearMethod(AndroidAmplitudeAdapterJava::javaClassStatic());
-  return true;
+  migrator_.ensureMigrated(*store);
+  return store;
 }
 
 void AndroidAmplitudeAdapterCpp::prefetchContext() {
@@ -131,8 +119,6 @@ void AndroidAmplitudeAdapterCpp::setDisk(const std::string& key, const std::stri
     throw std::runtime_error("NitroAmplitude: disk_adapter_unavailable");
   }
   store->setDisk(key, value);
-  std::lock_guard<std::mutex> lock(diskStoreMutex_);
-  legacyDiskRetryAllowed_ = true;
 }
 
 std::optional<std::string> AndroidAmplitudeAdapterCpp::getDisk(const std::string& key) {
@@ -147,7 +133,7 @@ void AndroidAmplitudeAdapterCpp::deleteDisk(const std::string& key) {
   const auto store = EnsureDiskStore();
   if (store != nullptr) {
     store->deleteDisk(key);
-    ForgetLegacyDiskEntry(key);
+    migrator_.forget(key);
   }
 }
 

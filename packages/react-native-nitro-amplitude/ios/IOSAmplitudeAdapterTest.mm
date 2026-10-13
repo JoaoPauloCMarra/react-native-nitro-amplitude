@@ -205,6 +205,10 @@ void testLegacyMigration() {
   assert(suiteDomain().count == 6);
 
   {
+    IOSAmplitudeAdapterCpp untouched;
+    assert(suiteDomain().count == 6);
+  }
+  {
     IOSAmplitudeAdapterCpp adapter;
     assert(adapter.getDisk("legacy-key").value_or("") == "legacy-value");
     assert(adapter.getDisk("existing-key").value_or("") == "already-stored");

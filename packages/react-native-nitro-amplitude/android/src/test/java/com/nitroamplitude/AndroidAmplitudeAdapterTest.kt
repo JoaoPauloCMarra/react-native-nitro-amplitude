@@ -470,7 +470,7 @@ class AndroidAmplitudeAdapterTest {
   }
 
   @Test
-  fun applicationContextJsonHasEveryFieldAndIsCachedPerOptionSet() {
+  fun applicationContextJsonHasEveryFieldAndIsCachedOnce() {
     val json = JSONObject(AndroidAmplitudeAdapter.getApplicationContextJson("{}"))
     assertEquals("Android", json.getString("platform"))
     assertEquals("android", json.getString("osName"))

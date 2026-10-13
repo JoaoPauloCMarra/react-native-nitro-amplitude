@@ -1,28 +1,22 @@
-import { useEffect, useState } from "react";
-import { StyleSheet, View } from "react-native";
 import { useLocalSearchParams } from "expo-router";
 import {
   NitroExperimentStorage,
   NitroMemoryStorage,
   createAmplitudeClient,
 } from "react-native-nitro-amplitude";
-import { Card, Page, StatusRow } from "../components/shared";
+import { ANALYTICS_API_KEY, delay } from "../components/fixture";
+import {
+  LabBlockedPage,
+  LabCasesScreen,
+  countFailedCases,
+  useLabCases,
+} from "../components/lab-runner";
 
-const ANALYTICS_API_KEY = "nitro-amplitude-dry-run-analytics-key";
 const DURABLE_NAMESPACE = "e2e-durable-identity";
 const STORAGE_NAMESPACE = "e2e-experiment-storage";
 const STORAGE_KEY = "relaunch-marker";
 
 type Phase = "write" | "read";
-
-type PersistenceCase = {
-  name: string;
-  status: string;
-};
-
-function delay(millis: number): Promise<void> {
-  return new Promise<void>((resolve) => setTimeout(resolve, millis));
-}
 
 function createDurableClient() {
   return createAmplitudeClient({
@@ -79,20 +73,6 @@ async function runExperimentStorageCase(
     : `fail:exp-storage=disk=${diskValue === runId}:memory=${String(memoryValue === null)}`;
 }
 
-async function runCase(
-  name: string,
-  run: () => Promise<string>,
-): Promise<PersistenceCase> {
-  try {
-    return { name, status: await run() };
-  } catch (error) {
-    return {
-      name,
-      status: `fail:${name}=${error instanceof Error ? error.message.slice(0, 40) : "error"}`,
-    };
-  }
-}
-
 export default function AmplitudePersistenceLabScreen() {
   const searchParams = useLocalSearchParams<{
     phase?: string;
@@ -107,107 +87,40 @@ export default function AmplitudePersistenceLabScreen() {
       ? searchParams.runId
       : undefined;
   const dryRun = process.env.EXPO_PUBLIC_AMPLITUDE_DRY_RUN === "1";
-  const [cases, setCases] = useState<PersistenceCase[]>([]);
-  const [done, setDone] = useState(false);
-
-  useEffect(() => {
-    if (!dryRun || !phase || !runId) {
-      return;
-    }
-    let cancelled = false;
-    void (async () => {
-      const steps: [string, () => Promise<string>][] = [
-        ["durable-identity", () => runDurableIdentityCase(phase, runId)],
-        ["experiment-storage", () => runExperimentStorageCase(phase, runId)],
-      ];
-      for (const [name, run] of steps) {
-        const result = await runCase(name, run);
-        if (cancelled) {
-          return;
-        }
-        setCases((previous) => [...previous, result]);
-      }
-      if (!cancelled) {
-        setDone(true);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [dryRun, phase, runId]);
+  const { cases, done } = useLabCases(
+    dryRun && phase !== undefined && runId !== undefined,
+    () =>
+      phase === undefined || runId === undefined
+        ? []
+        : [
+            ["durable-identity", () => runDurableIdentityCase(phase, runId)],
+            [
+              "experiment-storage",
+              () => runExperimentStorageCase(phase, runId),
+            ],
+          ],
+    `${phase ?? ""}:${runId ?? ""}`,
+  );
 
   if (!dryRun) {
-    return (
-      <Page
-        title="Persistence lab"
-        subtitle="Start the example in fixture mode"
-      >
-        <StatusRow
-          testID="e2e-persistence-blocked"
-          label="state"
-          value="blocked: fixture mode required"
-        />
-      </Page>
-    );
+    return <LabBlockedPage prefix="persistence" title="Persistence lab" />;
   }
 
-  const failed = cases.filter((item) => !item.status.startsWith("ok:")).length;
   const summary =
     phase && runId
       ? done
-        ? `persistence-${phase}-done:fail=${failed};`
+        ? `persistence-${phase}-done:fail=${countFailedCases(cases)};`
         : "running"
       : "blocked:phase-and-run-id-required";
 
   return (
-    <View
-      testID="e2e-persistence-screen"
-      style={{ flex: 1 }}
-      accessibilityLabel="Persistence lab"
-    >
-      <Page
-        title="Persistence lab"
-        subtitle="Deep link nitroamplitude://e2e-persistence"
-      >
-        <StatusRow
-          testID="e2e-persistence-mode"
-          label="mode"
-          value="dry-run fixture"
-        />
-        <View
-          testID="e2e-persistence-results"
-          accessible
-          accessibilityLabel={[
-            ...cases.map((item) => item.status),
-            summary,
-          ].join(" ")}
-          style={localStyles.resultsProbe}
-        />
-        <StatusRow
-          testID="e2e-persistence-summary"
-          label="summary"
-          value={summary}
-        />
-        <Card
-          title="Relaunch persistence"
-          subtitle="Native durable and memory storage"
-        >
-          {cases.map((item) => (
-            <StatusRow
-              key={item.name}
-              testID={`e2e-persistence-${item.name}`}
-              label={item.name}
-              value={item.status}
-            />
-          ))}
-        </Card>
-      </Page>
-    </View>
+    <LabCasesScreen
+      prefix="persistence"
+      title="Persistence lab"
+      cardTitle="Relaunch persistence"
+      cardSubtitle="Native durable and memory storage"
+      cases={cases}
+      summary={summary}
+    />
   );
 }
-
-const localStyles = StyleSheet.create({
-  resultsProbe: {
-    height: 1,
-  },
-});

@@ -29,15 +29,11 @@ export const Colors = {
   primary: "#0f766e",
   success: "#15803d",
   danger: "#b91c1c",
-  warning: "#b45309",
-  memory: "#c2410c",
   disk: "#1d4ed8",
-  secure: "#0d9488",
   accent: "#334155",
 };
 
-type ButtonVariant = "primary" | "danger" | "secondary" | "ghost" | "success";
-type ButtonSize = "sm" | "md" | "lg";
+type ButtonVariant = "primary" | "secondary";
 
 type ButtonProps = {
   title: string;
@@ -45,24 +41,17 @@ type ButtonProps = {
   variant?: ButtonVariant;
   style?: ViewStyle;
   disabled?: boolean;
-  size?: ButtonSize;
   testID?: string;
 };
 
 const buttonBackground: Record<ButtonVariant, string> = {
   primary: Colors.primary,
-  danger: Colors.danger,
-  success: Colors.success,
   secondary: Colors.card,
-  ghost: "transparent",
 };
 
 const buttonTextColor: Record<ButtonVariant, string> = {
   primary: "#f8fafc",
-  danger: "#f8fafc",
-  success: "#f8fafc",
   secondary: Colors.text,
-  ghost: Colors.muted,
 };
 
 export const Button = ({
@@ -71,7 +60,6 @@ export const Button = ({
   variant = "primary",
   style,
   disabled = false,
-  size = "md",
   testID,
 }: ButtonProps) => (
   <Pressable
@@ -83,9 +71,6 @@ export const Button = ({
     style={({ pressed }) => [
       styles.button,
       { backgroundColor: buttonBackground[variant] },
-      size === "sm" && styles.buttonSm,
-      size === "lg" && styles.buttonLg,
-      variant === "ghost" && styles.buttonGhost,
       pressed && !disabled && styles.buttonPressed,
       disabled && styles.buttonDisabled,
       style,
@@ -93,14 +78,7 @@ export const Button = ({
     onPress={onPress}
     disabled={disabled}
   >
-    <Text
-      style={[
-        styles.buttonText,
-        { color: buttonTextColor[variant] },
-        size === "sm" && styles.buttonTextSm,
-        size === "lg" && styles.buttonTextLg,
-      ]}
-    >
+    <Text style={[styles.buttonText, { color: buttonTextColor[variant] }]}>
       {title}
     </Text>
   </Pressable>
@@ -388,22 +366,6 @@ export const styles = StyleSheet.create({
     justifyContent: "center",
     boxShadow: "0 6px 16px rgba(15, 23, 42, 0.08)",
   },
-  buttonSm: {
-    minHeight: 34,
-    paddingVertical: 7,
-    paddingHorizontal: 10,
-    borderRadius: 10,
-  },
-  buttonLg: {
-    minHeight: 50,
-    paddingVertical: 14,
-    paddingHorizontal: 20,
-  },
-  buttonGhost: {
-    borderWidth: 1,
-    borderColor: Colors.border,
-    boxShadow: "none",
-  },
   buttonPressed: {
     transform: [{ scale: 0.98 }],
     opacity: 0.9,
@@ -415,12 +377,6 @@ export const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "700",
     letterSpacing: 0.2,
-  },
-  buttonTextSm: {
-    fontSize: 12,
-  },
-  buttonTextLg: {
-    fontSize: 16,
   },
   inputGroup: {
     gap: 6,

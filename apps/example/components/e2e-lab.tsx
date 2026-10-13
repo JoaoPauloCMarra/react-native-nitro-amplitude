@@ -35,11 +35,10 @@ import {
   getDryRunAnalyticsEvents,
   getNetworkEnabled,
 } from "react-native-nitro-amplitude/network";
+import { ANALYTICS_API_KEY, EXPERIMENT_API_KEY } from "./fixture";
 import { Button, Card, Colors, StatusRow, styles } from "./shared";
 
 const DRY_RUN = process.env.EXPO_PUBLIC_AMPLITUDE_DRY_RUN === "1";
-const ANALYTICS_API_KEY = "nitro-amplitude-dry-run-analytics-key";
-const EXPERIMENT_API_KEY = "nitro-amplitude-dry-run-experiment-key";
 
 const DEMO_FLAG_BODY = JSON.stringify({
   "demo-flag": { key: "on", value: "on" },
@@ -113,7 +112,9 @@ export function AmplitudeE2eLab({ fixtureUrl, runId }: AmplitudeE2eLabProps) {
   useEffect(() => {
     let cancelled = false;
     const initialize = getDiagnostics().initialized
-      ? Promise.resolve().then(() => setUserId("e2e-user"))
+      ? Promise.resolve().then(() => {
+          setUserId("e2e-user");
+        })
       : init(ANALYTICS_API_KEY, "e2e-user", {
           instanceName: "e2e-lab",
           trackingSessionEvents: true,
@@ -810,8 +811,8 @@ export function AmplitudeE2eLab({ fixtureUrl, runId }: AmplitudeE2eLabProps) {
           title="Combined client"
           onPress={() => {
             const client = createAmplitudeClient({
-              analyticsApiKey: "nitro-amplitude-dry-run-analytics-key",
-              experimentDeploymentKey: "nitro-amplitude-dry-run-experiment-key",
+              analyticsApiKey: ANALYTICS_API_KEY,
+              experimentDeploymentKey: EXPERIMENT_API_KEY,
               userId: "e2e-combined",
               dryRun: true,
               instanceName: "e2e-combined",

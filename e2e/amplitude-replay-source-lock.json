@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "runtimeSourceSha256": "5e3c8cd325cc0a44dc30d9f0472b2725951f660aca4ff9e58ae4046891f07242",
+  "runtimeSourceSha256": "94bde79c5061ee57229feb940a198737e2fee6387a30cb324b0db851def7b169",
   "runtimeSourceFiles": [
     "apps/example/app.config.js",
     "apps/example/app/_layout.tsx",
@@ -18,6 +18,8 @@
     "apps/example/babel.config.js",
     "apps/example/components/e2e-gate.tsx",
     "apps/example/components/e2e-lab.tsx",
+    "apps/example/components/fixture.ts",
+    "apps/example/components/lab-runner.tsx",
     "apps/example/components/shared.tsx",
     "apps/example/components/smoke-test.tsx",
     "apps/example/metro.config.js",
@@ -88,7 +90,6 @@
     "packages/react-native-nitro-amplitude/src/analytics/storage/local-storage.ts",
     "packages/react-native-nitro-amplitude/src/analytics/types.ts",
     "packages/react-native-nitro-amplitude/src/analytics/typings/ua-parser.d.ts",
-    "packages/react-native-nitro-amplitude/src/analytics/utils/platform.ts",
     "packages/react-native-nitro-amplitude/src/analytics/version.ts",
     "packages/react-native-nitro-amplitude/src/diagnostic-failures.ts",
     "packages/react-native-nitro-amplitude/src/diagnostics-pipeline.ts",
@@ -120,7 +121,6 @@
     "packages/react-native-nitro-amplitude/src/experiment/util/backoff.ts",
     "packages/react-native-nitro-amplitude/src/experiment/util/convert.ts",
     "packages/react-native-nitro-amplitude/src/experiment/util/index.ts",
-    "packages/react-native-nitro-amplitude/src/experiment/util/platform.ts",
     "packages/react-native-nitro-amplitude/src/experiment/util/userSessionExposureTracker.ts",
     "packages/react-native-nitro-amplitude/src/index.ts",
     "packages/react-native-nitro-amplitude/src/index.web.ts",
@@ -135,6 +135,7 @@
     "packages/react-native-nitro-amplitude/src/native/storage.web.ts",
     "packages/react-native-nitro-amplitude/src/network.ts",
     "packages/react-native-nitro-amplitude/src/package-version.ts",
+    "packages/react-native-nitro-amplitude/src/platform.ts",
     "packages/react-native-nitro-amplitude/src/presets.ts",
     "packages/react-native-nitro-amplitude/src/testing.ts"
   ],

@@ -7,10 +7,9 @@ import {
   getConnectorIdentity,
 } from "react-native-nitro-amplitude";
 import { DryRunTransport } from "react-native-nitro-amplitude/network";
+import { ANALYTICS_API_KEY, EXPERIMENT_API_KEY } from "../components/fixture";
+import { LabBlockedPage } from "../components/lab-runner";
 import { Button, Card, Page, StatusRow } from "../components/shared";
-
-const ANALYTICS_API_KEY = "nitro-amplitude-dry-run-analytics-key";
-const EXPERIMENT_API_KEY = "nitro-amplitude-dry-run-experiment-key";
 
 type CaseStatus = "pass" | "fail" | "skip";
 type LabCase = {
@@ -25,10 +24,6 @@ type IdentityReport = {
   skip: number;
   cases: LabCase[];
 };
-
-declare global {
-  var __identityReport: IdentityReport | undefined;
-}
 
 function runCase(
   name: string,
@@ -115,7 +110,6 @@ async function runIdentitySweep(): Promise<IdentityReport> {
     skip: cases.filter((item) => item.status === "skip").length,
     cases,
   };
-  globalThis.__identityReport = report;
   return report;
 }
 
@@ -140,15 +134,7 @@ export default function AmplitudeIdentityLabScreen() {
   }, [dryRun]);
 
   if (!dryRun) {
-    return (
-      <Page title="Identity lab" subtitle="Start the example in fixture mode">
-        <StatusRow
-          testID="e2e-identity-blocked"
-          label="state"
-          value="blocked: fixture mode required"
-        />
-      </Page>
-    );
+    return <LabBlockedPage prefix="identity" title="Identity lab" />;
   }
 
   const summary = report

@@ -28,7 +28,7 @@ import { Button, Card, Colors, StatusRow } from "./shared";
 
 type LogEntry = {
   label: string;
-  status: "pass" | "fail" | "skipped";
+  status: "pass" | "fail";
   detail?: string;
 };
 
@@ -43,15 +43,7 @@ export function SmokeTestRunner() {
     setRunning(true);
     setSummary("Running");
 
-    const run = async (
-      label: string,
-      fn: () => void | Promise<void>,
-      skipReason?: string,
-    ) => {
-      if (skipReason) {
-        next.push({ label, status: "skipped", detail: skipReason });
-        return;
-      }
+    const run = async (label: string, fn: () => void | Promise<void>) => {
       try {
         await fn();
         next.push({ label, status: "pass" });
@@ -190,10 +182,9 @@ export function SmokeTestRunner() {
     setLogs(next);
     const passed = next.filter((entry) => entry.status === "pass").length;
     const failed = next.filter((entry) => entry.status === "fail").length;
-    const skipped = next.filter((entry) => entry.status === "skipped").length;
     const completionLabel = failed === 0 ? "Complete: PASS" : "Complete: FAIL";
     setSummary(
-      `${completionLabel}: ${passed} passed · ${failed} failed · ${skipped} skipped · ${
+      `${completionLabel}: ${passed} passed · ${failed} failed · ${
         next.length
       } total`,
     );

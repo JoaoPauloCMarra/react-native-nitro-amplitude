@@ -28,3 +28,54 @@ describe("publish gate", () => {
     expect(artifactStage).not.toContain("bun run test:types");
   });
 });
+
+describe("package doc lifecycle", () => {
+  test("copies only documents the package tarball ships", () => {
+    const syncSource = fs.readFileSync(
+      path.join(
+        root,
+        "packages",
+        "react-native-nitro-amplitude",
+        "scripts",
+        "sync-package-docs.js",
+      ),
+      "utf8",
+    );
+    const packageJson = JSON.parse(
+      fs.readFileSync(
+        path.join(
+          root,
+          "packages",
+          "react-native-nitro-amplitude",
+          "package.json",
+        ),
+        "utf8",
+      ),
+    );
+    const alwaysPacked = new Set(["README.md", "LICENSE"]);
+    const sources = [...syncSource.matchAll(/source: "([^"]+)"/g)].map(
+      (match) => match[1],
+    );
+    expect(sources.length).toBeGreaterThan(0);
+    for (const source of sources) {
+      expect(alwaysPacked.has(source) || packageJson.files.includes(source)).toBe(
+        true,
+      );
+    }
+  });
+});
+
+describe("publish workflow", () => {
+  test("every validate output is read by a later job", () => {
+    const workflow = fs.readFileSync(
+      path.join(root, ".github", "workflows", "npm-publish.yml"),
+      "utf8",
+    );
+    const block = workflow.match(/^ {4}outputs:\n((?: {6}\S.*\n)+)/m)?.[1] ?? "";
+    const outputs = [...block.matchAll(/^ {6}(\w+):/gm)].map((m) => m[1]);
+    expect(outputs.length).toBeGreaterThan(0);
+    for (const output of outputs) {
+      expect(workflow).toContain(`needs.validate.outputs.${output}`);
+    }
+  });
+});

@@ -58,3 +58,17 @@ describe("getNativeStartupDiagnostics nitroModulesAvailable", () => {
     expect(native.nativeAvailable).toBe(false);
   });
 });
+
+describe("healthCheck errors", () => {
+  afterEach(() => {
+    jest.resetModules();
+  });
+
+  it("lists each distinct native failure once on web", async () => {
+    jest.resetModules();
+    const result = await loadDiagnostics("web", "present").healthCheck();
+    expect(result.ok).toBe(false);
+    expect(result.errors.length).toBeGreaterThan(0);
+    expect(new Set(result.errors).size).toBe(result.errors.length);
+  });
+});

@@ -9,6 +9,7 @@ import {
 import { VERSION } from "../version";
 import { Platform } from "react-native";
 import { getNativeApplicationContext } from "../../native/context";
+import type { NativeApplicationContext } from "../../native/context";
 
 const BROWSER_PLATFORM = "Web";
 const IP_ADDRESS = "$remote";
@@ -33,22 +34,6 @@ function getNativePlatformName(platformOS = getPlatformOS()): string {
   }
 }
 
-type NativeContext = {
-  version?: string;
-  platform?: string;
-  language?: string;
-  country?: string;
-  osName?: string;
-  osVersion?: string;
-  deviceBrand?: string;
-  deviceManufacturer?: string;
-  deviceModel?: string;
-  carrier?: string;
-  adid?: string;
-  appSetId?: string;
-  idfv?: string;
-};
-
 export class Context implements BeforePlugin {
   name = "@amplitude/plugin-context-react-native";
   type = "before" as const;
@@ -58,7 +43,7 @@ export class Context implements BeforePlugin {
   // @ts-ignore
   config: ReactNativeConfig;
   library = `amplitude-nitro-ts/${VERSION}`;
-  private nativeContext: NativeContext | undefined;
+  private nativeContext: NativeApplicationContext | undefined;
   private nativeContextLoaded = false;
 
   setup(config: ReactNativeConfig): Promise<undefined> {
@@ -66,7 +51,7 @@ export class Context implements BeforePlugin {
     return Promise.resolve(undefined);
   }
 
-  private getNativeContext(): NativeContext | undefined {
+  private getNativeContext(): NativeApplicationContext | undefined {
     if (this.nativeContextLoaded) {
       return this.nativeContext;
     }

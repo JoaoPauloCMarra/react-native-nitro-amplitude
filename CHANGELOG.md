@@ -33,6 +33,8 @@ The format follows Keep a Changelog and the project adheres to SemVer.
   once per process on first disk use and retries on a later call only when the
   attempt failed. iOS no longer leaves pending legacy entries invisible after a
   failed first attempt.
+- `healthCheck().errors` lists each distinct native failure once instead of
+  repeating the same message.
 
 ## [0.11.0] - 2026-10-07
 

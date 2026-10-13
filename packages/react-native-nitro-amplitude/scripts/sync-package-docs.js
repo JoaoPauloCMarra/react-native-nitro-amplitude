@@ -16,7 +16,6 @@ const lifecycle = createPackageDocLifecycle({
     { source: "CHANGELOG.md", target: "CHANGELOG.md" },
     { source: "LICENSE", target: "LICENSE" },
     { source: "SECURITY.md", target: "SECURITY.md" },
-    { source: "docs", target: "docs", persistent: false },
   ],
 });
 

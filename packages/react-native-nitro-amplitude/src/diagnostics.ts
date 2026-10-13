@@ -169,6 +169,11 @@ export async function healthCheck(
   analytics?: AmplitudeReactNativeClient,
 ): Promise<AmplitudeHealthCheckResult> {
   const errors: string[] = [];
+  const addError = (message: string) => {
+    if (!errors.includes(message)) {
+      errors.push(message);
+    }
+  };
   const native = getNativeStartupDiagnostics();
   let diskStorageWritable = false;
   let workerReady = false;
@@ -181,7 +186,7 @@ export async function healthCheck(
     diskStorageWritable = storage.get(key, true) === "ok";
     storage.remove(key, true);
   } catch (error) {
-    errors.push(error instanceof Error ? error.message : String(error));
+    addError(error instanceof Error ? error.message : String(error));
   }
 
   try {
@@ -189,11 +194,11 @@ export async function healthCheck(
     const worker = getAmplitudeWorker();
     workerReady = worker.queueSize() >= 0;
   } catch (error) {
-    errors.push(error instanceof Error ? error.message : String(error));
+    addError(error instanceof Error ? error.message : String(error));
   }
 
   if (!native.nativeAvailable && native.lastError) {
-    errors.push(native.lastError.message);
+    addError(native.lastError.message);
   }
 
   const analyticsInitialized = analytics

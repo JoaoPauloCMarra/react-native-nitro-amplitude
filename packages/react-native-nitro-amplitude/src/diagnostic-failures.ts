@@ -126,9 +126,6 @@ function getExperimentSurface(requestUrl: string): AmplitudeDiagnosticSurface {
   try {
     const url = new URL(requestUrl);
     const normalized = `${url.host}${url.pathname}`.toLowerCase();
-    if (normalized.includes("flag.")) {
-      return "experiment_flag_fetch";
-    }
     if (normalized.includes("flag")) {
       return "experiment_flag_fetch";
     }

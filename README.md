@@ -24,7 +24,7 @@ bun add react-native-nitro-amplitude react-native-nitro-modules
 
 ## Requirements and compatibility
 
-Compatibility for `0.11.0`:
+Compatibility for `0.11.1`:
 
 | Dependency                   | Supported range    | Tested baseline     |
 | ---------------------------- | ------------------ | ------------------- |
@@ -53,7 +53,7 @@ regenerate and rebuild native projects so the committed Nitro 0.37.1 bindings
 are compiled into the app:
 
 ```sh
-bun add react-native-nitro-amplitude@0.11.0 react-native-nitro-modules@0.37.1
+bun add react-native-nitro-amplitude@0.11.1 react-native-nitro-modules@0.37.1
 bunx expo prebuild
 ```
 

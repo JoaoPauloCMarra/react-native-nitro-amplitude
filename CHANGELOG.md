@@ -4,7 +4,7 @@ All notable changes to this project are documented in this file.
 
 The format follows Keep a Changelog and the project adheres to SemVer.
 
-## [Next]
+## [0.11.1] - 2026-10-13
 
 ### Fixed
 
@@ -40,11 +40,27 @@ The format follows Keep a Changelog and the project adheres to SemVer.
   after the next successful disk write, so reads and deletes never scan the
   legacy store again. iOS no longer leaves pending legacy entries invisible
   for the rest of the process after a failed first attempt.
+- A request rejected for an empty URL or request id now reports `nativeCode`
+  `invalid_request` with `error.code` `network_error`, instead of an English
+  sentence classified as `native_unavailable`. A missing native adapter reports
+  `nativeCode` `adapter_unavailable` instead of `Native adapter unavailable`.
 - `nitroHttpClient` registers its completion listener again after a failed
   registration, and removes the previous listener when the native worker
   instance changes.
 - `healthCheck().errors` lists each distinct native failure once instead of
   repeating the same message.
+
+Breaking changes: None. Two `error.message` values change: a missing native
+adapter now reports `adapter_unavailable` (was `Native adapter unavailable`),
+and a rejected request reports `NitroAmplitude: invalid_request` (was
+`NitroAmplitude: Invalid HTTP request`). Code that matched the old English
+text must match `nativeCode` instead. The promises that `init`, `add`, `remove`
+and `flush` return from `createMockAmplitudeClient()` now resolve to
+`undefined`, as the real client does, instead of a dry-run result object.
+`AmplitudeDiagnosticFailureKind`, `AmplitudeDiagnosticOperation` and
+`AmplitudeDiagnosticSurface` gain `storage_error`, `session_storage_read` and
+`session_storage`; handle the new values or add a default branch if you switch
+over them exhaustively.
 
 ## [0.11.0] - 2026-10-07
 

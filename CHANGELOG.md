@@ -13,6 +13,10 @@ The format follows Keep a Changelog and the project adheres to SemVer.
   stored session read now treat an unreadable store as empty, and a failed
   old-cookie removal no longer stops `init`. `init` starts a fresh session
   instead.
+- `createMockAmplitudeClient()` now includes `trackScreenView` and
+  `trackScreenViewOnNavigationStateChange`, and is checked against the client
+  type at compile time. The mock's `init`, `add`, `remove` and `flush` now
+  return `AmplitudeReturn<void>`, as the real client does.
 
 ## [0.11.0] - 2026-10-07
 

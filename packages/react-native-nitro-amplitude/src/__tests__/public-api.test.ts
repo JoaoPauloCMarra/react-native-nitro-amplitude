@@ -147,6 +147,7 @@ import {
 } from "../network";
 import {
   createFakeExperimentStorage,
+  createMockAmplitudeClient,
   createMockExperimentClient,
 } from "../testing";
 import {
@@ -1090,6 +1091,18 @@ describe("react-native-nitro-amplitude", () => {
 
     expect(variantBoolean(experiment, "bool", false)).toBe(true);
     expect(variantString(experiment, "string", "fallback")).toBe("enabled");
+  });
+
+  it("mock analytics client exposes screen tracking methods", async () => {
+    const client = createMockAmplitudeClient();
+
+    await client.trackScreenView("Home", { source: "test" }).promise;
+    await client.trackScreenViewOnNavigationStateChange(undefined).promise;
+
+    expect(client.trackScreenView).toBeInstanceOf(Function);
+    expect(client.trackScreenViewOnNavigationStateChange).toBeInstanceOf(
+      Function,
+    );
   });
 
   it("provides web storage and context fallbacks without Nitro", async () => {

@@ -36,6 +36,10 @@ function createReturn(eventType: string): AmplitudeReturn<Result> {
   };
 }
 
+function createVoidReturn(): AmplitudeReturn<void> {
+  return { promise: Promise.resolve() };
+}
+
 export type FakeExperimentStorage = Storage & {
   values: Map<string, string>;
 };
@@ -66,15 +70,21 @@ export function createMockAmplitudeClient(): AmplitudeReactNativeClient {
   const client = {
     init: createMockFunction((_: string, nextUserId?: string) => {
       userId = nextUserId;
-      return createReturn("$init");
+      return createVoidReturn();
     }),
     track: createMockFunction(() => createReturn("$track")),
     logEvent: createMockFunction(() => createReturn("$track")),
+    trackScreenView: createMockFunction(() =>
+      createReturn("[Amplitude] Screen Viewed"),
+    ),
+    trackScreenViewOnNavigationStateChange: createMockFunction(() =>
+      createReturn("[Amplitude] Screen Viewed"),
+    ),
     identify: createMockFunction(() => createReturn("$identify")),
     groupIdentify: createMockFunction(() => createReturn("$groupidentify")),
     setGroup: createMockFunction(() => createReturn("$groupidentify")),
     revenue: createMockFunction(() => createReturn("revenue_amount")),
-    flush: createMockFunction(() => createReturn("$flush")),
+    flush: createMockFunction(() => createVoidReturn()),
     flushWithResult: createMockFunction(async () => ({
       ok: true,
       sent: 0,
@@ -83,8 +93,8 @@ export function createMockAmplitudeClient(): AmplitudeReactNativeClient {
       retried: 0,
       finishedAt: Date.now(),
     })),
-    add: createMockFunction(() => createReturn("$add")),
-    remove: createMockFunction(() => createReturn("$remove")),
+    add: createMockFunction(() => createVoidReturn()),
+    remove: createMockFunction(() => createVoidReturn()),
     setUserId: createMockFunction((nextUserId: string | undefined) => {
       userId = nextUserId;
     }),
@@ -123,8 +133,8 @@ export function createMockAmplitudeClient(): AmplitudeReactNativeClient {
         errors: [],
       }),
     ),
-  };
-  return client as unknown as AmplitudeReactNativeClient;
+  } satisfies AmplitudeReactNativeClient;
+  return client;
 }
 
 export function createMockExperimentClient(

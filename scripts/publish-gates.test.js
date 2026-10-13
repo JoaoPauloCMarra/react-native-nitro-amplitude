@@ -1,6 +1,7 @@
 const { describe, expect, test } = require("bun:test");
 const fs = require("node:fs");
 const path = require("node:path");
+const { spawnSync } = require("node:child_process");
 
 const root = path.join(__dirname, "..");
 const publishSource = fs.readFileSync(
@@ -77,5 +78,17 @@ describe("publish workflow", () => {
     for (const output of outputs) {
       expect(workflow).toContain(`needs.validate.outputs.${output}`);
     }
+  });
+});
+
+describe("publish --skip-quality", () => {
+  test("is rejected outside a dry run", () => {
+    const result = spawnSync(
+      process.execPath,
+      [path.join(root, "scripts", "publish.js"), "--skip-quality", "--yes"],
+      { encoding: "utf8" },
+    );
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain("--skip-quality is only allowed");
   });
 });

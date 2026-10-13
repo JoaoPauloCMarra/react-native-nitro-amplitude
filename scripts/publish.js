@@ -345,7 +345,7 @@ Options:
   --yes                     Skip interactive confirmations.
   --allow-dirty             Allow uncommitted changes.
   --skip-checks             Skip git/auth preflight only.
-  --skip-quality            Skip the "bun run check" quality gate (already run by check:ci).
+  --skip-quality            With --dry-run only: skip the "bun run check" quality gate (already run by check:ci).
   --skip-pack-preview       Skip the npm pack summary preview.
   --with-coverage           Run JS/TS and C++ coverage gates before packaging.
   --verify-npm-lifecycle    Run dry-run packaging with lifecycle scripts enabled.
@@ -357,6 +357,10 @@ Options:
   const isDryRun = args.includes("--dry-run");
   const skipChecks = args.includes("--skip-checks");
   const skipQuality = args.includes("--skip-quality");
+  if (skipQuality && !isDryRun) {
+    log("✗ --skip-quality is only allowed together with --dry-run", "red");
+    process.exit(1);
+  }
   const yes = args.includes("--yes");
   const allowDirty = args.includes("--allow-dirty");
   const skipPackPreview = args.includes("--skip-pack-preview");

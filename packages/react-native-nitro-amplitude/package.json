@@ -79,6 +79,7 @@
     "format": "bunx prettier --write \"src/**/*.{ts,tsx}\" \"../../README.md\" \"../../CHANGELOG.md\"",
     "format:check": "bunx prettier --check \"src/**/*.{ts,tsx}\" \"../../README.md\" \"../../CHANGELOG.md\"",
     "typecheck": "tsc --noEmit",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.test.json",
     "test:types": "tsc --noEmit -p tsconfig.types.json",
     "test": "jest --runInBand",
     "test:coverage": "jest --coverage",

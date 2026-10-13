@@ -8,7 +8,7 @@ import type { Storage } from "@amplitude/analytics-core";
 import { useReactNativeConfig } from "../analytics/config";
 import { parseOldCookies } from "../analytics/cookie-migration";
 
-function createFailingReadStorage(): Storage<unknown> {
+function createFailingReadStorage<T>(): Storage<T> {
   const readFailure = new Error(
     "[nitro-error:storage_full] NitroStorage: Disk SQLite exec failed: disk I/O error",
   );

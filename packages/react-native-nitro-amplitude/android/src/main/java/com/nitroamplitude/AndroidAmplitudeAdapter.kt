@@ -20,7 +20,6 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 object AndroidAmplitudeAdapter {
   private const val DEFAULT_OPTIONS_JSON = "{}"
-  private const val MAX_CACHED_CONTEXTS = 8
   private const val MAX_HTTP_TIMEOUT_MILLIS = 300000
   private const val MAX_RESPONSE_BODY_BYTES = 4 * 1024 * 1024
   private const val LEGACY_DISK_PREFS = "NitroAmplitude"
@@ -62,11 +61,8 @@ object AndroidAmplitudeAdapter {
       executeExistingDelayedTasksAfterShutdownPolicy = false
       continueExistingPeriodicTasksAfterShutdownPolicy = false
     }
-  private val cachedContexts = object : LinkedHashMap<String, String>(16, 0.75f, true) {
-    override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, String>): Boolean {
-      return size > MAX_CACHED_CONTEXTS
-    }
-  }
+  @Volatile
+  private var cachedContext: String? = null
 
   @JvmStatic
   fun setContext(context: Context) {
@@ -94,13 +90,9 @@ object AndroidAmplitudeAdapter {
 
   @JvmStatic
   fun getApplicationContextJson(optionsJson: String): String {
-    synchronized(cachedContexts) {
-      cachedContexts[DEFAULT_OPTIONS_JSON]?.let { return it }
-    }
+    cachedContext?.let { return it }
     val json = buildApplicationContextJson()
-    synchronized(cachedContexts) {
-      cachedContexts[DEFAULT_OPTIONS_JSON] = json
-    }
+    cachedContext = json
     return json
   }
 

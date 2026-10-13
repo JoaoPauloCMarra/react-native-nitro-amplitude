@@ -98,8 +98,10 @@ Available on the `react-native-nitro-amplitude/testing` subpath.
 
 ## Nitro helpers
 
-- `prefetchNativeContext()` — warms the native device-context cache, including
-  the normalized option set used by Experiment.
+- `prefetchNativeContext()` — warms the native device-context data that later
+  context reads build from. Android caches one context for all tracking
+  options; iOS caches the base context and adds `carrier` and `idfv` per
+  request.
 - `nitroHttpClient`, `nitroTransport` — background native HTTP for
   uploads/fetches with request-scoped completion and a bounded worker queue.
 

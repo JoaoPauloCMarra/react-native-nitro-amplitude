@@ -553,8 +553,8 @@ Presets and combined client:
 
 Native HybridObject types:
 
-- `AmplitudeContext` (context JSON + prefetch, cached by normalized option
-  set on both platforms). Its legacy session/event methods remain as deprecated
+- `AmplitudeContext` (context JSON + prefetch; the base context is cached once
+  per process, and iOS adds `carrier` and `idfv` per request). Its legacy session/event methods remain as deprecated
   no-op compatibility stubs; they do not import legacy Amplitude SQLite data.
 - `AmplitudeStorage` (sync memory/disk KV with `setBatch` for batched durable
   writes, a `getBatch` compatibility wrapper, and `removeBatch` for bulk

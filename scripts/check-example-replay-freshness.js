@@ -89,6 +89,29 @@ const runtimeFileRules = [
   "apps/example/tsconfig.json",
 ];
 
+function sourceDeclaresTestId(root, source, testId) {
+  if (source.includes(`testID="${testId}"`)) {
+    return true;
+  }
+  const match = /^e2e-([a-z]+)-(.+)$/.exec(testId);
+  if (!match) {
+    return false;
+  }
+  const [, prefix, suffix] = match;
+  const labRunner = fs.readFileSync(
+    inside(root, "apps/example/components/lab-runner.tsx"),
+    "utf8",
+  );
+  const component = suffix === "blocked" ? "LabBlockedPage" : "LabCasesScreen";
+  const usesComponent = new RegExp(
+    `<${component}\\s[^>]*?prefix="${prefix}"`,
+  ).test(source);
+  return (
+    usesComponent &&
+    labRunner.includes(`testID={\`e2e-\${prefix}-${suffix}\`}`)
+  );
+}
+
 function inside(root, relativePath) {
   const absolute = path.resolve(root, relativePath);
   const relative = path.relative(path.resolve(root), absolute);
@@ -330,12 +353,15 @@ function readCoverageManifest(root, manifestPath = manifestRelativePath) {
         `${feature.id} must state its transport and replay coverage`,
       );
     }
-    if (!loadTriggered && !source.includes(`testID="${feature.controlId}"`)) {
+    if (
+      !loadTriggered &&
+      !sourceDeclaresTestId(root, source, feature.controlId)
+    ) {
       throw new Error(
         `${feature.id} control is missing from ${feature.source}`,
       );
     }
-    if (!source.includes(`testID="${feature.statusId}"`)) {
+    if (!sourceDeclaresTestId(root, source, feature.statusId)) {
       throw new Error(
         `${feature.id} status selector is missing from ${feature.source}`,
       );
@@ -495,4 +521,5 @@ module.exports = {
   collectRuntimeFiles,
   inside,
   refreshReplayLock,
+  sourceDeclaresTestId,
 };

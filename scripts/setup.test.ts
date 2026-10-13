@@ -20,32 +20,11 @@ async function runSetupWithFailure(failedCommand: string) {
   const source = readFileSync(filename, "utf8");
   const commands: string[] = [];
   const messages: string[] = [];
-  let exitCode: number | undefined;
-  const processMock = {
-    platform: "linux",
-    exit(code: number): void {
-      exitCode = code;
-    },
-  };
-  const childProcessMock = {
-    execSync(command: string) {
-      commands.push(command);
-      if (command === failedCommand) {
-        throw new Error(`command failed: ${command}`);
-      }
-    },
-  };
-  const filesystemMock = {
-    existsSync: () => true,
-    mkdirSync: () => undefined,
-  };
   const setupModule: SetupModule = { exports: {} };
   const setupRequire = Object.assign(
     (name: string): unknown => {
-      if (name === "child_process") return childProcessMock;
-      if (name === "fs") return filesystemMock;
+      if (name === "child_process") return { execSync: () => undefined };
       if (name === "path") return path;
-      if (name === "https") return {};
       throw new Error(`unexpected setup dependency: ${name}`);
     },
     { main: {} },
@@ -54,12 +33,12 @@ async function runSetupWithFailure(failedCommand: string) {
     log: (message?: unknown) => messages.push(String(message ?? "")),
   };
 
-  runInNewContext(readFileSync(filename, "utf8"), {
+  runInNewContext(source, {
     __dirname,
     console: output,
     exports: setupModule.exports,
     module: setupModule,
-    process: processMock,
+    process: { platform: "linux" },
     require: setupRequire,
   });
 
@@ -75,19 +54,7 @@ async function runSetupWithFailure(failedCommand: string) {
     console: output,
   };
 
-  let status = exitCode;
-  if (setupModule.exports.main) {
-    status = await setupModule.exports.main(dependencies);
-  } else {
-    await Promise.resolve();
-    await Promise.resolve();
-    if (
-      status === undefined &&
-      messages.some((message) => message.includes("Setup complete"))
-    ) {
-      status = 0;
-    }
-  }
+  const status = await setupModule.exports.main?.(dependencies);
 
   return {
     commands: commands.filter((command) => command !== "command -v bun"),

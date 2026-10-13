@@ -1,4 +1,4 @@
-import { isNative } from "../util/platform";
+import { isNative } from "../../platform";
 import { ExposureTrackingProvider } from "./exposure";
 import { Logger, LogLevel } from "./logger";
 import { Source } from "./source";

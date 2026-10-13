@@ -11,7 +11,7 @@ export interface AmplitudeStorage extends HybridObject<{
   has(key: string, persist: boolean): boolean;
   getAllKeys(persist: boolean): string[];
   getKeysByPrefix(prefix: string, persist: boolean): string[];
-  /** Deprecated compatibility wrapper around repeated set calls. */
+  /** Batched write used by durable flushes; equivalent to repeated set calls. */
   setBatch(keys: string[], values: string[], persist: boolean): void;
   /** Deprecated compatibility wrapper. Missing entries use the legacy sentinel. */
   getBatch(keys: string[], persist: boolean): string[];

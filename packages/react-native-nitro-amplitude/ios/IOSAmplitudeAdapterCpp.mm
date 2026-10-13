@@ -7,8 +7,8 @@
 #define NITRO_AMPLITUDE_HAS_UIKIT 0
 #endif
 
-#include "../cpp/core/LegacyDiskMigration.hpp"
-#include "../cpp/core/PosixFileAdapter.hpp"
+#include "LegacyDiskMigration.hpp"
+#include "PosixFileAdapter.hpp"
 
 #include <algorithm>
 #include <memory>
@@ -229,7 +229,35 @@ static NSString* CanonicalOptions(NSDictionary* options) {
   return [parts componentsJoinedByString:@"&"];
 }
 
-IOSAmplitudeAdapterCpp::IOSAmplitudeAdapterCpp() {
+static NSDictionary* BaseContext() {
+  static NSDictionary* base = []() {
+    NSString* systemName = nil;
+    NSString* systemVersion = nil;
+    NSString* deviceModel = nil;
+#if NITRO_AMPLITUDE_HAS_UIKIT
+    UIDevice* device = [UIDevice currentDevice];
+    systemName = device.systemName;
+    systemVersion = device.systemVersion;
+    deviceModel = device.model;
+#endif
+    NSLocale* locale = [NSLocale currentLocale];
+    NSString* version = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleShortVersionString"];
+    return @{
+      @"version": version ?: @"",
+      @"platform": @"iOS",
+      @"language": locale.languageCode ?: @"",
+      @"country": locale.countryCode ?: @"",
+      @"osName": systemName ?: @"iOS",
+      @"osVersion": systemVersion ?: @"",
+      @"deviceManufacturer": @"Apple",
+      @"deviceModel": deviceModel ?: @"",
+      @"deviceBrand": @"Apple",
+    };
+  }();
+  return base;
+}
+
+IOSAmplitudeAdapterCpp::IOSAmplitudeAdapterCpp() : migrator_(MakeLegacyDiskSource()) {
   NSString* applicationSupport =
       [NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory, NSUserDomainMask, YES) firstObject];
 #ifdef NITRO_AMPLITUDE_TESTING
@@ -249,44 +277,47 @@ IOSAmplitudeAdapterCpp::IOSAmplitudeAdapterCpp() {
           std::make_shared<PosixFileAdapter>(), directoryPath.value());
     }
   }
-  MigrateLegacyDisk();
 }
 
-void IOSAmplitudeAdapterCpp::MigrateLegacyDisk() {
-  if (!NitroDiskDefaultsAreSuite()) {
-    return;
-  }
-  NSDictionary<NSString*, id>* entries = [NitroDiskDefaults() persistentDomainForName:kDiskSuiteName];
-  if (entries.count == 0) {
-    return;
-  }
-  std::vector<std::pair<std::string, std::string>> legacy;
-  legacy.reserve(entries.count);
-  for (NSString* key in entries) {
-    const auto legacyKey = ToStdString(key);
-    const auto legacyValue = ToStdString(entries[key]);
-    if (legacyKey.has_value() && legacyValue.has_value()) {
-      legacy.emplace_back(legacyKey.value(), legacyValue.value());
+LegacyDiskSource IOSAmplitudeAdapterCpp::MakeLegacyDiskSource() {
+  LegacyDiskSource source;
+  source.entries = []() {
+    std::vector<std::pair<std::string, std::string>> legacy;
+    if (!NitroDiskDefaultsAreSuite()) {
+      return legacy;
     }
-  }
-  if (diskStore_ != nullptr && !legacy.empty()) {
-    const LegacyDiskMigrationResult result = migrateLegacyDiskEntries(*diskStore_, legacy);
-    if (!result.complete) {
-      for (const auto& handledKey : result.handledKeys) {
-        NSString* nsKey = ToNSString(handledKey);
-        if (nsKey != nil) {
-          [NitroDiskDefaults() removeObjectForKey:nsKey];
-        }
+    NSDictionary<NSString*, id>* entries = [NitroDiskDefaults() persistentDomainForName:kDiskSuiteName];
+    legacy.reserve(entries.count);
+    for (NSString* key in entries) {
+      const auto legacyKey = ToStdString(key);
+      const auto legacyValue = ToStdString(entries[key]);
+      if (legacyKey.has_value() && legacyValue.has_value()) {
+        legacy.emplace_back(legacyKey.value(), legacyValue.value());
       }
-      legacyDiskPending_ = true;
+    }
+    return legacy;
+  };
+  source.remove = [](const std::vector<std::string>& keys) {
+    if (!NitroDiskDefaultsAreSuite()) {
       return;
     }
-  }
-  [NitroDiskDefaults() removePersistentDomainForName:kDiskSuiteName];
+    for (const auto& key : keys) {
+      NSString* nsKey = ToNSString(key);
+      if (nsKey != nil) {
+        [NitroDiskDefaults() removeObjectForKey:nsKey];
+      }
+    }
+  };
+  source.clear = []() {
+    if (NitroDiskDefaultsAreSuite()) {
+      [NitroDiskDefaults() removePersistentDomainForName:kDiskSuiteName];
+    }
+  };
+  return source;
 }
 
 void IOSAmplitudeAdapterCpp::prefetchContext() {
-  getApplicationContextJson("{}");
+  BaseContext();
 }
 
 std::string IOSAmplitudeAdapterCpp::getApplicationContextJson(const std::string& optionsJson) {
@@ -305,28 +336,7 @@ std::string IOSAmplitudeAdapterCpp::getApplicationContextJson(const std::string&
     }
   }
 
-  NSString* systemName = nil;
-  NSString* systemVersion = nil;
-  NSString* deviceModel = nil;
-#if NITRO_AMPLITUDE_HAS_UIKIT
-  UIDevice* device = [UIDevice currentDevice];
-  systemName = device.systemName;
-  systemVersion = device.systemVersion;
-  deviceModel = device.model;
-#endif
-  NSLocale* locale = [NSLocale currentLocale];
-  NSString* version = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleShortVersionString"];
-  NSMutableDictionary* json = [@{
-    @"version": version ?: @"",
-    @"platform": @"iOS",
-    @"language": locale.languageCode ?: @"",
-    @"country": locale.countryCode ?: @"",
-    @"osName": systemName ?: @"iOS",
-    @"osVersion": systemVersion ?: @"",
-    @"deviceManufacturer": @"Apple",
-    @"deviceModel": deviceModel ?: @"",
-    @"deviceBrand": @"Apple",
-  } mutableCopy];
+  NSMutableDictionary* json = [BaseContext() mutableCopy];
 
   if ([options[@"carrier"] boolValue]) {
     json[@"carrier"] = @"";
@@ -355,7 +365,9 @@ std::string IOSAmplitudeAdapterCpp::getApplicationContextJson(const std::string&
 
 void IOSAmplitudeAdapterCpp::setDisk(const std::string& key, const std::string& value) {
   if (diskStore_ != nullptr) {
+    migrator_.ensureMigrated(*diskStore_);
     diskStore_->setDisk(key, value);
+    migrator_.rearmAfterWrite();
     return;
   }
   NSString* nsKey = RequireNSString(key);
@@ -365,6 +377,7 @@ void IOSAmplitudeAdapterCpp::setDisk(const std::string& key, const std::string& 
 
 std::optional<std::string> IOSAmplitudeAdapterCpp::getDisk(const std::string& key) {
   if (diskStore_ != nullptr) {
+    migrator_.ensureMigrated(*diskStore_);
     return diskStore_->getDisk(key);
   }
   NSString* nsKey = ToNSString(key);
@@ -376,10 +389,10 @@ std::optional<std::string> IOSAmplitudeAdapterCpp::getDisk(const std::string& ke
 
 void IOSAmplitudeAdapterCpp::deleteDisk(const std::string& key) {
   if (diskStore_ != nullptr) {
+    migrator_.ensureMigrated(*diskStore_);
     diskStore_->deleteDisk(key);
-    if (!legacyDiskPending_) {
-      return;
-    }
+    migrator_.forget(key);
+    return;
   }
   NSString* nsKey = ToNSString(key);
   if (nsKey != nil) {
@@ -389,6 +402,7 @@ void IOSAmplitudeAdapterCpp::deleteDisk(const std::string& key) {
 
 bool IOSAmplitudeAdapterCpp::hasDisk(const std::string& key) {
   if (diskStore_ != nullptr) {
+    migrator_.ensureMigrated(*diskStore_);
     return diskStore_->hasDisk(key);
   }
   NSString* nsKey = ToNSString(key);
@@ -397,6 +411,7 @@ bool IOSAmplitudeAdapterCpp::hasDisk(const std::string& key) {
 
 std::vector<std::string> IOSAmplitudeAdapterCpp::getAllDiskKeys() {
   if (diskStore_ != nullptr) {
+    migrator_.ensureMigrated(*diskStore_);
     return diskStore_->getAllDiskKeys();
   }
   NSUserDefaults* defaults = NitroDiskDefaults();
@@ -468,6 +483,9 @@ HttpResult IOSAmplitudeAdapterCpp::performHttpRequest(
     if ([error.domain isEqualToString:NSURLErrorDomain] &&
         (error.code == NSURLErrorTimedOut || error.code == NSURLErrorCancelled)) {
       result.error = error.code == NSURLErrorTimedOut ? "timeout" : "cancelled";
+    } else if ([error.domain isEqualToString:NSURLErrorDomain] &&
+               (error.code == NSURLErrorBadURL || error.code == NSURLErrorUnsupportedURL)) {
+      result.error = "invalid_url";
     } else {
       result.error = FormatNetworkError(error);
     }

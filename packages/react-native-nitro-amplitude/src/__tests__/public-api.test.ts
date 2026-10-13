@@ -1,6 +1,17 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 const mockMemory = new Map<string, string>();
 const mockDisk = new Map<string, string>();
 const mockHybridObjects: Record<string, Record<string, jest.Mock>> = {};
+
+function mockMethod(hybrid: string, method: string): jest.Mock {
+  const fn = mockHybridObjects[hybrid]?.[method];
+  if (!fn) {
+    throw new Error(`Missing mock ${hybrid}.${method}`);
+  }
+  return fn;
+}
 
 function createStorageHybrid() {
   const selectStore = (persist: boolean) => (persist ? mockDisk : mockMemory);
@@ -147,6 +158,7 @@ import {
 } from "../network";
 import {
   createFakeExperimentStorage,
+  createMockAmplitudeClient,
   createMockExperimentClient,
 } from "../testing";
 import {
@@ -244,6 +256,7 @@ describe("react-native-nitro-amplitude", () => {
     await preset.analytics.cookieStorage?.set("session", {
       deviceId: "device",
       sessionId: 1,
+      optOut: false,
     });
     await preset.experiment.storage?.put("variant", "on");
 
@@ -322,6 +335,15 @@ describe("react-native-nitro-amplitude", () => {
     expect(typeof ExperimentCompat.ExperimentClient).toBe("function");
   });
 
+  it("prefetches native context without reading an option-specific entry", () => {
+    prefetchNativeContext();
+
+    expect(mockMethod("AmplitudeContext", "prefetch")).toHaveBeenCalledTimes(1);
+    expect(
+      mockMethod("AmplitudeContext", "getApplicationContextJson"),
+    ).not.toHaveBeenCalled();
+  });
+
   it("reads native context through Nitro and normalizes null values", () => {
     prefetchNativeContext();
     const context = getNativeApplicationContext({
@@ -342,8 +364,7 @@ describe("react-native-nitro-amplitude", () => {
     expect(context.platform).toBe("iOS");
     expect(mockHybridObjects.AmplitudeContext?.prefetch).toHaveBeenCalled();
 
-    const hybrid = mockHybridObjects.AmplitudeContext;
-    hybrid.getApplicationContextJson.mockReturnValue(
+    mockMethod("AmplitudeContext", "getApplicationContextJson").mockReturnValue(
       JSON.stringify({ version: null, platform: "Android", osName: 7 }),
     );
     const normalized = getNativeApplicationContext({
@@ -365,7 +386,7 @@ describe("react-native-nitro-amplitude", () => {
     expect(normalized.osName).toBeUndefined();
   });
 
-  it("retains deprecated legacy ABI stubs without SQLite migration", () => {
+  it("keeps the context fixture in step with the Nitro spec", () => {
     expect(mockHybridObjects.AmplitudeContext).toBeUndefined();
     const context = getNativeApplicationContext({
       platform: true,
@@ -382,21 +403,17 @@ describe("react-native-nitro-amplitude", () => {
       country: false,
     });
     expect(context).toEqual({ platform: "iOS", version: "1.0.0" });
+    const specSource = readFileSync(
+      join(__dirname, "..", "AmplitudeContext.nitro.ts"),
+      "utf8",
+    );
+    const specMethods = [...specSource.matchAll(/^ {2}(\w+)\(/gm)]
+      .map((match) => match[1])
+      .sort();
+    expect(specMethods).toContain("getLegacySessionDataJson");
     expect(
       Object.keys(mockHybridObjects.AmplitudeContext ?? {}).sort(),
-    ).toEqual([
-      "getApplicationContextJson",
-      "getLegacyEventsJson",
-      "getLegacySessionDataJson",
-      "prefetch",
-      "removeLegacyEvent",
-    ]);
-    expect(mockHybridObjects.AmplitudeContext?.getLegacySessionDataJson()).toBe(
-      "{}",
-    );
-    expect(mockHybridObjects.AmplitudeContext?.getLegacyEventsJson()).toEqual(
-      [],
-    );
+    ).toEqual(specMethods);
   });
 
   it("clears stale native diagnostics after successful probes", () => {
@@ -560,6 +577,7 @@ describe("react-native-nitro-amplitude", () => {
       1000,
     );
     await dryRunTransport.send("https://example.com/events", {
+      api_key: "api-key",
       events: [{ event_type: "demo" }],
     });
 
@@ -583,6 +601,7 @@ describe("react-native-nitro-amplitude", () => {
     );
 
     await analyticsTransport.send("https://example.com/events", {
+      api_key: "api-key",
       events: [{ event_type: "demo" }],
     });
     expect(buffer.getTimings()).toEqual([
@@ -623,7 +642,7 @@ describe("react-native-nitro-amplitude", () => {
       ): Promise<Response | null> {
         calls.push({ payload, compression: enableRequestBodyCompression });
         return {
-          status: "success",
+          status: Status.Success,
           statusCode: 200,
           body: {
             eventsIngested: 1,
@@ -636,7 +655,7 @@ describe("react-native-nitro-amplitude", () => {
 
     await createTimedAnalyticsTransport(transport, jest.fn()).send(
       "https://example.com/events",
-      { events: [{ event_type: "demo" }] },
+      { api_key: "api-key", events: [{ event_type: "demo" }] },
       true,
     );
 
@@ -1090,6 +1109,18 @@ describe("react-native-nitro-amplitude", () => {
 
     expect(variantBoolean(experiment, "bool", false)).toBe(true);
     expect(variantString(experiment, "string", "fallback")).toBe("enabled");
+  });
+
+  it("mock analytics client exposes screen tracking methods", async () => {
+    const client = createMockAmplitudeClient();
+
+    await client.trackScreenView("Home", { source: "test" }).promise;
+    await client.trackScreenViewOnNavigationStateChange(undefined).promise;
+
+    expect(client.trackScreenView).toBeInstanceOf(Function);
+    expect(client.trackScreenViewOnNavigationStateChange).toBeInstanceOf(
+      Function,
+    );
   });
 
   it("provides web storage and context fallbacks without Nitro", async () => {
@@ -1952,11 +1983,9 @@ describe("react-native-nitro-amplitude", () => {
         await storage.set("events", { ok: true });
       };
       await storage.get("missing");
-      mockHybridObjects.AmplitudeStorage?.setBatch.mockImplementationOnce(
-        () => {
-          throw new Error("NitroAmplitude: storage_error");
-        },
-      );
+      mockMethod("AmplitudeStorage", "setBatch").mockImplementationOnce(() => {
+        throw new Error("NitroAmplitude: storage_error");
+      });
 
       await expect(analytics.flushWithResult()).resolves.toMatchObject({
         ok: false,
@@ -1995,7 +2024,7 @@ describe("react-native-nitro-amplitude", () => {
         true,
       );
       expect(
-        mockHybridObjects.AmplitudeStorage?.set.mock.calls.map(
+        mockMethod("AmplitudeStorage", "set").mock.calls.map(
           (call) => [call[0], call[1]] as const,
         ),
       ).toEqual([
@@ -2393,7 +2422,7 @@ describe("react-native-nitro-amplitude", () => {
       await analytics.healthCheck();
       const result = await analytics.healthCheck();
       const probeKeys = new Set(
-        (mockHybridObjects.AmplitudeStorage?.set.mock.calls ?? [])
+        (mockMethod("AmplitudeStorage", "set").mock.calls ?? [])
           .map(([key]) => String(key))
           .filter((key) => key.startsWith("health::")),
       );
@@ -2442,7 +2471,7 @@ describe("react-native-nitro-amplitude", () => {
     const buffer = createNetworkTimingBuffer();
     await createTimedAnalyticsTransport(dryRunTransport, buffer.record).send(
       "https://example.com/events",
-      { events: [{ event_type: "demo" }] },
+      { api_key: "api-key", events: [{ event_type: "demo" }] },
     );
     const events = getDiagnosticEvents();
     expect(events.some((event) => event.type === "health")).toBe(true);
@@ -2468,7 +2497,8 @@ describe("react-native-nitro-amplitude", () => {
       const { addEventListener } = (
         jest.requireMock("react-native") as AppStateMock
       ).AppState;
-      const call = addEventListener.mock.calls.at(-1);
+      const call =
+        addEventListener.mock.calls[addEventListener.mock.calls.length - 1];
       if (!call) {
         throw new Error("AppState listener was not installed");
       }
@@ -2528,10 +2558,12 @@ describe("react-native-nitro-amplitude", () => {
         }).promise;
         const handler = latestAppStateHandler();
         const failure = Promise.reject(new Error("offline"));
+        const handled = jest.spyOn(failure, "catch");
         jest.spyOn(analytics, "flush").mockReturnValue({ promise: failure });
 
         expect(() => handler("background")).not.toThrow();
-        await expect(failure).rejects.toThrow("offline");
+        expect(handled).toHaveBeenCalledTimes(1);
+        await Promise.resolve();
       } finally {
         analytics.shutdown();
       }

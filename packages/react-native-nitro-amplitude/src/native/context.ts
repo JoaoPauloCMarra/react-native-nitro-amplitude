@@ -33,9 +33,7 @@ export const EXPERIMENT_CONTEXT_OPTIONS: ReactNativeTrackingOptions = {
 };
 
 export function prefetchNativeContext(): void {
-  const context = getAmplitudeContext();
-  context.prefetch();
-  context.getApplicationContextJson(JSON.stringify(EXPERIMENT_CONTEXT_OPTIONS));
+  getAmplitudeContext().prefetch();
 }
 
 export function getNativeApplicationContext(

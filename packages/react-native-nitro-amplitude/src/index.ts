@@ -4,63 +4,19 @@ import analyticsClient, {
 import type {
   AmplitudeDiagnostics,
   AmplitudeSafeDiagnostics,
-  NativeStartupDiagnostics,
-  WorkerMetrics,
 } from "./diagnostics";
 import {
   getAmplitudeDiagnostics,
-  getLastNativeError,
-  getNativeStartupDiagnostics,
   getSafeAmplitudeDiagnostics,
 } from "./diagnostics";
 import { prefetchNativeContext } from "./native/context";
-import { clearDiagnosticFailures } from "./diagnostic-failures";
-import type {
-  AmplitudeDiagnosticFailure,
-  AmplitudeDiagnosticFailureKind,
-  AmplitudeDiagnosticOperation,
-  AmplitudeDiagnosticSurface,
-} from "./diagnostic-failures";
-import {
-  AmplitudeError,
-  createAmplitudeError,
-  getAmplitudeErrorCode,
-} from "./errors";
-import type { AmplitudeErrorCode } from "./errors";
-import {
-  createAmplitudeClient,
-  createDurableAmplitudeStoragePreset,
-  createExperimentUser,
-  createPersistentAmplitudeConfig,
-  getConnectorIdentity,
-} from "./presets";
-import type {
-  AmplitudeCombinedClient,
-  AmplitudeCombinedClientConfig,
-  AmplitudeCombinedClientConfigWithExperiment,
-  AmplitudeCombinedClientWithExperiment,
-  DurableAmplitudeStoragePreset,
-  DurableAmplitudeStoragePresetOptions,
-} from "./presets";
+
 import { Experiment } from "./experiment/factory";
 import { ExperimentClient } from "./experiment/experimentClient";
 import { StubExperimentClient } from "./experiment/stubClient";
 import { ConsoleLogger } from "./experiment/logger/consoleLogger";
 import { LogLevel } from "./experiment/types/logger";
-import type { Logger } from "./experiment/types/logger";
 import { Source, VariantSource, isFallback } from "./experiment/types/source";
-import {
-  variantBoolean,
-  variantJson,
-  variantNumber,
-  variantPayload,
-  variantString,
-} from "./experiment/typed-variants";
-import {
-  LocalStorage as ExperimentLocalStorage,
-  MemoryStorage as ExperimentMemoryStorage,
-} from "./experiment/storage/local-storage";
-import { PACKAGE_VERSION } from "./package-version";
 
 import * as AnalyticsTypes from "./analytics/types";
 

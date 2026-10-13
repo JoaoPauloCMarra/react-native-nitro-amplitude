@@ -1,6 +1,6 @@
 import { Storage, getGlobalScope } from "@amplitude/analytics-core";
 import { BrowserStringStorage } from "../../native/browser-string-storage";
-import { isNative } from "../utils/platform";
+import { isNative } from "../../platform";
 
 export class MemoryStorage<T> implements Storage<T> {
   private readonly memoryStorage = new Map<string, unknown>();

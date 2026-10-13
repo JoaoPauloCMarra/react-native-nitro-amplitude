@@ -3,7 +3,7 @@ import type {
   AmplitudeHealthCheckResult,
   AmplitudeReactNativeClient,
 } from "./analytics/react-native-client";
-import { isNative } from "./analytics/utils/platform";
+import { isNative } from "./platform";
 import { getAmplitudeErrorCode } from "./errors";
 import { getNetworkEnabled } from "./network";
 import type { AmplitudeNetworkTiming } from "./network";
@@ -56,6 +56,18 @@ function getHybridModule(): HybridModule {
   return require("./native/hybrid.web") as HybridModule;
 }
 
+function isNitroModulesAvailable(): boolean {
+  if (!isNative()) {
+    return false;
+  }
+  try {
+    require("react-native-nitro-modules");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function getLastNativeError(): NativeStartupDiagnostics["lastError"] {
   return lastNativeError;
 }
@@ -71,12 +83,11 @@ function recordNativeError(
 
 export function getNativeStartupDiagnostics(): NativeStartupDiagnostics {
   const result: NativeStartupDiagnostics = {
-    nitroModulesAvailable: true,
+    nitroModulesAvailable: isNitroModulesAvailable(),
     contextAvailable: false,
     storageAvailable: false,
     workerAvailable: false,
     nativeAvailable: false,
-    lastError: lastNativeError,
   };
   let lastError: NativeStartupDiagnostics["lastError"] | undefined;
 
@@ -158,6 +169,11 @@ export async function healthCheck(
   analytics?: AmplitudeReactNativeClient,
 ): Promise<AmplitudeHealthCheckResult> {
   const errors: string[] = [];
+  const addError = (message: string) => {
+    if (!errors.includes(message)) {
+      errors.push(message);
+    }
+  };
   const native = getNativeStartupDiagnostics();
   let diskStorageWritable = false;
   let workerReady = false;
@@ -170,7 +186,7 @@ export async function healthCheck(
     diskStorageWritable = storage.get(key, true) === "ok";
     storage.remove(key, true);
   } catch (error) {
-    errors.push(error instanceof Error ? error.message : String(error));
+    addError(error instanceof Error ? error.message : String(error));
   }
 
   try {
@@ -178,11 +194,11 @@ export async function healthCheck(
     const worker = getAmplitudeWorker();
     workerReady = worker.queueSize() >= 0;
   } catch (error) {
-    errors.push(error instanceof Error ? error.message : String(error));
+    addError(error instanceof Error ? error.message : String(error));
   }
 
   if (!native.nativeAvailable && native.lastError) {
-    errors.push(native.lastError.message);
+    addError(native.lastError.message);
   }
 
   const analyticsInitialized = analytics

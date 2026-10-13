@@ -4,6 +4,7 @@ const { execSync } = require("child_process");
 const fs = require("fs");
 const path = require("path");
 const readline = require("readline");
+const { findSupportedLineFailures } = require("./release-docs");
 
 const colors = {
   green: (text) => `\x1b[32m${text}\x1b[0m`,
@@ -223,7 +224,12 @@ function assertReleaseDocs(version) {
   const changelogVersion = getFirstChangelogVersion();
   const nitroPeer = packageJson.peerDependencies?.["react-native-nitro-modules"];
 
-  const failures = [];
+  const securityText = fs.readFileSync(
+    path.join(projectRoot, "SECURITY.md"),
+    "utf-8",
+  );
+
+  const failures = [...findSupportedLineFailures(version, securityText)];
   if (changelogVersion !== version) {
     failures.push(
       `CHANGELOG.md top entry is ${changelogVersion ?? "missing"}, expected ${version}`,
@@ -339,6 +345,7 @@ Options:
   --yes                     Skip interactive confirmations.
   --allow-dirty             Allow uncommitted changes.
   --skip-checks             Skip git/auth preflight only.
+  --skip-quality            With --dry-run only: skip the "bun run check" quality gate (already run by check:ci).
   --skip-pack-preview       Skip the npm pack summary preview.
   --with-coverage           Run JS/TS and C++ coverage gates before packaging.
   --verify-npm-lifecycle    Run dry-run packaging with lifecycle scripts enabled.
@@ -349,6 +356,11 @@ Options:
 
   const isDryRun = args.includes("--dry-run");
   const skipChecks = args.includes("--skip-checks");
+  const skipQuality = args.includes("--skip-quality");
+  if (skipQuality && !isDryRun) {
+    log("✗ --skip-quality is only allowed together with --dry-run", "red");
+    process.exit(1);
+  }
   const yes = args.includes("--yes");
   const allowDirty = args.includes("--allow-dirty");
   const skipPackPreview = args.includes("--skip-pack-preview");
@@ -426,36 +438,11 @@ Options:
     console.log("");
   }
 
-  runCheck(
-    "🧹 Running lint...",
-    `bun run lint:check`,
-    { cwd: projectRoot },
-  );
-  runCheck(
-    "🎨 Running format check...",
-    `bun run format:check`,
-    { cwd: projectRoot },
-  );
-  runCheck(
-    "📝 Running typecheck...",
-    `bun run typecheck`,
-    { cwd: projectRoot },
-  );
-  runCheck(
-    "🔎 Running type-surface checks...",
-    `bun run test:types`,
-    { cwd: projectRoot },
-  );
-  runCheck(
-    "🧪 Running unit tests...",
-    `bun run test`,
-    { cwd: projectRoot },
-  );
-  runCheck(
-    "🧪 Running C++ tests...",
-    `bun run test:cpp`,
-    { cwd: projectRoot },
-  );
+  if (!skipQuality) {
+    runCheck("🧪 Running quality gate...", `bun run check`, {
+      cwd: projectRoot,
+    });
+  }
   if (withCoverage) {
     runCheck(
       "📊 Running JS/TS coverage gate...",
@@ -474,9 +461,7 @@ Options:
       "bun run clean",
       "bun run codegen",
       "bun run build",
-      "bun run test:types",
       "bun run benchmark",
-      "bun run test:cpp",
       "bun run check:pack",
     ].join(" && "),
     { cwd: packageDir },

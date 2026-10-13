@@ -205,6 +205,10 @@ void testLegacyMigration() {
   assert(suiteDomain().count == 6);
 
   {
+    IOSAmplitudeAdapterCpp untouched;
+    assert(suiteDomain().count == 6);
+  }
+  {
     IOSAmplitudeAdapterCpp adapter;
     assert(adapter.getDisk("legacy-key").value_or("") == "legacy-value");
     assert(adapter.getDisk("existing-key").value_or("") == "already-stored");
@@ -437,6 +441,10 @@ void testHttpRequests() {
   }
 
   for (const std::string& url : {std::string(), std::string("\xff\xfe"), std::string("https://amplitude.test/\xff")}) {
+    const HttpResult invalid = adapter.performHttpRequest(url, "POST", {}, "{}", 2000);
+    assert(invalid.statusCode == 0 && invalid.error == "invalid_url");
+  }
+  for (const std::string& url : {std::string("amplitude.com/2/httpapi"), std::string("unknown://host/path"), std::string("not a url")}) {
     const HttpResult invalid = adapter.performHttpRequest(url, "POST", {}, "{}", 2000);
     assert(invalid.statusCode == 0 && invalid.error == "invalid_url");
   }

@@ -45,10 +45,6 @@ public:
     return stat(directory.c_str(), &info) == 0 && S_ISDIR(info.st_mode);
   }
 
-  std::vector<std::string> listFiles(const std::string& directory) override {
-    return readDirectory(directory).value_or(std::vector<std::string>());
-  }
-
   std::optional<std::vector<std::string>> readDirectory(const std::string& directory) override {
     std::vector<std::string> names;
     DIR* dir = opendir(directory.c_str());

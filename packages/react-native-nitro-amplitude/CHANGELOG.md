@@ -4,6 +4,90 @@ All notable changes to this project are documented in this file.
 
 The format follows Keep a Changelog and the project adheres to SemVer.
 
+## [0.12.0] - 2026-10-13
+
+### Added
+
+- `createMockAmplitudeClient()` includes `trackScreenView` and
+  `trackScreenViewOnNavigationStateChange`, and is checked against the client
+  type at compile time.
+- `AmplitudeDiagnosticFailureKind` gains `storage_error`,
+  `AmplitudeDiagnosticOperation` gains `session_storage_read`, and
+  `AmplitudeDiagnosticSurface` gains `session_storage`. They report a failed
+  read of the stored user session or of attribution storage.
+- Native error codes `invalid_request` (an empty URL or request id, reported
+  with `error.code` `network_error`) and `adapter_unavailable` (reported with
+  `error.code` `native_unavailable`).
+
+### Changed
+
+- A stored opt-out is no longer reset to `false` on every `init`. A persisted
+  `optOut: true` now survives a restart unless you pass `optOut` in `init`.
+- When the stored session cannot be read, `init` logs the failure, records a
+  `session_storage_read` diagnostic failure, and starts a fresh session. It
+  treats the client as opted out for that init unless you pass `optOut`, so no
+  events are sent. The client does not overwrite the stored session while
+  reads fail. On the next successful read it merges the stored session with
+  changes made since, restores the stored opt-out choice, and saves the
+  result.
+- The worker `error.message` for a missing native adapter is now
+  `adapter_unavailable` (was `Native adapter unavailable`), and for a rejected
+  request `NitroAmplitude: invalid_request` (was
+  `NitroAmplitude: Invalid HTTP request`). Match `nativeCode` instead of the
+  old English text.
+- The promises that `init`, `add`, `remove` and `flush` return from
+  `createMockAmplitudeClient()` resolve to `undefined`, as the real client
+  does, instead of a dry-run result object.
+- iOS reports `nativeCode` `invalid_url` for a malformed or unsupported
+  `serverUrl` (for example a URL without a scheme), as Android does. It
+  previously reported `network_error` with `details.code` `-1002`.
+- `getNativeStartupDiagnostics().nitroModulesAvailable` reports whether
+  `react-native-nitro-modules` loads. It was always `true`; it is `false` on
+  web and on a native build where the module is missing.
+- `healthCheck().errors` lists each distinct native failure once instead of
+  repeating the same message.
+- Legacy disk storage migration follows one rule on iOS and Android: it runs
+  once per process on first disk use. After a failed attempt it retries only
+  after the next successful disk write, so reads and deletes never scan the
+  legacy store again. iOS no longer leaves pending legacy entries invisible
+  for the rest of the process after a failed first attempt.
+- `prefetchNativeContext()` and the native `prefetch()` warm the context data
+  that later calls read. Android builds the application context once for all
+  tracking options.
+
+- Update the pinned `@amplitude/analytics-core` dependency from `2.59.0` to
+  `2.60.2`. It resolves pending `track` promises for events the server rejects
+  as duplicate `insert_id` values during upload.
+
+### Fixed
+
+- The default Analytics transport uses the HTTP status when the server's JSON
+  response has no `code` field, as it already did for non-JSON responses. A
+  proxy or gateway error such as `401` or `502` with a JSON body is now
+  classified by its status instead of being retried as an unknown response.
+- Analytics `init` no longer fails when the cookie storage cannot be read,
+  for example when a device's disk is full. A failed old-cookie read or
+  removal no longer stops `init`. On web, a failed attribution (campaign)
+  read is logged, recorded as a `session_storage_read` diagnostic failure, and
+  skips attribution for that init instead of rejecting `init`.
+- `nitroHttpClient.request()` and `nitroTransport` reject with an
+  `AmplitudeError` (code `native_unavailable`) when the native worker cannot be
+  created, instead of the raw Nitro error.
+- `nitroHttpClient` registers its completion listener again after a failed
+  registration, and removes the previous listener when the native worker
+  instance changes.
+
+Breaking changes: None. Migration notes:
+
+- Persisted opt-out now applies after a restart. If your app relied on `init`
+  clearing a stored opt-out, pass `optOut: false` in `init` or call
+  `setOptOut(false)`.
+- Code that switches exhaustively over `AmplitudeDiagnosticFailureKind`,
+  `AmplitudeDiagnosticOperation` or `AmplitudeDiagnosticSurface` needs cases
+  for the new values, or a default branch.
+- Code that matched the old English worker `error.message` text must match
+  `error.nativeCode` instead.
+
 ## [0.11.0] - 2026-10-07
 
 ### Added

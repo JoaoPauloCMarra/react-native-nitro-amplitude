@@ -7,12 +7,13 @@ import {
   createCookieStorage,
   getDefaultConfig,
   getTopLevelDomain,
+  ignoreCookieStorageFailure,
 } from "../config";
 
 export const parseOldCookies = async (
   apiKey: string,
   options?: ReactNativeOptions,
-): Promise<UserSession> => {
+): Promise<Partial<UserSession>> => {
   const disableCookies =
     options?.disableCookies ?? getDefaultConfig().disableCookies;
   const storage = await createCookieStorage<string>({
@@ -23,16 +24,20 @@ export const parseOldCookies = async (
       : (options?.domain ?? (await getTopLevelDomain())),
   });
   const oldCookieName = getOldCookieName(apiKey);
-  const cookies = await storage.getRaw(oldCookieName);
+  const cookies = await ignoreCookieStorageFailure(
+    () => storage.getRaw(oldCookieName),
+    options?.loggerProvider,
+  );
 
   if (!cookies) {
-    return {
-      optOut: false,
-    };
+    return {};
   }
 
   if (options?.cookieUpgrade ?? getDefaultConfig().cookieUpgrade) {
-    await storage.remove(oldCookieName);
+    await ignoreCookieStorageFailure(
+      () => storage.remove(oldCookieName),
+      options?.loggerProvider,
+    );
   }
   const [deviceId, userId, optOut, sessionId, lastEventTime] =
     cookies.split(".");

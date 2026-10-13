@@ -38,7 +38,7 @@ import { CampaignTracker } from "./campaign/campaign-tracker";
 import { Context } from "./plugins/context";
 import { useReactNativeConfig, createCookieStorage } from "./config";
 import { parseOldCookies } from "./cookie-migration";
-import { isNative } from "./utils/platform";
+import { isNative } from "../platform";
 
 const START_SESSION_EVENT = "session_start";
 const OFFLINE_RECHECK_MIN_MILLIS = 1000;
@@ -383,15 +383,26 @@ export class AmplitudeReactNative
       this.currentTimeMillis(),
     );
 
-    const storage = await createCookieStorage<Campaign>(this.config);
-    const campaignTracker = new CampaignTracker(this.config.apiKey, {
-      ...attributionConfig,
-      storage,
-      track,
-      onNewCampaign,
-    });
+    try {
+      const storage = await createCookieStorage<Campaign>(this.config);
+      const campaignTracker = new CampaignTracker(this.config.apiKey, {
+        ...attributionConfig,
+        storage,
+        track,
+        onNewCampaign,
+      });
 
-    await campaignTracker.send(isNewSession);
+      await campaignTracker.send(isNewSession);
+    } catch (error) {
+      this.config.loggerProvider?.error(
+        `Failed to read attribution storage; skipping attribution for this init: ${String(error)}`,
+      );
+      recordDiagnosticFailure({
+        operation: "session_storage_read",
+        surface: "session_storage",
+        kind: "storage_error",
+      });
+    }
   }
 
   getUserId() {

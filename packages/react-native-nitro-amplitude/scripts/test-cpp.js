@@ -2,6 +2,10 @@ const { execFileSync } = require("child_process");
 const path = require("path");
 const fs = require("fs");
 const os = require("os");
+const {
+  sanitizerCompileFlags,
+  sanitizerRuntimeEnv,
+} = require("./sanitizer-config");
 
 const coverageEnabled = process.argv.includes("--coverage");
 const sanitizers =
@@ -134,9 +138,7 @@ const commonFlags = [
   "-std=c++20",
   "-g",
   "-DNITRO_AMPLITUDE_DISABLE_PLATFORM_ADAPTER",
-  ...(sanitizers
-    ? [`-fsanitize=${sanitizers}`, "-fno-omit-frame-pointer", "-O1"]
-    : []),
+  ...sanitizerCompileFlags(sanitizers),
   ...(coverageEnabled
     ? ["-fprofile-instr-generate", "-fcoverage-mapping"]
     : []),
@@ -163,37 +165,6 @@ function runCommand(command, args, options = {}) {
     stdio: "inherit",
     ...options,
   });
-}
-
-function sanitizerRuntimeEnv() {
-  if (!sanitizers) {
-    return process.env;
-  }
-
-  if (sanitizers.includes("thread")) {
-    return {
-      ...process.env,
-      TSAN_OPTIONS:
-        process.env.TSAN_OPTIONS ?? "halt_on_error=1:second_deadlock_stack=1",
-    };
-  }
-
-  if (sanitizers.includes("address")) {
-    return {
-      ...process.env,
-      ASAN_OPTIONS: process.env.ASAN_OPTIONS ?? "strict_string_checks=1",
-    };
-  }
-
-  if (sanitizers.includes("undefined")) {
-    return {
-      ...process.env,
-      UBSAN_OPTIONS:
-        process.env.UBSAN_OPTIONS ?? "halt_on_error=1:print_stacktrace=1",
-    };
-  }
-
-  return process.env;
 }
 
 function runIosAdapterTest(baseEnv) {
@@ -329,8 +300,8 @@ try {
       LLVM_PROFILE_FILE: path.join(buildDir, "ios-adapter.profraw"),
     });
   } else {
-    runCommand(outputFile, [], { env: sanitizerRuntimeEnv() });
-    runIosAdapterTest(sanitizerRuntimeEnv());
+    runCommand(outputFile, [], { env: sanitizerRuntimeEnv(sanitizers, process.env) });
+    runIosAdapterTest(sanitizerRuntimeEnv(sanitizers, process.env));
   }
 
   console.log("✅ C++ tests passed!");

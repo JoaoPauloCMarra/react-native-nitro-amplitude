@@ -1,5 +1,3 @@
-import { useEffect, useState } from "react";
-import { StyleSheet, View } from "react-native";
 import { useLocalSearchParams } from "expo-router";
 import {
   Experiment,
@@ -19,15 +17,13 @@ import {
   clearDryRunTransportRecords,
   getDryRunAnalyticsEvents,
 } from "react-native-nitro-amplitude/network";
-import { Card, Page, StatusRow } from "../components/shared";
-
-const ANALYTICS_API_KEY = "nitro-amplitude-dry-run-analytics-key";
-const EXPERIMENT_API_KEY = "nitro-amplitude-dry-run-experiment-key";
-
-type NetworkCase = {
-  name: string;
-  status: string;
-};
+import { ANALYTICS_API_KEY, EXPERIMENT_API_KEY } from "../components/fixture";
+import {
+  LabBlockedPage,
+  LabCasesScreen,
+  countFailedCases,
+  useLabCases,
+} from "../components/lab-runner";
 
 function fixtureEndpoint(baseUrl: string, endpoint: string): string {
   return `${baseUrl.replace(/\/+$/, "")}${endpoint}`;
@@ -212,20 +208,6 @@ async function runDiagnosticsCase(fixtureUrl: string): Promise<string> {
     : `fail:diagnostics=native=${nativeReady}:worker=${workerReady}:timings=${timingsPresent}:pipeline=${pipelineTimings}:cleared=${cleared}`;
 }
 
-async function runCase(
-  name: string,
-  run: () => Promise<string>,
-): Promise<NetworkCase> {
-  try {
-    return { name, status: await run() };
-  } catch (error) {
-    return {
-      name,
-      status: `fail:${name}=${error instanceof Error ? error.message.slice(0, 40) : "error"}`,
-    };
-  }
-}
-
 export default function AmplitudeNetworkLabScreen() {
   const searchParams = useLocalSearchParams<{ fixtureUrl?: string }>();
   const fixtureUrl =
@@ -233,111 +215,44 @@ export default function AmplitudeNetworkLabScreen() {
       ? searchParams.fixtureUrl
       : undefined;
   const dryRun = process.env.EXPO_PUBLIC_AMPLITUDE_DRY_RUN === "1";
-  const [cases, setCases] = useState<NetworkCase[]>([]);
-  const [done, setDone] = useState(false);
-
-  useEffect(() => {
-    if (!dryRun || !fixtureUrl) {
-      return;
-    }
-    let cancelled = false;
-    void (async () => {
-      const steps: [string, () => Promise<string>][] = [
-        ["timeout", () => runTimeoutCase(fixtureUrl)],
-        ["refused", () => runRefusedCase(fixtureUrl)],
-        ["invalid-url", () => runInvalidUrlCase()],
-        ["native-transport", () => runNativeTransportCase(fixtureUrl)],
-        [
-          "native-transport-failure",
-          () => runNativeTransportFailureCase(fixtureUrl),
-        ],
-        ["experiment-native", () => runNativeExperimentCase(fixtureUrl)],
-        ["diagnostics", () => runDiagnosticsCase(fixtureUrl)],
-      ];
-      for (const [name, run] of steps) {
-        const result = await runCase(name, run);
-        if (cancelled) {
-          return;
-        }
-        setCases((previous) => [...previous, result]);
-      }
-      if (!cancelled) {
-        setDone(true);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [dryRun, fixtureUrl]);
+  const { cases, done } = useLabCases(
+    dryRun && fixtureUrl !== undefined,
+    () =>
+      fixtureUrl === undefined
+        ? []
+        : [
+            ["timeout", () => runTimeoutCase(fixtureUrl)],
+            ["refused", () => runRefusedCase(fixtureUrl)],
+            ["invalid-url", () => runInvalidUrlCase()],
+            ["native-transport", () => runNativeTransportCase(fixtureUrl)],
+            [
+              "native-transport-failure",
+              () => runNativeTransportFailureCase(fixtureUrl),
+            ],
+            ["experiment-native", () => runNativeExperimentCase(fixtureUrl)],
+            ["diagnostics", () => runDiagnosticsCase(fixtureUrl)],
+          ],
+    fixtureUrl ?? "",
+  );
 
   if (!dryRun) {
-    return (
-      <Page title="Network lab" subtitle="Start the example in fixture mode">
-        <StatusRow
-          testID="e2e-network-blocked"
-          label="state"
-          value="blocked: fixture mode required"
-        />
-      </Page>
-    );
+    return <LabBlockedPage prefix="network" title="Network lab" />;
   }
 
-  const failed = cases.filter((item) => !item.status.startsWith("ok:")).length;
   const summary = fixtureUrl
     ? done
-      ? `network-done:fail=${failed};`
+      ? `network-done:fail=${countFailedCases(cases)};`
       : "running"
     : "blocked:local-fixture-url-required";
 
   return (
-    <View
-      testID="e2e-network-screen"
-      style={{ flex: 1 }}
-      accessibilityLabel="Network lab"
-    >
-      <Page
-        title="Network lab"
-        subtitle="Deep link nitroamplitude://e2e-network"
-      >
-        <StatusRow
-          testID="e2e-network-mode"
-          label="mode"
-          value="dry-run fixture"
-        />
-        <View
-          testID="e2e-network-results"
-          accessible
-          accessibilityLabel={[
-            ...cases.map((item) => item.status),
-            summary,
-          ].join(" ")}
-          style={localStyles.resultsProbe}
-        />
-        <StatusRow
-          testID="e2e-network-summary"
-          label="summary"
-          value={summary}
-        />
-        <Card
-          title="Native network"
-          subtitle="Local fixture only; no Amplitude keys"
-        >
-          {cases.map((item) => (
-            <StatusRow
-              key={item.name}
-              testID={`e2e-network-${item.name}`}
-              label={item.name}
-              value={item.status}
-            />
-          ))}
-        </Card>
-      </Page>
-    </View>
+    <LabCasesScreen
+      prefix="network"
+      title="Network lab"
+      cardTitle="Native network"
+      cardSubtitle="Local fixture only; no Amplitude keys"
+      cases={cases}
+      summary={summary}
+    />
   );
 }
-
-const localStyles = StyleSheet.create({
-  resultsProbe: {
-    height: 1,
-  },
-});

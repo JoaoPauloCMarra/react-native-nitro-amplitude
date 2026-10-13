@@ -1,4 +1,8 @@
 const replayFixture = process.env.EXPO_PUBLIC_AMPLITUDE_DRY_RUN === "1";
+const androidArchitectures = (process.env.NITRO_ANDROID_ARCHS ?? "")
+  .split(",")
+  .map((arch) => arch.trim())
+  .filter(Boolean);
 
 module.exports = {
   expo: {
@@ -47,13 +51,18 @@ module.exports = {
         {
           ios: {
             enableSceneSupport: true,
+            ccacheEnabled: true,
           },
           android: {
             usePrecompiledHeaders: true,
+            ...(androidArchitectures.length > 0
+              ? { buildArchs: androidArchitectures }
+              : {}),
             ...(replayFixture ? { usesCleartextTraffic: true } : {}),
           },
         },
       ],
+      "./plugins/with-fast-gradle",
       "react-native-nitro-amplitude",
       "expo-font",
       "expo-asset",

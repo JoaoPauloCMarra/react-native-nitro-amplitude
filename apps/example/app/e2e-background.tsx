@@ -8,18 +8,15 @@ import {
   clearDryRunTransportRecords,
   getDryRunAnalyticsEvents,
 } from "react-native-nitro-amplitude/network";
+import { ANALYTICS_API_KEY, delay } from "../components/fixture";
+import { LabBlockedPage } from "../components/lab-runner";
 import { Page, StatusRow } from "../components/shared";
 
-const ANALYTICS_API_KEY = "nitro-amplitude-dry-run-analytics-key";
 const PROBE_EVENT = "e2e_background_probe";
 const FLUSH_INTERVAL_MILLIS = 600000;
 const LATENCY_LIMIT_MILLIS = 120000;
 const RESUME_POLL_MILLIS = 5000;
 const RESUME_POLL_STEP_MILLIS = 250;
-
-function delay(millis: number): Promise<void> {
-  return new Promise<void>((resolve) => setTimeout(resolve, millis));
-}
 
 function probeRecords(runId: string) {
   return getDryRunAnalyticsEvents().flatMap((record) =>
@@ -132,15 +129,7 @@ export default function AmplitudeBackgroundLabScreen() {
   }, [dryRun, runId]);
 
   if (!dryRun) {
-    return (
-      <Page title="Background lab" subtitle="Start the example in fixture mode">
-        <StatusRow
-          testID="e2e-background-blocked"
-          label="state"
-          value="blocked: fixture mode required"
-        />
-      </Page>
-    );
+    return <LabBlockedPage prefix="background" title="Background lab" />;
   }
 
   const summary = runId

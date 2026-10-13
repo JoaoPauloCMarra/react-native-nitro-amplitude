@@ -145,10 +145,8 @@ class AndroidAmplitudeAdapterTest {
     return field.get(null)
   }
 
-  @Suppress("UNCHECKED_CAST")
   private fun clearCachedContexts() {
-    val cache = getStaticField("cachedContexts") as MutableMap<String, String>
-    synchronized(cache) { cache.clear() }
+    setStaticField("cachedContext", null)
   }
 
   private fun drainPrefetchExecutor() {
@@ -470,7 +468,7 @@ class AndroidAmplitudeAdapterTest {
   }
 
   @Test
-  fun applicationContextJsonHasEveryFieldAndIsCachedPerOptionSet() {
+  fun applicationContextJsonHasEveryFieldAndIsCachedOnce() {
     val json = JSONObject(AndroidAmplitudeAdapter.getApplicationContextJson("{}"))
     assertEquals("Android", json.getString("platform"))
     assertEquals("android", json.getString("osName"))
@@ -490,9 +488,7 @@ class AndroidAmplitudeAdapterTest {
     for (index in 0 until 40) {
       AndroidAmplitudeAdapter.getApplicationContextJson("{\"option$index\":true}")
     }
-    @Suppress("UNCHECKED_CAST")
-    val cache = getStaticField("cachedContexts") as Map<String, String>
-    assertTrue(synchronized(cache) { cache.size } <= 8)
+    assertTrue(getStaticField("cachedContext") === first)
   }
 
   @Test

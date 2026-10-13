@@ -114,7 +114,7 @@ void HybridAmplitudeWorker::enqueue(
     const std::string& body,
     double timeoutMillis) {
   if (requestId.empty() || url.empty()) {
-    throw std::runtime_error("NitroAmplitude: Invalid HTTP request");
+    throw std::runtime_error("NitroAmplitude: invalid_request");
   }
   if (std::isnan(timeoutMillis) || std::isinf(timeoutMillis) || timeoutMillis <= 0.0) {
     timeoutMillis = kDefaultTimeoutMillis;
@@ -220,7 +220,6 @@ void HybridAmplitudeWorker::workerLoop() {
         notifyCancelled = true;
       } else {
         ++inFlightCount_;
-        inFlightGenerations_.insert(request.generation);
       }
     }
 
@@ -246,7 +245,7 @@ void HybridAmplitudeWorker::workerLoop() {
     ::NitroAmplitude::HttpResult result;
     try {
       if (!adapter_) {
-        result.error = "Native adapter unavailable";
+        result.error = "adapter_unavailable";
       } else if (!isMethodToken(request.method)) {
         result.error = "network_error";
       } else {
@@ -302,7 +301,6 @@ void HybridAmplitudeWorker::workerLoop() {
     --inFlightCount_;
     {
       std::lock_guard<std::mutex> lock(queueMutex_);
-      inFlightGenerations_.erase(request.generation);
       cancelledGenerations_.erase(request.generation);
       const auto active = activeGenerations_.find(request.requestId);
       if (active != activeGenerations_.end()) {

@@ -1,5 +1,3 @@
-import { useEffect, useState } from "react";
-import { StyleSheet, View } from "react-native";
 import {
   Experiment,
   StubExperimentClient,
@@ -18,38 +16,22 @@ import {
   clearDryRunTransportRecords,
   getDryRunAnalyticsEvents,
 } from "react-native-nitro-amplitude/network";
-import { Card, Page, StatusRow } from "../components/shared";
+import {
+  ANALYTICS_API_KEY,
+  EXPERIMENT_API_KEY,
+  delay,
+  fixtureHttpClient,
+} from "../components/fixture";
+import {
+  LabBlockedPage,
+  LabCasesScreen,
+  countFailedCases,
+  useLabCases,
+} from "../components/lab-runner";
 import type { Types } from "react-native-nitro-amplitude";
-
-const ANALYTICS_API_KEY = "nitro-amplitude-dry-run-analytics-key";
-const EXPERIMENT_API_KEY = "nitro-amplitude-dry-run-experiment-key";
-
-const fixtureHttpClient = {
-  async request(requestUrl: string) {
-    if (
-      requestUrl.includes("/sdk/v2/flags") &&
-      !requestUrl.includes("vardata")
-    ) {
-      return { status: 200, body: "[]" };
-    }
-    return {
-      status: 200,
-      body: JSON.stringify({ "demo-flag": { key: "on", value: "on" } }),
-    };
-  },
-};
-
-type AnalyticsCase = {
-  name: string;
-  status: string;
-};
 
 function recordedEvents() {
   return getDryRunAnalyticsEvents().flatMap((record) => record.payload.events);
-}
-
-function delay(millis: number): Promise<void> {
-  return new Promise<void>((resolve) => setTimeout(resolve, millis));
 }
 
 async function runExposureCase(): Promise<string> {
@@ -375,118 +357,36 @@ async function runHelpersCase(): Promise<string> {
     : `fail:experiment-helpers=${failures.join(",")}`;
 }
 
-async function runCase(
-  name: string,
-  run: () => Promise<string>,
-): Promise<AnalyticsCase> {
-  try {
-    return { name, status: await run() };
-  } catch (error) {
-    return {
-      name,
-      status: `fail:${name}=${error instanceof Error ? error.message.slice(0, 40) : "error"}`,
-    };
-  }
-}
-
 export default function AmplitudeAnalyticsLabScreen() {
   const dryRun = process.env.EXPO_PUBLIC_AMPLITUDE_DRY_RUN === "1";
-  const [cases, setCases] = useState<AnalyticsCase[]>([]);
-  const [done, setDone] = useState(false);
-
-  useEffect(() => {
-    if (!dryRun) {
-      return;
-    }
-    let cancelled = false;
-    void (async () => {
-      const steps: [string, () => Promise<string>][] = [
-        ["exposure", runExposureCase],
-        ["session", runSessionCase],
-        ["plugin", runPluginCase],
-        ["shutdown", runShutdownCase],
-        ["experiment-helpers", runHelpersCase],
-      ];
-      for (const [name, run] of steps) {
-        const result = await runCase(name, run);
-        if (cancelled) {
-          return;
-        }
-        setCases((previous) => [...previous, result]);
-      }
-      if (!cancelled) {
-        setDone(true);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [dryRun]);
+  const { cases, done } = useLabCases(
+    dryRun,
+    () => [
+      ["exposure", runExposureCase],
+      ["session", runSessionCase],
+      ["plugin", runPluginCase],
+      ["shutdown", runShutdownCase],
+      ["experiment-helpers", runHelpersCase],
+    ],
+    "",
+  );
 
   if (!dryRun) {
-    return (
-      <Page title="Analytics lab" subtitle="Start the example in fixture mode">
-        <StatusRow
-          testID="e2e-analytics-blocked"
-          label="state"
-          value="blocked: fixture mode required"
-        />
-      </Page>
-    );
+    return <LabBlockedPage prefix="analytics" title="Analytics lab" />;
   }
 
-  const failed = cases.filter((item) => !item.status.startsWith("ok:")).length;
-  const summary = done ? `analytics-done:fail=${failed};` : "running";
+  const summary = done
+    ? `analytics-done:fail=${countFailedCases(cases)};`
+    : "running";
 
   return (
-    <View
-      testID="e2e-analytics-screen"
-      style={{ flex: 1 }}
-      accessibilityLabel="Analytics lab"
-    >
-      <Page
-        title="Analytics lab"
-        subtitle="Deep link nitroamplitude://e2e-analytics"
-      >
-        <StatusRow
-          testID="e2e-analytics-mode"
-          label="mode"
-          value="dry-run fixture"
-        />
-        <View
-          testID="e2e-analytics-results"
-          accessible
-          accessibilityLabel={[
-            ...cases.map((item) => item.status),
-            summary,
-          ].join(" ")}
-          style={localStyles.resultsProbe}
-        />
-        <StatusRow
-          testID="e2e-analytics-summary"
-          label="summary"
-          value={summary}
-        />
-        <Card
-          title="Analytics and Experiment"
-          subtitle="Dry-run fixture only; no Amplitude keys"
-        >
-          {cases.map((item) => (
-            <StatusRow
-              key={item.name}
-              testID={`e2e-analytics-${item.name}`}
-              label={item.name}
-              value={item.status}
-            />
-          ))}
-        </Card>
-      </Page>
-    </View>
+    <LabCasesScreen
+      prefix="analytics"
+      title="Analytics lab"
+      cardTitle="Analytics and Experiment"
+      cardSubtitle="Dry-run fixture only; no Amplitude keys"
+      cases={cases}
+      summary={summary}
+    />
   );
 }
-
-const localStyles = StyleSheet.create({
-  resultsProbe: {
-    height: 1,
-  },
-});

@@ -123,7 +123,7 @@ public:
     return !failEnsureDirectory;
   }
 
-  std::vector<std::string> listFiles(const std::string& directory) override {
+  virtual std::vector<std::string> listFiles(const std::string& directory) {
     std::vector<std::string> names;
     const std::string prefix = directory + "/";
     for (const auto& entry : files) {
@@ -760,7 +760,7 @@ void testWorkerFallbacks() {
 
   auto removeListener = worker->addOnComplete(
       [&](const std::string& requestId, double statusCode, const std::string& body, const std::string& error) {
-        if (requestId == "req-1" && statusCode == 0 && body.empty() && error == "Native adapter unavailable") {
+        if (requestId == "req-1" && statusCode == 0 && body.empty() && error == "adapter_unavailable") {
           receivedUnavailable = true;
         }
       });
@@ -1429,10 +1429,16 @@ static std::string readRaw(const std::string& path) {
   return content.value();
 }
 
+static std::vector<std::string> listDirectory(
+    NitroAmplitude::FileAdapter& files,
+    const std::string& directory) {
+  return files.readDirectory(directory).value_or(std::vector<std::string>());
+}
+
 static size_t countNamesContaining(const std::string& directory, const std::string& needle) {
   NitroAmplitude::PosixFileAdapter files;
   size_t count = 0;
-  for (const auto& name : files.listFiles(directory)) {
+  for (const auto& name : listDirectory(files, directory)) {
     if (name.find(needle) != std::string::npos) {
       ++count;
     }
@@ -1443,7 +1449,7 @@ static size_t countNamesContaining(const std::string& directory, const std::stri
 static uint64_t directoryBytes(const std::string& directory) {
   NitroAmplitude::PosixFileAdapter files;
   uint64_t total = 0;
-  for (const auto& name : files.listFiles(directory)) {
+  for (const auto& name : listDirectory(files, directory)) {
     total += fileSize(directory + "/" + name);
   }
   return total;
@@ -1451,7 +1457,7 @@ static uint64_t directoryBytes(const std::string& directory) {
 
 static bool everySegmentEndsOnRecordBoundary(const std::string& directory) {
   NitroAmplitude::PosixFileAdapter files;
-  for (const auto& name : files.listFiles(directory)) {
+  for (const auto& name : listDirectory(files, directory)) {
     const std::string content = readRaw(directory + "/" + name);
     if (!content.empty() && content.back() != '\n') {
       return false;
@@ -1775,8 +1781,8 @@ void testPosixFileAdapterContract() {
   assert(files.ensureDirectory(nested));
   assert(files.ensureDirectory(nested));
   assert(files.ensureDirectory(nested + "/"));
-  assert(files.listFiles(nested).empty());
-  assert(files.listFiles(temp.path + "/missing").empty());
+  assert(listDirectory(files, nested).empty());
+  assert(listDirectory(files, temp.path + "/missing").empty());
   assert(!files.readDirectory(temp.path + "/missing").has_value());
   assert(files.readDirectory(nested).value_or(std::vector<std::string>({"x"})).empty());
 
@@ -1828,7 +1834,7 @@ void testPosixFileAdapterContract() {
   assert(files.removeFile(regular));
   assert(!files.removeFile(nested));
 
-  const auto names = files.listFiles(temp.path);
+  const auto names = listDirectory(files, temp.path);
   assert(names == std::vector<std::string>({"a"}));
 }
 
@@ -1865,13 +1871,13 @@ void testPosixDiskFullKeepsCommittedRecords() {
     }
     assert(store.hasDisk("a"));
     assert(!store.hasDisk("d"));
-    assert(files->listFiles(dir) == std::vector<std::string>({"segment-00000000.jsonl"}));
+    assert(listDirectory(*files, dir) == std::vector<std::string>({"segment-00000000.jsonl"}));
     assert(readRaw(segment0) == "a\t1\nb\t2\n");
 
     store.setDisk("e", "5");
     assert(store.getDisk("e").value_or("") == "5");
     assert(store.getDisk("a").value_or("") == "1");
-    assert(files->listFiles(dir) == std::vector<std::string>({"segment-00000000.jsonl"}));
+    assert(listDirectory(*files, dir) == std::vector<std::string>({"segment-00000000.jsonl"}));
     assert(readRaw(segment0) == "a\t1\nb\t2\ne\t5\n");
   }
 
@@ -1883,7 +1889,7 @@ void testPosixDiskFullKeepsCommittedRecords() {
     assert(reloaded.getDisk("e").value_or("") == "5");
   }
   assert(readRaw(segment0) == "a\t1\nb\t2\ne\t5\n");
-  assert(files->listFiles(dir) == std::vector<std::string>({"segment-00000000.jsonl"}));
+  assert(listDirectory(*files, dir) == std::vector<std::string>({"segment-00000000.jsonl"}));
 }
 
 void testPosixDiskFullDeleteKeepsRecord() {
@@ -1904,7 +1910,7 @@ void testPosixDiskFullDeleteKeepsRecord() {
         assert(store.hasDisk("a"));
       }
     }
-    assert(files->listFiles(dir) == std::vector<std::string>({"segment-00000000.jsonl"}));
+    assert(listDirectory(*files, dir) == std::vector<std::string>({"segment-00000000.jsonl"}));
     assert(store.getDisk("a").value_or("x").empty());
   }
   {
@@ -1930,11 +1936,11 @@ void testPosixDiskFullDuringRotationDoesNotBurnSegmentIds() {
       for (int attempt = 0; attempt < 25; ++attempt) {
         assert(throwsRuntimeError(
             [&]() { store.setDisk("big", std::string(20, 'x')); }, kAppendFailed));
-        assert(files->listFiles(dir) == oneSegment);
+        assert(listDirectory(*files, dir) == oneSegment);
       }
     }
     store.setDisk("big", std::string(20, 'x'));
-    assert(files->listFiles(dir) ==
+    assert(listDirectory(*files, dir) ==
            std::vector<std::string>({"segment-00000000.jsonl", "segment-00000001.jsonl"}));
   }
   JsonlSegmentStore reloaded(files, dir, 16);
@@ -1953,11 +1959,11 @@ void testPosixLoadReclaimsEmptySegments() {
   {
     JsonlSegmentStore store(files, dir);
     assert(sortedKeys(store) == std::vector<std::string>({"a"}));
-    assert(files->listFiles(dir) == std::vector<std::string>({"segment-00000000.jsonl"}));
+    assert(listDirectory(*files, dir) == std::vector<std::string>({"segment-00000000.jsonl"}));
     store.setDisk("b", "2");
   }
   assert(readRaw(dir + "/segment-00000000.jsonl") == "a\t1\nb\t2\n");
-  assert(files->listFiles(dir) == std::vector<std::string>({"segment-00000000.jsonl"}));
+  assert(listDirectory(*files, dir) == std::vector<std::string>({"segment-00000000.jsonl"}));
 }
 
 void testPosixReopenWhileDiskIsFull() {
@@ -1982,7 +1988,7 @@ void testPosixReopenWhileDiskIsFull() {
     }
     assert(!store.hasDisk("d"));
   }
-  assert(files->listFiles(dir) == std::vector<std::string>({"segment-00000000.jsonl"}));
+  assert(listDirectory(*files, dir) == std::vector<std::string>({"segment-00000000.jsonl"}));
 
   {
     JsonlSegmentStore store(files, dir);
@@ -1993,7 +1999,7 @@ void testPosixReopenWhileDiskIsFull() {
   assert(sortedKeys(reloaded) == std::vector<std::string>({"a", "b", "d"}));
   assert(reloaded.getDisk("d").value_or("") == "4");
   assert(readRaw(segment0) == "a\t1\nb\t2\nd\t4\n");
-  assert(files->listFiles(dir) == std::vector<std::string>({"segment-00000000.jsonl"}));
+  assert(listDirectory(*files, dir) == std::vector<std::string>({"segment-00000000.jsonl"}));
 }
 
 void testPosixMigrationUnderDiskFullRetriesWithoutDuplicates() {
@@ -2012,7 +2018,7 @@ void testPosixMigrationUnderDiskFullRetriesWithoutDuplicates() {
       assert(throwsRuntimeError([&]() { store.migrateLegacyEntries(legacy); }, kAppendFailed));
     }
     assert(store.getAllDiskKeys().empty());
-    assert(files->listFiles(dir).empty());
+    assert(listDirectory(*files, dir).empty());
   }
   {
     JsonlSegmentStore store(files, dir);
@@ -2085,6 +2091,67 @@ void testLegacyDiskMigrationResumesWithoutResurrectingKeys() {
   assert(reloaded.hasDisk("legacy-b"));
   assert(reloaded.getDisk("never").value_or("") == "2");
   assert(sortedKeys(reloaded).size() == 5);
+}
+
+void testLegacyDiskMigratorRetriesOnlyAfterASuccessfulWrite() {
+  auto files = std::make_shared<UnstableDirectoryFileAdapter>();
+  JsonlSegmentStore store(files, "legacy-migrator", 4096);
+  std::map<std::string, std::string> legacy = {{"legacy-a", "1"}, {"legacy-b", "2"}};
+  int entriesCalls = 0;
+  int clearCalls = 0;
+  bool sourceThrows = false;
+  NitroAmplitude::LegacyDiskSource source;
+  source.entries = [&]() {
+    ++entriesCalls;
+    if (sourceThrows) {
+      throw std::runtime_error("source unavailable");
+    }
+    return std::vector<std::pair<std::string, std::string>>(legacy.begin(), legacy.end());
+  };
+  source.remove = [&](const std::vector<std::string>& keys) {
+    for (const auto& key : keys) {
+      legacy.erase(key);
+    }
+  };
+  source.clear = [&]() {
+    ++clearCalls;
+    legacy.clear();
+  };
+  NitroAmplitude::LegacyDiskMigrator migrator(source);
+
+  sourceThrows = true;
+  migrator.ensureMigrated(store);
+  assert(entriesCalls == 1 && clearCalls == 0);
+  sourceThrows = false;
+
+  migrator.ensureMigrated(store);
+  assert(entriesCalls == 1);
+
+  migrator.rearmAfterWrite();
+  files->failDataAppends = true;
+  migrator.ensureMigrated(store);
+  assert(entriesCalls == 2 && clearCalls == 0 && legacy.size() == 2);
+  files->failDataAppends = false;
+
+  migrator.ensureMigrated(store);
+  migrator.ensureMigrated(store);
+  assert(entriesCalls == 2);
+
+  migrator.forget("legacy-a");
+  assert(legacy.size() == 1);
+
+  migrator.rearmAfterWrite();
+  migrator.ensureMigrated(store);
+  assert(entriesCalls == 3 && clearCalls == 1 && legacy.empty());
+  assert(store.getDisk("legacy-b").value_or("") == "2");
+
+  store.setDisk("fresh", "value");
+  migrator.ensureMigrated(store);
+  legacy["late"] = "3";
+  migrator.forget("late");
+  migrator.ensureMigrated(store);
+  assert(entriesCalls == 3 && clearCalls == 1);
+  assert(legacy.size() == 1 && !store.hasDisk("late"));
 }
 
 void testSegmentStoreMigrationInterruptedMidway() {
@@ -2189,7 +2256,7 @@ void testPosixDirectoryRemovedWhileRunning() {
   }
   JsonlSegmentStore reloaded(files, dir);
   assert(sortedKeys(reloaded) == std::vector<std::string>({"c"}));
-  assert(files->listFiles(dir) == std::vector<std::string>({"segment-00000000.jsonl"}));
+  assert(listDirectory(*files, dir) == std::vector<std::string>({"segment-00000000.jsonl"}));
 
   const std::string blocked = temp.path + "/not-a-directory";
   writeRaw(blocked, "x");
@@ -2241,7 +2308,7 @@ void testPosixCrashRestartAtEveryByteOfLastRecord() {
       retried.setDisk("k4", "last\nrecord");
     }
     assert(readRaw(segment0) == full);
-    assert(files->listFiles(dir).size() == 1);
+    assert(listDirectory(*files, dir).size() == 1);
   }
 
   JsonlSegmentStore complete(files, dir);
@@ -2353,7 +2420,7 @@ void testPosixInterruptedCompactionLeavesNoTemporaryFiles() {
     store.setDisk("b", "2");
   }
   assert(countNamesContaining(dir, ".tmp.") == 0);
-  assert(files->listFiles(dir) == std::vector<std::string>({"segment-00000000.jsonl"}));
+  assert(listDirectory(*files, dir) == std::vector<std::string>({"segment-00000000.jsonl"}));
   JsonlSegmentStore reloaded(files, dir);
   assert(sortedKeys(reloaded) == std::vector<std::string>({"a", "b"}));
 }
@@ -2377,7 +2444,7 @@ void testPosixHugeAndBinaryValuesRoundTrip() {
     store.setDisk("small-after", "2");
     assert(store.getDisk("huge").value_or("") == huge);
     assert(store.getDisk(binaryKey).value_or("") == everyByte);
-    assert(files->listFiles(dir).size() == 3);
+    assert(listDirectory(*files, dir).size() == 3);
   }
   {
     JsonlSegmentStore reloaded(files, dir);
@@ -2417,7 +2484,7 @@ void testPosixRepeatedOverwritesStayBounded() {
       }
     }
     assert(directoryBytes(dir) <= 3 * cap);
-    assert(files->listFiles(dir).size() <= 3);
+    assert(listDirectory(*files, dir).size() <= 3);
   }
   JsonlSegmentStore reloaded(files, dir, cap);
   assert(reloaded.getAllDiskKeys().size() == 18);
@@ -2463,7 +2530,7 @@ void testPosixBoundedKeySetKeepsDiskBounded() {
           liveBytes += entry.first.size() + entry.second.size() + 2;
         }
         const uint64_t bytes = directoryBytes(dir);
-        const size_t fileCount = files->listFiles(dir).size();
+        const size_t fileCount = listDirectory(*files, dir).size();
         worstFiles = std::max(worstFiles, fileCount);
         assert(bytes <= 2 * liveBytes + 2 * cap + largestRecord);
       }
@@ -2815,11 +2882,11 @@ void testPosixPartialDirectoryListingIsAnError() {
     store.setDisk("a", "1");
     store.setDisk("big", std::string(20, 'x'));
     store.setDisk("c", "3");
-    assert(files->listFiles(dir).size() >= 2);
+    assert(listDirectory(*files, dir).size() >= 2);
 
     files->entriesBeforeReadError = 2;
     assert(!files->readDirectory(dir).has_value());
-    assert(files->listFiles(dir).empty());
+    assert(listDirectory(*files, dir).empty());
     files->entriesBeforeReadError = 3;
     assert(!files->readDirectory(dir).has_value());
     files->entriesBeforeReadError = std::numeric_limits<size_t>::max();
@@ -2886,7 +2953,7 @@ void testPosixUnwritableSegmentRetiresOneId() {
     assert(store.getDisk("a").value_or("") == "1");
     assert(chmod(dir.c_str(), 0700) == 0);
     store.setDisk("b", "2");
-    assert(files->listFiles(dir) ==
+    assert(listDirectory(*files, dir) ==
            std::vector<std::string>({"segment-00000000.jsonl", "segment-00000001.jsonl"}));
   }
   assert(chmod(segment0.c_str(), 0600) == 0);
@@ -3846,10 +3913,10 @@ void testWorkerTimeoutNumericBoundaries() {
 
   assert(throwsRuntimeError(
       [&]() { worker->enqueue("", "https://collector.test/ok", "GET", {}, "", 1000); },
-      "NitroAmplitude: Invalid HTTP request"));
+      "NitroAmplitude: invalid_request"));
   assert(throwsRuntimeError(
       [&]() { worker->enqueue("id", "", "GET", {}, "", 1000); },
-      "NitroAmplitude: Invalid HTTP request"));
+      "NitroAmplitude: invalid_request"));
   assert(log.entries().size() == cases.size());
   removeListener();
 }
@@ -4271,6 +4338,7 @@ int main() {
   testPosixReopenWhileDiskIsFull();
   testPosixMigrationUnderDiskFullRetriesWithoutDuplicates();
   testLegacyDiskMigrationResumesWithoutResurrectingKeys();
+  testLegacyDiskMigratorRetriesOnlyAfterASuccessfulWrite();
   testSegmentStoreMigrationInterruptedMidway();
   testPosixPermissionDenied();
   testPosixDirectoryRemovedWhileRunning();

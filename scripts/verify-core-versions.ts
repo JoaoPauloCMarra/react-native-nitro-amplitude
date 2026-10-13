@@ -1,13 +1,13 @@
 const projectRoot = import.meta.dir + "/..";
 
 const expectedVersions = {
-  expo: "~57.0.27",
+  expo: "~57.0.28",
   "expo-asset": "~57.0.19",
   "expo-build-properties": "~57.0.22",
   "expo-constants": "~57.0.21",
   "expo-linking": "~57.0.12",
-  "expo-router": "~57.0.25",
-  "expo-splash-screen": "~57.0.9",
+  "expo-router": "~57.0.26",
+  "expo-splash-screen": "~57.0.10",
   "expo-system-ui": "~57.0.4",
   nitrogen: "0.37.1",
   react: "19.2.3",
@@ -20,7 +20,7 @@ const expectedVersions = {
   "react-native-reanimated": "4.5.1",
   "react-native-worklets": "0.10.1",
   "babel-preset-expo": "~57.0.7",
-  "@amplitude/analytics-core": "2.59.0",
+  "@amplitude/analytics-core": "2.60.2",
   "@amplitude/analytics-connector": "^1.6.8",
   "@amplitude/experiment-core": "^0.13.6",
   "@amplitude/ua-parser-js": "^0.7.33",

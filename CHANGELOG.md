@@ -20,6 +20,9 @@ The format follows Keep a Changelog and the project adheres to SemVer.
 - `nitroHttpClient.request()` and `nitroTransport` now reject with an
   `AmplitudeError` (code `native_unavailable`) when the native worker cannot be
   created, instead of the raw Nitro error.
+- `getNativeStartupDiagnostics().nitroModulesAvailable` now reports whether
+  `react-native-nitro-modules` loads. It was always `true`; it is `false` on web
+  and on a native build where the module is missing.
 
 ## [0.11.0] - 2026-10-07
 

@@ -56,6 +56,18 @@ function getHybridModule(): HybridModule {
   return require("./native/hybrid.web") as HybridModule;
 }
 
+function isNitroModulesAvailable(): boolean {
+  if (!isNative()) {
+    return false;
+  }
+  try {
+    require("react-native-nitro-modules");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function getLastNativeError(): NativeStartupDiagnostics["lastError"] {
   return lastNativeError;
 }
@@ -71,12 +83,11 @@ function recordNativeError(
 
 export function getNativeStartupDiagnostics(): NativeStartupDiagnostics {
   const result: NativeStartupDiagnostics = {
-    nitroModulesAvailable: true,
+    nitroModulesAvailable: isNitroModulesAvailable(),
     contextAvailable: false,
     storageAvailable: false,
     workerAvailable: false,
     nativeAvailable: false,
-    lastError: lastNativeError,
   };
   let lastError: NativeStartupDiagnostics["lastError"] | undefined;
 

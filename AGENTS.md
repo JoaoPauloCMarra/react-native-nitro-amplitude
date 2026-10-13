@@ -62,8 +62,7 @@ projects; apps must not call `setContext` manually.
 - `bun run release:preflight` (+ benchmark, example checks, pack audit)
 - Example prebuild + Android/iOS launch when native code changes
 - `bun run android:test` (Kotlin JVM tests) is a required local release step; it needs the generated example Android project (`bun run example:prebuild`), so it is not part of `check` or CI.
-- PR body is the current version's CHANGELOG section. The GitHub release
-  description must match it. Do not add Summary, Test plan, or extra sections.
+- PR and GitHub release descriptions follow the workspace `AGENTS.md` section "PR And Release Descriptions": the same short text for both, with the full detail kept in `CHANGELOG.md`.
 
 ## Known gaps
 

@@ -5,7 +5,7 @@ import {
 import { Poller } from "@amplitude/experiment-core";
 
 import { ExperimentUser, ExperimentUserProvider } from "../types/user";
-import { isNative } from "../util/platform";
+import { isNative } from "../../platform";
 
 import {
   EXPERIMENT_CONTEXT_OPTIONS,

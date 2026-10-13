@@ -3,7 +3,7 @@ import { getAnalyticsConnector } from "@amplitude/analytics-core";
 import { createInstance } from "./analytics/react-native-client";
 import type { AmplitudeReactNativeClient } from "./analytics/react-native-client";
 import { NetworkGuardedFetchTransport } from "./analytics/network-guarded-fetch-transport";
-import { isNative } from "./analytics/utils/platform";
+import { isNative } from "./platform";
 import { Experiment } from "./experiment/factory";
 import type { ExperimentClient } from "./experiment/experimentClient";
 import type { ExperimentConfig } from "./experiment/types/config";

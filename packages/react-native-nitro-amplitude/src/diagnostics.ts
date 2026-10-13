@@ -3,7 +3,7 @@ import type {
   AmplitudeHealthCheckResult,
   AmplitudeReactNativeClient,
 } from "./analytics/react-native-client";
-import { isNative } from "./analytics/utils/platform";
+import { isNative } from "./platform";
 import { getAmplitudeErrorCode } from "./errors";
 import { getNetworkEnabled } from "./network";
 import type { AmplitudeNetworkTiming } from "./network";

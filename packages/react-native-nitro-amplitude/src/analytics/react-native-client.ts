@@ -38,7 +38,7 @@ import { CampaignTracker } from "./campaign/campaign-tracker";
 import { Context } from "./plugins/context";
 import { useReactNativeConfig, createCookieStorage } from "./config";
 import { parseOldCookies } from "./cookie-migration";
-import { isNative } from "./utils/platform";
+import { isNative } from "../platform";
 
 const START_SESSION_EVENT = "session_start";
 const OFFLINE_RECHECK_MIN_MILLIS = 1000;

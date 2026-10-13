@@ -16,7 +16,7 @@ import {
 import type { Transport } from "@amplitude/analytics-core";
 
 import { LocalStorage } from "./storage/local-storage";
-import { isNative } from "./utils/platform";
+import { isNative } from "../platform";
 import { NetworkGuardedFetchTransport } from "./network-guarded-fetch-transport";
 import { createDiagnosticAnalyticsTransport } from "../diagnostic-failures";
 

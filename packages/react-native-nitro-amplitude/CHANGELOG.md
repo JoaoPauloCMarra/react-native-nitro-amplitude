@@ -17,6 +17,9 @@ The format follows Keep a Changelog and the project adheres to SemVer.
   `trackScreenViewOnNavigationStateChange`, and is checked against the client
   type at compile time. The mock's `init`, `add`, `remove` and `flush` now
   return `AmplitudeReturn<void>`, as the real client does.
+- `nitroHttpClient.request()` and `nitroTransport` now reject with an
+  `AmplitudeError` (code `native_unavailable`) when the native worker cannot be
+  created, instead of the raw Nitro error.
 
 ## [0.11.0] - 2026-10-07
 

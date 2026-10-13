@@ -9,15 +9,21 @@ type CompleteListener = (
 
 const listeners: CompleteListener[] = [];
 const enqueue = jest.fn();
+let workerCreationError: Error | undefined;
 
 jest.mock("../native/hybrid", () => ({
-  getAmplitudeWorker: () => ({
-    addOnComplete: (listener: CompleteListener) => {
-      listeners.push(listener);
-      return { remove: jest.fn() };
-    },
-    enqueue,
-  }),
+  getAmplitudeWorker: () => {
+    if (workerCreationError) {
+      throw workerCreationError;
+    }
+    return {
+      addOnComplete: (listener: CompleteListener) => {
+        listeners.push(listener);
+        return { remove: jest.fn() };
+      },
+      enqueue,
+    };
+  },
 }));
 
 import {
@@ -201,5 +207,21 @@ describe("NitroHttpClient native failures", () => {
     expect(amplitudeError.nativeCode).toBe("queue_full");
     expect(amplitudeError.details).toBeUndefined();
     expect(amplitudeError.cause).toBeInstanceOf(Error);
+  });
+
+  it("wraps a worker creation failure in AmplitudeError", async () => {
+    workerCreationError = new Error(
+      "Couldn't find the native module AmplitudeWorker",
+    );
+    try {
+      const error = await new NitroHttpClient()
+        .request("https://api.lab.amplitude.com/v1", "GET", {}, null)
+        .catch((caught: unknown) => caught);
+      expect(error).toBeInstanceOf(AmplitudeError);
+      expect((error as AmplitudeError).code).toBe("native_unavailable");
+      expect((error as AmplitudeError).cause).toBe(workerCreationError);
+    } finally {
+      workerCreationError = undefined;
+    }
   });
 });

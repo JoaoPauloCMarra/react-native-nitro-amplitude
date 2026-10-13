@@ -71,12 +71,12 @@ export class NitroHttpClient implements HttpClient {
     timeoutMillis = DEFAULT_TIMEOUT_MILLIS,
   ): Promise<SimpleResponse> {
     assertNetworkEnabled();
-    this.ensureListener();
     const requestId = createRequestId();
     return new Promise<SimpleResponse>((resolve, reject) => {
       this.pendingRequests.set(requestId, { resolve, reject });
 
       try {
+        this.ensureListener();
         getAmplitudeWorker().enqueue(
           requestId,
           requestUrl,

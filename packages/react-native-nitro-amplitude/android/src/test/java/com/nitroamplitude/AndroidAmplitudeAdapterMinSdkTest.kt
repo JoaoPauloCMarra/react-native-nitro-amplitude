@@ -24,7 +24,7 @@ class AndroidAmplitudeAdapterMinSdkTest {
   @Test
   fun contextJsonIsBuiltOnTheMinimumSupportedSdk() {
     assertEquals(24, Build.VERSION.SDK_INT)
-    val json = JSONObject(AndroidAmplitudeAdapter.getApplicationContextJson("{\"min-sdk\":true}"))
+    val json = JSONObject(AndroidAmplitudeAdapter.getApplicationContextJson())
     assertEquals("Android", json.getString("platform"))
     assertEquals("android", json.getString("osName"))
     assertEquals(Build.VERSION.RELEASE ?: "", json.getString("osVersion"))
@@ -40,7 +40,7 @@ class AndroidAmplitudeAdapterMinSdkTest {
     configuration.setLocales(LocaleList.getEmptyLocaleList())
     @Suppress("DEPRECATION")
     resources.updateConfiguration(configuration, resources.displayMetrics)
-    val json = JSONObject(AndroidAmplitudeAdapter.getApplicationContextJson("{\"min-sdk-empty-locales\":true}"))
+    val json = JSONObject(AndroidAmplitudeAdapter.getApplicationContextJson())
     val expected = if (resources.configuration.locales.isEmpty) {
       Locale.getDefault()
     } else {

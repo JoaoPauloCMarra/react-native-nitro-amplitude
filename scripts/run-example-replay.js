@@ -4,7 +4,11 @@ const fs = require("node:fs");
 const { isIP } = require("node:net");
 const os = require("node:os");
 const path = require("node:path");
-const { inside } = require("./check-example-replay-freshness.js");
+const {
+  inside,
+  readCoverageManifest,
+} = require("./check-example-replay-freshness.js");
+const { isOutside } = require("./path-containment");
 
 const projectRoot = path.resolve(__dirname, "..");
 const coveragePath = path.join(
@@ -146,13 +150,7 @@ function validateOptions(options) {
 }
 
 function isWithinDirectory(parent, candidate) {
-  const relative = path.relative(path.resolve(parent), path.resolve(candidate));
-  return (
-    relative === "" ||
-    (!relative.startsWith(`..${path.sep}`) &&
-      relative !== ".." &&
-      !path.isAbsolute(relative))
-  );
+  return !isOutside(parent, candidate);
 }
 
 function createArtifactsDirectory(makeTempDirectory = fs.mkdtempSync) {
@@ -172,24 +170,8 @@ function createArtifactsDirectory(makeTempDirectory = fs.mkdtempSync) {
 
 function readSuites(manifestFile = coveragePath) {
   const root = path.resolve(path.dirname(manifestFile), "..");
-  const manifest = JSON.parse(fs.readFileSync(manifestFile, "utf8"));
-  if (!Array.isArray(manifest.suites) || manifest.suites.length === 0) {
-    throw new Error("Replay coverage manifest must list at least one suite");
-  }
-  return manifest.suites.map((suite) => {
-    if (
-      typeof suite.path !== "string" ||
-      !suite.path.startsWith("e2e/") ||
-      suite.path.includes("..") ||
-      !suite.path.endsWith(".ad")
-    ) {
-      throw new Error("Replay coverage manifest contains an unsafe suite path");
-    }
-    const file = inside(root, suite.path);
-    if (!fs.existsSync(file) || !fs.lstatSync(file).isFile())
-      throw new Error(`Replay flow is missing: ${suite.path}`);
-    return suite.path;
-  });
+  return readCoverageManifest(root, path.relative(root, manifestFile))
+    .suitePaths;
 }
 
 function runExampleReplay({

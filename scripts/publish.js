@@ -5,6 +5,7 @@ const fs = require("fs");
 const path = require("path");
 const readline = require("readline");
 const { findSupportedLineFailures } = require("./release-docs");
+const { validateDistTag } = require("./validate-release-tags");
 
 const colors = {
   green: (text) => `\x1b[32m${text}\x1b[0m`,
@@ -72,21 +73,6 @@ function formatDuration(startedAt) {
 
 function shellQuote(value) {
   return JSON.stringify(String(value));
-}
-
-function validateNpmTag(tag) {
-  if (!/^[a-z0-9][a-z0-9._-]*$/i.test(tag)) {
-    log(`Invalid npm dist tag: ${tag}`, "red");
-    process.exit(1);
-  }
-
-  if (/^v?\d+\.\d+\.\d+/.test(tag)) {
-    log(
-      `Invalid npm dist tag "${tag}": use a release channel like latest or next.`,
-      "red",
-    );
-    process.exit(1);
-  }
 }
 
 function isInteractive() {
@@ -368,7 +354,12 @@ Options:
   const verifyNpmLifecycle = args.includes("--verify-npm-lifecycle");
   const tag =
     args.find((arg) => arg.startsWith("--tag="))?.split("=")[1] || "latest";
-  validateNpmTag(tag);
+  try {
+    validateDistTag(tag);
+  } catch (error) {
+    log(`Invalid npm dist tag "${tag}": ${error.message}`, "red");
+    process.exit(1);
+  }
 
   console.log("");
   log("📦 Publishing react-native-nitro-amplitude", "bold");

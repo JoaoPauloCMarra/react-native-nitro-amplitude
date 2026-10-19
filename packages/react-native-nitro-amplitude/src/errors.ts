@@ -5,6 +5,7 @@ export type AmplitudeErrorCode =
   | "invalid_api_key"
   | "invalid_deployment_key"
   | "experiment_fetch_failed"
+  | "experiment_fetch_superseded"
   | "native_unavailable"
   | "serialization_error"
   | "event_too_large"

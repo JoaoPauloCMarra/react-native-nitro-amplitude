@@ -6,6 +6,8 @@ jest.mock("../native/context", () => ({
 
 import { ExperimentClient } from "../experiment/experimentClient";
 
+const SUPERSEDED = { code: "experiment_fetch_superseded" };
+
 test("equivalent user maps preserve retries across partial fetches", async () => {
   jest.useFakeTimers();
   let rejectFirst: ((error: Error) => void) | undefined;
@@ -279,7 +281,7 @@ test.each(["clear", "user change"])(
           "enable-balance-assessment": { key: "on", value: "on" },
         }),
       });
-      await request;
+      await expect(request).rejects.toMatchObject(SUPERSEDED);
       expect(client.variant("enable-balance-assessment", "off").value).toBe(
         "off",
       );
@@ -312,7 +314,7 @@ test("a cleared request cannot replace or deduplicate the next identity request"
     for (let step = 0; step < 20; step += 1) await Promise.resolve();
     expect(pending).toHaveLength(2);
     pending[0]?.({ status: 200, body: '{"flag":{"key":"on","value":"on"}}' });
-    await oldRequest;
+    await expect(oldRequest).rejects.toMatchObject(SUPERSEDED);
     expect(client.variant("flag", "off").value).toBe("off");
     const deduplicated = client.fetchOrThrow({ user_id: "user-a" });
     for (let step = 0; step < 20; step += 1) await Promise.resolve();
@@ -367,7 +369,7 @@ test("clearing during storage prevents earlier responses from restoring assignme
     finishStorage?.();
     await first;
     pending[1]?.({ status: 200, body: '{"flag":{"key":"off","value":"off"}}' });
-    await second;
+    await expect(second).rejects.toMatchObject(SUPERSEDED);
     expect(client.hasCachedVariant("flag")).toBe(false);
   } finally {
     client.stop();
@@ -797,7 +799,7 @@ test("an old user response cannot mark the current assignments fresh", async () 
       status: 200,
       body: '{"feature":{"key":"late","value":"late"}}',
     });
-    await oldRequest;
+    await expect(oldRequest).rejects.toMatchObject(SUPERSEDED);
 
     expect(client.variantWithMetadata("feature")).toMatchObject({
       freshness: "stale",
@@ -923,5 +925,131 @@ test("restarting the same user starts and retries a new startup fetch", async ()
     await newStartup?.catch(() => {});
     jest.clearAllTimers();
     jest.useRealTimers();
+  }
+});
+
+function deferredHttp() {
+  const pending: ((response: { status: number; body: string }) => void)[] = [];
+  const request = jest.fn(
+    () =>
+      new Promise<{ status: number; body: string }>((resolve) => {
+        pending.push(resolve);
+      }),
+  );
+  return { pending, request };
+}
+
+const ON = (key: string) => ({
+  status: 200,
+  body: JSON.stringify({ [key]: { key: "on", value: "on" } }),
+});
+
+async function flushMicrotasks() {
+  for (let step = 0; step < 20; step += 1) await Promise.resolve();
+}
+
+test("keeps both responses of concurrent fetches with disjoint flagKeys", async () => {
+  const { pending, request } = deferredHttp();
+  const client = new ExperimentClient("test-deployment-key", {
+    retryFetchOnFailure: false,
+    automaticExposureTracking: false,
+    fetchOnStart: false,
+    pollOnStart: false,
+    httpClient: { request },
+  });
+  try {
+    await client.cacheReady();
+    const user = { user_id: "disjoint-user" };
+    const first = client.fetchOrThrow(user, { flagKeys: ["a"] });
+    await flushMicrotasks();
+    const second = client.fetchOrThrow(user, { flagKeys: ["b"] });
+    await flushMicrotasks();
+    expect(pending).toHaveLength(2);
+
+    pending[1]?.(ON("b"));
+    await second;
+    pending[0]?.(ON("a"));
+    await first;
+
+    expect(client.variant("a").value).toBe("on");
+    expect(client.variant("b").value).toBe("on");
+  } finally {
+    client.stop();
+  }
+});
+
+test("drops an older response only for keys a newer stored response covered", async () => {
+  const { pending, request } = deferredHttp();
+  const client = new ExperimentClient("test-deployment-key", {
+    retryFetchOnFailure: false,
+    automaticExposureTracking: false,
+    fetchOnStart: false,
+    pollOnStart: false,
+    httpClient: { request },
+  });
+  try {
+    await client.cacheReady();
+    const user = { user_id: "covered-user" };
+    const older = client.fetch(user, { flagKeys: ["a"] });
+    await flushMicrotasks();
+    const newer = client.fetch(user, { flagKeys: ["a", "b"] });
+    await flushMicrotasks();
+    expect(pending).toHaveLength(2);
+
+    pending[1]?.({
+      status: 200,
+      body: JSON.stringify({
+        a: { key: "new", value: "new" },
+        b: { key: "on", value: "on" },
+      }),
+    });
+    await newer;
+    pending[0]?.({
+      status: 200,
+      body: JSON.stringify({ a: { key: "old", value: "old" } }),
+    });
+    await older;
+
+    expect(client.variant("a").value).toBe("new");
+    expect(client.variant("b").value).toBe("on");
+  } finally {
+    client.stop();
+  }
+});
+
+test("reports a superseded fetch as not fetched", async () => {
+  const { pending, request } = deferredHttp();
+  const client = new ExperimentClient("test-deployment-key", {
+    retryFetchOnFailure: false,
+    automaticExposureTracking: false,
+    fetchOnStart: false,
+    pollOnStart: false,
+    httpClient: { request },
+  });
+  try {
+    await client.cacheReady();
+    const metadata = client.fetchWithMetadata({ user_id: "A" });
+    const thrown = client.fetchOrThrow({ user_id: "A" });
+    const thrownResult = thrown.then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+    await flushMicrotasks();
+    client.setUser({ user_id: "B" });
+    pending[0]?.(ON("f"));
+    pending[1]?.(ON("f"));
+
+    await expect(metadata).resolves.toMatchObject({
+      fetched: false,
+      failureReason: "superseded",
+    });
+    await expect(thrownResult).resolves.toMatchObject({
+      name: "AmplitudeError",
+      code: "experiment_fetch_superseded",
+    });
+    expect(client.variant("f").value).toBeUndefined();
+    expect(client.getLastFetchTime()).toBeUndefined();
+  } finally {
+    client.stop();
   }
 });

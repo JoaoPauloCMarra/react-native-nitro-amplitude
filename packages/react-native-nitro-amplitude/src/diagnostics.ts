@@ -9,10 +9,7 @@ import { getNetworkEnabled } from "./network";
 import type { AmplitudeNetworkTiming } from "./network";
 import type { AmplitudeDiagnosticFailure } from "./diagnostic-failures";
 import { getDiagnosticFailures } from "./diagnostic-failures";
-import {
-  getDiagnosticEventsByType,
-  recordDiagnosticEvent,
-} from "./diagnostics-pipeline";
+import { getDiagnosticEventsByType } from "./diagnostics-pipeline";
 
 type HybridModule = typeof import("./native/hybrid");
 
@@ -214,10 +211,5 @@ export async function healthCheck(
     workerReady,
     errors,
   };
-  recordDiagnosticEvent({
-    type: "health",
-    recordedAt: Date.now(),
-    health: result,
-  });
   return result;
 }

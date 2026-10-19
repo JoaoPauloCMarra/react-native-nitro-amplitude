@@ -47,8 +47,15 @@ local_ref<JavaStringArray> toJavaStringArray(const std::vector<std::string>& val
 
 } // namespace
 
+static HttpResult PerformJavaHttpRequest(
+    const std::string& url,
+    const std::string& method,
+    const std::unordered_map<std::string, std::string>& headers,
+    const std::string& body,
+    int timeoutMillis);
+
 AndroidAmplitudeAdapterCpp::AndroidAmplitudeAdapterCpp()
-    : migrator_(LegacyDiskSource{
+    : storage_([this]() { return EnsureDiskStore(); }, LegacyDiskSource{
           []() {
             static auto entriesMethod = AndroidAmplitudeAdapterJava::javaClassStatic()
                 ->getStaticMethod<JavaStringArray()>("getLegacyDiskEntries", "()[Ljava/lang/String;");
@@ -97,7 +104,6 @@ std::shared_ptr<JsonlSegmentStore> AndroidAmplitudeAdapterCpp::EnsureDiskStore()
     }
     store = diskStore_;
   }
-  migrator_.ensureMigrated(*store);
   return store;
 }
 
@@ -106,52 +112,47 @@ void AndroidAmplitudeAdapterCpp::prefetchContext() {
   method(AndroidAmplitudeAdapterJava::javaClassStatic());
 }
 
-std::string AndroidAmplitudeAdapterCpp::getApplicationContextJson(const std::string& optionsJson) {
-  static auto method = AndroidAmplitudeAdapterJava::javaClassStatic()->getStaticMethod<jstring(std::string)>(
-      "getApplicationContextJson", "(Ljava/lang/String;)Ljava/lang/String;");
-  auto result = method(AndroidAmplitudeAdapterJava::javaClassStatic(), optionsJson);
+std::string AndroidAmplitudeAdapterCpp::getApplicationContextJson(const std::string&) {
+  static auto method = AndroidAmplitudeAdapterJava::javaClassStatic()->getStaticMethod<jstring()>(
+      "getApplicationContextJson", "()Ljava/lang/String;");
+  auto result = method(AndroidAmplitudeAdapterJava::javaClassStatic());
   return result ? result->toStdString() : std::string("{}");
 }
 
 void AndroidAmplitudeAdapterCpp::setDisk(const std::string& key, const std::string& value) {
-  const auto store = EnsureDiskStore();
-  if (store == nullptr) {
-    throw std::runtime_error("NitroAmplitude: disk_adapter_unavailable");
-  }
-  store->setDisk(key, value);
-  migrator_.rearmAfterWrite();
+  storage_.setDisk(key, value);
 }
 
 std::optional<std::string> AndroidAmplitudeAdapterCpp::getDisk(const std::string& key) {
-  const auto store = EnsureDiskStore();
-  if (store == nullptr) {
-    return std::nullopt;
-  }
-  return store->getDisk(key);
+  return storage_.getDisk(key);
 }
 
 void AndroidAmplitudeAdapterCpp::deleteDisk(const std::string& key) {
-  const auto store = EnsureDiskStore();
-  if (store != nullptr) {
-    store->deleteDisk(key);
-    migrator_.forget(key);
-  }
+  storage_.deleteDisk(key);
 }
 
 bool AndroidAmplitudeAdapterCpp::hasDisk(const std::string& key) {
-  const auto store = EnsureDiskStore();
-  return store != nullptr && store->hasDisk(key);
+  return storage_.hasDisk(key);
 }
 
 std::vector<std::string> AndroidAmplitudeAdapterCpp::getAllDiskKeys() {
-  const auto store = EnsureDiskStore();
-  if (store == nullptr) {
-    return {};
-  }
-  return store->getAllDiskKeys();
+  return storage_.getAllDiskKeys();
 }
 
 HttpResult AndroidAmplitudeAdapterCpp::performHttpRequest(
+    const std::string& url,
+    const std::string& method,
+    const std::unordered_map<std::string, std::string>& headers,
+    const std::string& body,
+    int timeoutMillis) {
+  HttpResult result;
+  ThreadScope::WithClassLoader([&]() {
+    result = PerformJavaHttpRequest(url, method, headers, body, timeoutMillis);
+  });
+  return result;
+}
+
+static HttpResult PerformJavaHttpRequest(
     const std::string& url,
     const std::string& method,
     const std::unordered_map<std::string, std::string>& headers,

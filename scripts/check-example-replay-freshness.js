@@ -2,6 +2,7 @@ const { spawnSync } = require("node:child_process");
 const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
+const { isOutside } = require("./path-containment");
 
 const manifestRelativePath = "e2e/amplitude-replay-coverage.json";
 const lockRelativePath = "e2e/amplitude-replay-source-lock.json";
@@ -90,7 +91,10 @@ const runtimeFileRules = [
 ];
 
 function sourceDeclaresTestId(root, source, testId) {
-  if (source.includes(`testID="${testId}"`)) {
+  if (
+    source.includes(`testID="${testId}"`) ||
+    source.includes(`testID: "${testId}"`)
+  ) {
     return true;
   }
   const match = /^e2e-([a-z]+)-(.+)$/.exec(testId);
@@ -114,26 +118,13 @@ function sourceDeclaresTestId(root, source, testId) {
 
 function inside(root, relativePath) {
   const absolute = path.resolve(root, relativePath);
-  const relative = path.relative(path.resolve(root), absolute);
-  if (
-    relative === ".." ||
-    relative.startsWith(`..${path.sep}`) ||
-    path.isAbsolute(relative)
-  ) {
+  if (isOutside(root, absolute)) {
     throw new Error(
       `Replay coverage path escapes the repository: ${relativePath}`,
     );
   }
   if (fs.existsSync(absolute)) {
-    const resolved = path.relative(
-      fs.realpathSync(root),
-      fs.realpathSync(absolute),
-    );
-    if (
-      resolved === ".." ||
-      resolved.startsWith(`..${path.sep}`) ||
-      path.isAbsolute(resolved)
-    ) {
+    if (isOutside(fs.realpathSync(root), fs.realpathSync(absolute))) {
       throw new Error(
         `Replay coverage path escapes the repository through a symlink: ${relativePath}`,
       );
@@ -520,6 +511,7 @@ module.exports = {
   checkReplayFreshness,
   collectRuntimeFiles,
   inside,
+  readCoverageManifest,
   refreshReplayLock,
   sourceDeclaresTestId,
 };

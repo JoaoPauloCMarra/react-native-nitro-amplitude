@@ -39,9 +39,9 @@ public:
 private:
   std::mutex contextCacheMutex_;
   std::map<std::string, std::string> contextCache_;
-  std::shared_ptr<JsonlSegmentStore> diskStore_;
-  LegacyDiskMigrator migrator_;
+  MigratingStorage storage_;
 
+  static std::shared_ptr<JsonlSegmentStore> MakeDiskStore();
   static LegacyDiskSource MakeLegacyDiskSource();
 };
 

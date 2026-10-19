@@ -224,60 +224,46 @@ export class NitroAnalyticsStorage<T> implements AnalyticsStorage<T> {
   }
 }
 
-export class NitroExperimentStorage implements ExperimentStorage {
-  constructor(private readonly namespace: string) {}
+class NitroStringStorage implements ExperimentStorage {
+  constructor(
+    private readonly namespace: string,
+    private readonly persist: boolean,
+  ) {}
 
   async get(key: string): Promise<string | null> {
     const storage = getAmplitudeStorage();
-    const value = storage.get(namespaceKey(this.namespace, key), true);
+    const value = storage.get(namespaceKey(this.namespace, key), this.persist);
     return value ?? null;
   }
 
   async put(key: string, value: string): Promise<void> {
     const storage = getAmplitudeStorage();
-    storage.set(namespaceKey(this.namespace, key), value, true);
+    storage.set(namespaceKey(this.namespace, key), value, this.persist);
   }
 
   async delete(key: string): Promise<void> {
     const storage = getAmplitudeStorage();
-    storage.remove(namespaceKey(this.namespace, key), true);
+    storage.remove(namespaceKey(this.namespace, key), this.persist);
   }
 
   async reset(): Promise<void> {
     const storage = getAmplitudeStorage();
     const prefix = `${this.namespace}::`;
-    const keys = storage.getKeysByPrefix(prefix, true);
+    const keys = storage.getKeysByPrefix(prefix, this.persist);
     if (keys.length > 0) {
-      storage.removeBatch(keys, true);
+      storage.removeBatch(keys, this.persist);
     }
   }
 }
 
-export class NitroMemoryStorage implements ExperimentStorage {
-  constructor(private readonly namespace: string) {}
-
-  async get(key: string): Promise<string | null> {
-    const storage = getAmplitudeStorage();
-    const value = storage.get(namespaceKey(this.namespace, key), false);
-    return value ?? null;
+export class NitroExperimentStorage extends NitroStringStorage {
+  constructor(namespace: string) {
+    super(namespace, true);
   }
+}
 
-  async put(key: string, value: string): Promise<void> {
-    const storage = getAmplitudeStorage();
-    storage.set(namespaceKey(this.namespace, key), value, false);
-  }
-
-  async delete(key: string): Promise<void> {
-    const storage = getAmplitudeStorage();
-    storage.remove(namespaceKey(this.namespace, key), false);
-  }
-
-  async reset(): Promise<void> {
-    const storage = getAmplitudeStorage();
-    const prefix = `${this.namespace}::`;
-    const keys = storage.getKeysByPrefix(prefix, false);
-    if (keys.length > 0) {
-      storage.removeBatch(keys, false);
-    }
+export class NitroMemoryStorage extends NitroStringStorage {
+  constructor(namespace: string) {
+    super(namespace, false);
   }
 }

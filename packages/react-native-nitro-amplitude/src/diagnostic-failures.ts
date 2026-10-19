@@ -35,6 +35,15 @@ export type AmplitudeDiagnosticSurface =
   | "experiment_flag_fetch"
   | "session_storage";
 
+const DEFAULT_SURFACES: Record<
+  AmplitudeDiagnosticOperation,
+  AmplitudeDiagnosticSurface
+> = {
+  analytics_upload: "analytics_upload",
+  experiment_fetch: "experiment_variant_fetch",
+  session_storage_read: "session_storage",
+};
+
 export type AmplitudeDiagnosticFailure = {
   operation: AmplitudeDiagnosticOperation;
   surface: AmplitudeDiagnosticSurface;
@@ -61,11 +70,7 @@ type RecordDiagnosticFailureInput = Omit<
 export function recordDiagnosticFailure(
   input: RecordDiagnosticFailureInput,
 ): void {
-  const surface =
-    input.surface ??
-    (input.operation === "analytics_upload"
-      ? "analytics_upload"
-      : "experiment_variant_fetch");
+  const surface = input.surface ?? DEFAULT_SURFACES[input.operation];
   const maxRetriesExceeded = input.maxRetriesExceeded ?? false;
   const failures = getDiagnosticFailures();
   let existing: AmplitudeDiagnosticFailure | undefined;
@@ -104,6 +109,17 @@ export function recordDiagnosticFailure(
   });
 }
 
+export function reportSessionReadFailure(
+  logger: { error: (message: string) => void } | undefined,
+  message: string,
+): void {
+  logger?.error(message);
+  recordDiagnosticFailure({
+    operation: "session_storage_read",
+    kind: "storage_error",
+  });
+}
+
 export function getDiagnosticFailures(): AmplitudeDiagnosticFailure[] {
   return getDiagnosticEventsByType("failure").map((event) => ({
     ...event.failure,
@@ -111,7 +127,7 @@ export function getDiagnosticFailures(): AmplitudeDiagnosticFailure[] {
 }
 
 export function clearDiagnosticFailures(): void {
-  clearDiagnosticEvents();
+  clearDiagnosticEvents("failure");
 }
 
 function getPayloadBatchSize(payload: Payload): number | undefined {

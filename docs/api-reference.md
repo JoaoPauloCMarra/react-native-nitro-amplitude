@@ -46,7 +46,8 @@ Native HTTP POSTs/PUTs of at least 1 KiB to `*.amplitude.com` send
   results and the last native startup failure.
 - `healthCheck()` — probes the durable disk store and the worker; returns
   `diskStorageWritable`, `workerReady`, and `errors`.
-- `clearDiagnosticFailures()` — resets recorded diagnostic failures.
+- `clearDiagnosticFailures()` — resets recorded diagnostic failures; network
+  timings stay.
 
 ## Network controls
 

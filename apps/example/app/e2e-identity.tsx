@@ -11,7 +11,7 @@ import { ANALYTICS_API_KEY, EXPERIMENT_API_KEY } from "../components/fixture";
 import { LabBlockedPage } from "../components/lab-runner";
 import { Button, Card, Page, StatusRow } from "../components/shared";
 
-type CaseStatus = "pass" | "fail" | "skip";
+type CaseStatus = "pass" | "fail";
 type LabCase = {
   name: string;
   status: CaseStatus;
@@ -21,7 +21,6 @@ type LabCase = {
 type IdentityReport = {
   fail: number;
   pass: number;
-  skip: number;
   cases: LabCase[];
 };
 
@@ -107,7 +106,6 @@ async function runIdentitySweep(): Promise<IdentityReport> {
   const report: IdentityReport = {
     fail: cases.filter((item) => item.status === "fail").length,
     pass: cases.filter((item) => item.status === "pass").length,
-    skip: cases.filter((item) => item.status === "skip").length,
     cases,
   };
   return report;
@@ -138,7 +136,7 @@ export default function AmplitudeIdentityLabScreen() {
   }
 
   const summary = report
-    ? `fail=${report.fail} pass=${report.pass} skip=${report.skip}`
+    ? `fail=${report.fail} pass=${report.pass}`
     : "running";
 
   return (

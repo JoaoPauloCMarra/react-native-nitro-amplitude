@@ -5,6 +5,7 @@ const { spawnSync } = require("node:child_process");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
+const { isOutside } = require("./path-containment");
 
 class LifecycleError extends Error {}
 
@@ -31,12 +32,7 @@ function createPackageDocLifecycle({
   const repoPath = path.resolve(repoRoot);
   const packagePath = path.resolve(packageRoot);
   const packageRelative = path.relative(repoPath, packagePath);
-  if (
-    packageRelative === "" ||
-    packageRelative === ".." ||
-    packageRelative.startsWith(`..${path.sep}`) ||
-    path.isAbsolute(packageRelative)
-  ) {
+  if (packageRelative === "" || isOutside(repoPath, packagePath)) {
     throw new LifecycleError(
       `Package root must be a child of the repository root: ${packagePath}`,
     );
@@ -49,8 +45,6 @@ function createPackageDocLifecycle({
   const normalizedEntries = entries.map((entry) => ({
     source: normalizeRelative(entry.source, "source"),
     target: normalizeRelative(entry.target, "target"),
-    persistent: entry.persistent !== false,
-    copy: entry.copy !== false,
   }));
   const allowedTargets = new Set(
     normalizedEntries.map((entry) => entry.target),
@@ -191,12 +185,7 @@ function createPackageDocLifecycle({
   }
 
   function assertInside(root, candidate, label) {
-    const relativePath = path.relative(root, candidate);
-    if (
-      relativePath === ".." ||
-      relativePath.startsWith(`..${path.sep}`) ||
-      path.isAbsolute(relativePath)
-    ) {
+    if (isOutside(root, candidate)) {
       throw new LifecycleError(
         `${label} escapes its allowed root: ${candidate}`,
       );
@@ -1113,15 +1102,6 @@ function createPackageDocLifecycle({
     }
   }
 
-  function hasCopiedAncestor(entry) {
-    return normalizedEntries.some(
-      (candidate) =>
-        candidate.copy &&
-        candidate.target !== entry.target &&
-        entry.target.startsWith(`${candidate.target}/`),
-    );
-  }
-
   function materializeTemporary(target, state, suffix) {
     const temporaryPath = reserveTemporary(
       path.dirname(target),
@@ -1281,7 +1261,6 @@ function createPackageDocLifecycle({
         return {
           target: entry.target,
           source: entry.source,
-          copy: entry.copy,
           original: snapshot(target),
           sourceHash: hash(snapshot(sourcePath(entry.source), repoPath)),
         };
@@ -1301,19 +1280,7 @@ function createPackageDocLifecycle({
       atomicWriteJson(manifestPath, manifest);
 
       for (const entry of manifest.entries) {
-        if (!entry.copy) continue;
         entry.preparedHash = copyCanonical(entry, entry.original);
-        atomicWriteJson(manifestPath, manifest);
-      }
-      for (const entry of manifest.entries) {
-        if (entry.preparedHash !== null) continue;
-        const current = snapshot(targetPath(entry.target));
-        if (!hasCopiedAncestor(entry) && hash(current) !== entry.originalHash) {
-          throw new LifecycleError(
-            `Package document changed during prepare: ${entry.target}; preserved the current file and lifecycle state.`,
-          );
-        }
-        entry.preparedHash = hash(current);
         atomicWriteJson(manifestPath, manifest);
       }
       manifest.phase = "prepared";
@@ -1353,9 +1320,7 @@ function createPackageDocLifecycle({
     const lock = acquireLock("sync", true);
     try {
       validateSources();
-      for (const entry of normalizedEntries.filter(
-        (candidate) => candidate.persistent && candidate.copy,
-      )) {
+      for (const entry of normalizedEntries) {
         const target = targetPath(entry.target);
         const sourceState = snapshot(sourcePath(entry.source), repoPath);
         const temporaryPath = materializeTemporary(
@@ -1375,9 +1340,7 @@ function createPackageDocLifecycle({
     try {
       validateSources();
       const failures = [];
-      for (const entry of normalizedEntries.filter(
-        (candidate) => candidate.persistent && candidate.copy,
-      )) {
+      for (const entry of normalizedEntries) {
         const sourceState = snapshot(sourcePath(entry.source), repoPath);
         const targetState = snapshot(targetPath(entry.target));
         if (hash(sourceState) !== hash(targetState))

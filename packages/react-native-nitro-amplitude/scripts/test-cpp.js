@@ -1,7 +1,7 @@
 const { execFileSync } = require("child_process");
-const path = require("path");
 const fs = require("fs");
 const os = require("os");
+const path = require("path");
 const {
   sanitizerCompileFlags,
   sanitizerRuntimeEnv,
@@ -105,9 +105,21 @@ const generatedDir = path.join(
   "c++",
 );
 
-const testFile = path.join(cppDir, "bindings", "HybridAmplitudeStorageTest.cpp");
-const contextSource = path.join(cppDir, "bindings", "HybridAmplitudeContext.cpp");
-const storageSource = path.join(cppDir, "bindings", "HybridAmplitudeStorage.cpp");
+const testFile = path.join(
+  cppDir,
+  "bindings",
+  "HybridAmplitudeStorageTest.cpp",
+);
+const contextSource = path.join(
+  cppDir,
+  "bindings",
+  "HybridAmplitudeContext.cpp",
+);
+const storageSource = path.join(
+  cppDir,
+  "bindings",
+  "HybridAmplitudeStorage.cpp",
+);
 const workerSource = path.join(cppDir, "bindings", "HybridAmplitudeWorker.cpp");
 const segmentStoreSource = path.join(cppDir, "core", "JsonlSegmentStore.cpp");
 const gzipSource = path.join(cppDir, "core", "Gzip.cpp");
@@ -222,7 +234,9 @@ function runCoverage() {
   fs.writeFileSync(exportFile, exportSummary);
 
   const readMinArg = (name, fallback) => {
-    const arg = process.argv.find((value) => value.startsWith(`--min-${name}=`));
+    const arg = process.argv.find((value) =>
+      value.startsWith(`--min-${name}=`),
+    );
     return arg ? Number(arg.split("=")[1]) : fallback;
   };
 
@@ -300,12 +314,17 @@ try {
       LLVM_PROFILE_FILE: path.join(buildDir, "ios-adapter.profraw"),
     });
   } else {
-    runCommand(outputFile, [], { env: sanitizerRuntimeEnv(sanitizers, process.env) });
+    runCommand(outputFile, [], {
+      env: sanitizerRuntimeEnv(sanitizers, process.env),
+    });
     runIosAdapterTest(sanitizerRuntimeEnv(sanitizers, process.env));
   }
 
   console.log("✅ C++ tests passed!");
-} catch {
+} catch (error) {
   console.error("❌ C++ tests failed.");
+  if (error && typeof error.status !== "number") {
+    console.error(error.message);
+  }
   process.exit(1);
 }

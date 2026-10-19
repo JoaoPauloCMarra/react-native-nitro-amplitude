@@ -17,7 +17,7 @@ import {
   SingleValueStoreCache,
 } from "./storage/cache";
 import { MemoryStorage } from "./storage/local-storage";
-import { FetchHttpClient, WrapperClient } from "./transport/http";
+import { WrapperClient } from "./transport/http";
 import { createDiagnosticHttpClient } from "../diagnostic-failures";
 import { DefaultUserProvider } from "./integration/default";
 import { ExperimentConfig, Defaults } from "./types/config";
@@ -58,52 +58,42 @@ export function resolveExperimentConfig(
   apiKey: string,
   config: ExperimentConfig,
 ): ResolvedExperimentConfig {
-  const serverZone = config?.serverZone ?? Defaults.serverZone ?? "US";
+  const serverZone = config?.serverZone ?? Defaults.serverZone;
   return {
     ...Defaults,
     ...config,
-    debug: config?.debug ?? Defaults.debug ?? false,
-    logLevel: config?.logLevel ?? Defaults.logLevel ?? LogLevel.Error,
-    loggerProvider: config?.loggerProvider ?? Defaults.loggerProvider ?? null,
-    instanceName:
-      config?.instanceName ?? Defaults.instanceName ?? "$default_instance",
-    fallbackVariant: config?.fallbackVariant ?? Defaults.fallbackVariant ?? {},
-    initialVariants: config?.initialVariants ?? Defaults.initialVariants ?? {},
-    source: config?.source ?? Defaults.source ?? Source.LocalStorage,
+    debug: config?.debug ?? Defaults.debug,
+    logLevel: config?.logLevel ?? Defaults.logLevel,
+    loggerProvider: config?.loggerProvider ?? Defaults.loggerProvider,
+    instanceName: config?.instanceName ?? Defaults.instanceName,
+    fallbackVariant: config?.fallbackVariant ?? Defaults.fallbackVariant,
+    initialVariants: config?.initialVariants ?? Defaults.initialVariants,
+    source: config?.source ?? Defaults.source,
     serverZone,
     serverUrl:
       config?.serverUrl ??
-      (serverZone === "EU"
-        ? euServerUrl
-        : (Defaults.serverUrl ?? "https://api.lab.amplitude.com")),
+      (serverZone === "EU" ? euServerUrl : Defaults.serverUrl),
     flagsServerUrl:
       config?.flagsServerUrl ??
-      (serverZone === "EU"
-        ? euFlagsServerUrl
-        : (Defaults.flagsServerUrl ?? "https://flag.lab.amplitude.com")),
+      (serverZone === "EU" ? euFlagsServerUrl : Defaults.flagsServerUrl),
     fetchTimeoutMillis:
-      config?.fetchTimeoutMillis ?? Defaults.fetchTimeoutMillis ?? 10000,
+      config?.fetchTimeoutMillis ?? Defaults.fetchTimeoutMillis,
     retryFetchOnFailure:
-      config?.retryFetchOnFailure ?? Defaults.retryFetchOnFailure ?? true,
+      config?.retryFetchOnFailure ?? Defaults.retryFetchOnFailure,
     automaticExposureTracking:
-      config?.automaticExposureTracking ??
-      Defaults.automaticExposureTracking ??
-      true,
-    pollOnStart: config?.pollOnStart ?? Defaults.pollOnStart ?? true,
-    fetchOnStart: config?.fetchOnStart ?? Defaults.fetchOnStart ?? true,
+      config?.automaticExposureTracking ?? Defaults.automaticExposureTracking,
+    pollOnStart: config?.pollOnStart ?? Defaults.pollOnStart,
+    fetchOnStart: config?.fetchOnStart ?? Defaults.fetchOnStart,
     automaticFetchOnAmplitudeIdentityChange:
       config?.automaticFetchOnAmplitudeIdentityChange ??
-      Defaults.automaticFetchOnAmplitudeIdentityChange ??
-      false,
-    userProvider: config?.userProvider ?? Defaults.userProvider ?? null,
+      Defaults.automaticFetchOnAmplitudeIdentityChange,
+    userProvider: config?.userProvider ?? Defaults.userProvider,
     exposureTrackingProvider:
-      config?.exposureTrackingProvider ??
-      Defaults.exposureTrackingProvider ??
-      null,
+      config?.exposureTrackingProvider ?? Defaults.exposureTrackingProvider,
     httpClient: createDiagnosticHttpClient(
-      config?.httpClient ?? Defaults.httpClient ?? FetchHttpClient,
+      config?.httpClient ?? Defaults.httpClient,
     ),
-    storage: config?.storage ?? Defaults.storage ?? null,
+    storage: config?.storage ?? Defaults.storage,
   };
 }
 
@@ -156,5 +146,5 @@ function getLogLevel(config: ResolvedExperimentConfig): LogLevel {
   if (config.debug === true) {
     return LogLevel.Debug;
   }
-  return config.logLevel ?? LogLevel.Warn;
+  return config.logLevel;
 }

@@ -1,6 +1,6 @@
 #include "HybridAmplitudeStorage.hpp"
 
-#include "../core/PlatformAdapterFactory.hpp"
+#include "PlatformAdapterFactory.hpp"
 
 #include <stdexcept>
 

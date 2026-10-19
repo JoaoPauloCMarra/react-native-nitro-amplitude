@@ -84,7 +84,7 @@ static constexpr NSUInteger kMaxTransportDetailLength = 200;
 #ifdef NITRO_AMPLITUDE_TESTING
 static NSString* (^gIdentifierForVendorOverride)(void) = nil;
 static NSArray<Class>* gUrlProtocolClassesOverride = nil;
-static bool gDiskStoreDisabled = false;
+static bool gDiskStoreUnavailable = false;
 
 void setIdentifierForVendorProviderForTesting(NSString* (^provider)(void)) {
   gIdentifierForVendorOverride = [provider copy];
@@ -94,8 +94,8 @@ void setUrlProtocolClassesForTesting(NSArray<Class>* classes) {
   gUrlProtocolClassesOverride = [classes copy];
 }
 
-void setDiskStoreDisabledForTesting(bool disabled) {
-  gDiskStoreDisabled = disabled;
+void setDiskStoreUnavailableForTesting(bool disabled) {
+  gDiskStoreUnavailable = disabled;
 }
 #endif
 
@@ -208,14 +208,6 @@ static NSURLSession* SharedSession() {
   return session;
 }
 
-static NSString* RequireNSString(const std::string& value) {
-  NSString* converted = ToNSString(value);
-  if (converted == nil) {
-    throw std::runtime_error("NitroAmplitude: storage_error");
-  }
-  return converted;
-}
-
 static NSString* CanonicalOptions(NSDictionary* options) {
   NSArray* sortedKeys = [options.allKeys sortedArrayUsingSelector:@selector(compare:)];
   NSMutableArray* parts = [NSMutableArray arrayWithCapacity:sortedKeys.count];
@@ -257,11 +249,14 @@ static NSDictionary* BaseContext() {
   return base;
 }
 
-IOSAmplitudeAdapterCpp::IOSAmplitudeAdapterCpp() : migrator_(MakeLegacyDiskSource()) {
+IOSAmplitudeAdapterCpp::IOSAmplitudeAdapterCpp()
+    : storage_([store = MakeDiskStore()]() { return store; }, MakeLegacyDiskSource()) {}
+
+std::shared_ptr<JsonlSegmentStore> IOSAmplitudeAdapterCpp::MakeDiskStore() {
   NSString* applicationSupport =
       [NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory, NSUserDomainMask, YES) firstObject];
 #ifdef NITRO_AMPLITUDE_TESTING
-  if (gDiskStoreDisabled) {
+  if (gDiskStoreUnavailable) {
     applicationSupport = nil;
   }
 #endif
@@ -273,10 +268,11 @@ IOSAmplitudeAdapterCpp::IOSAmplitudeAdapterCpp() : migrator_(MakeLegacyDiskSourc
                                                     error:nil];
     const auto directoryPath = ToStdString(directory);
     if (directoryPath.has_value()) {
-      diskStore_ = std::make_shared<JsonlSegmentStore>(
+      return std::make_shared<JsonlSegmentStore>(
           std::make_shared<PosixFileAdapter>(), directoryPath.value());
     }
   }
+  return nullptr;
 }
 
 LegacyDiskSource IOSAmplitudeAdapterCpp::MakeLegacyDiskSource() {
@@ -364,72 +360,23 @@ std::string IOSAmplitudeAdapterCpp::getApplicationContextJson(const std::string&
 }
 
 void IOSAmplitudeAdapterCpp::setDisk(const std::string& key, const std::string& value) {
-  if (diskStore_ != nullptr) {
-    migrator_.ensureMigrated(*diskStore_);
-    diskStore_->setDisk(key, value);
-    migrator_.rearmAfterWrite();
-    return;
-  }
-  NSString* nsKey = RequireNSString(key);
-  NSString* nsValue = RequireNSString(value);
-  [NitroDiskDefaults() setObject:nsValue forKey:nsKey];
+  storage_.setDisk(key, value);
 }
 
 std::optional<std::string> IOSAmplitudeAdapterCpp::getDisk(const std::string& key) {
-  if (diskStore_ != nullptr) {
-    migrator_.ensureMigrated(*diskStore_);
-    return diskStore_->getDisk(key);
-  }
-  NSString* nsKey = ToNSString(key);
-  if (nsKey == nil) {
-    return std::nullopt;
-  }
-  return ToStdString([NitroDiskDefaults() stringForKey:nsKey]);
+  return storage_.getDisk(key);
 }
 
 void IOSAmplitudeAdapterCpp::deleteDisk(const std::string& key) {
-  if (diskStore_ != nullptr) {
-    migrator_.ensureMigrated(*diskStore_);
-    diskStore_->deleteDisk(key);
-    migrator_.forget(key);
-    return;
-  }
-  NSString* nsKey = ToNSString(key);
-  if (nsKey != nil) {
-    [NitroDiskDefaults() removeObjectForKey:nsKey];
-  }
+  storage_.deleteDisk(key);
 }
 
 bool IOSAmplitudeAdapterCpp::hasDisk(const std::string& key) {
-  if (diskStore_ != nullptr) {
-    migrator_.ensureMigrated(*diskStore_);
-    return diskStore_->hasDisk(key);
-  }
-  NSString* nsKey = ToNSString(key);
-  return nsKey != nil && [NitroDiskDefaults() objectForKey:nsKey] != nil;
+  return storage_.hasDisk(key);
 }
 
 std::vector<std::string> IOSAmplitudeAdapterCpp::getAllDiskKeys() {
-  if (diskStore_ != nullptr) {
-    migrator_.ensureMigrated(*diskStore_);
-    return diskStore_->getAllDiskKeys();
-  }
-  NSUserDefaults* defaults = NitroDiskDefaults();
-  NSDictionary<NSString*, id>* entries;
-  if (NitroDiskDefaultsAreSuite()) {
-    entries = [defaults persistentDomainForName:kDiskSuiteName] ?: @{};
-  } else {
-    entries = [defaults dictionaryRepresentation];
-  }
-  std::vector<std::string> keys;
-  keys.reserve(entries.count);
-  for (NSString* key in entries) {
-    const auto converted = ToStdString(key);
-    if (converted.has_value()) {
-      keys.push_back(converted.value());
-    }
-  }
-  return keys;
+  return storage_.getAllDiskKeys();
 }
 
 HttpResult IOSAmplitudeAdapterCpp::performHttpRequest(

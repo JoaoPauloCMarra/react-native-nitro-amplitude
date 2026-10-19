@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { AppState, StyleSheet, View } from "react-native";
+import { AppState, View } from "react-native";
 import type { AppStateStatus } from "react-native";
 import { useLocalSearchParams } from "expo-router";
 import { createInstance } from "react-native-nitro-amplitude";
@@ -10,7 +10,7 @@ import {
 } from "react-native-nitro-amplitude/network";
 import { ANALYTICS_API_KEY, delay } from "../components/fixture";
 import { LabBlockedPage } from "../components/lab-runner";
-import { Page, StatusRow } from "../components/shared";
+import { Page, ResultsProbe, StatusRow } from "../components/shared";
 
 const PROBE_EVENT = "e2e_background_probe";
 const FLUSH_INTERVAL_MILLIS = 600000;
@@ -151,12 +151,7 @@ export default function AmplitudeBackgroundLabScreen() {
           label="mode"
           value="dry-run fixture"
         />
-        <View
-          testID="e2e-background-results"
-          accessible
-          accessibilityLabel={summary}
-          style={localStyles.resultsProbe}
-        />
+        <ResultsProbe testID="e2e-background-results" label={summary} />
         <StatusRow
           testID="e2e-background-summary"
           label="summary"
@@ -166,9 +161,3 @@ export default function AmplitudeBackgroundLabScreen() {
     </View>
   );
 }
-
-const localStyles = StyleSheet.create({
-  resultsProbe: {
-    height: 1,
-  },
-});

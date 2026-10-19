@@ -11,7 +11,6 @@ import {
   debugWrapper,
   getClientLogConfig,
   getClientStates,
-  ReactNativeConfig,
   ReactNativeOptions,
   ReactNativeAttributionOptions as AttributionOptions,
   IIdentify,
@@ -33,10 +32,15 @@ import { getNetworkEnabled, isNetworkGuardedTransport } from "../network";
 import {
   classifyDiagnosticFailure,
   recordDiagnosticFailure,
+  reportSessionReadFailure,
 } from "../diagnostic-failures";
 import { CampaignTracker } from "./campaign/campaign-tracker";
 import { Context } from "./plugins/context";
-import { useReactNativeConfig, createCookieStorage } from "./config";
+import {
+  useReactNativeConfig,
+  createCookieStorage,
+  type ReactNativeConfig,
+} from "./config";
 import { parseOldCookies } from "./cookie-migration";
 import { isNative } from "../platform";
 
@@ -237,10 +241,14 @@ export class AmplitudeReactNative
       // identity store.
       const connectorInstanceName = this.getConnectorInstanceName();
       const connector = getAnalyticsConnector(connectorInstanceName);
-      connector.identityStore.setIdentity({
-        userId: this.config.userId,
-        deviceId: this.config.deviceId,
-      });
+      const syncConnectorIdentity = () => {
+        connector.identityStore.setIdentity({
+          userId: this.config.userId,
+          deviceId: this.config.deviceId,
+        });
+      };
+      syncConnectorIdentity();
+      this.config.onSessionRestored = syncConnectorIdentity;
 
       // Step 3: Install plugins
       // Do not track any events before this
@@ -394,14 +402,10 @@ export class AmplitudeReactNative
 
       await campaignTracker.send(isNewSession);
     } catch (error) {
-      this.config.loggerProvider?.error(
+      reportSessionReadFailure(
+        this.config.loggerProvider,
         `Failed to read attribution storage; skipping attribution for this init: ${String(error)}`,
       );
-      recordDiagnosticFailure({
-        operation: "session_storage_read",
-        surface: "session_storage",
-        kind: "storage_error",
-      });
     }
   }
 
@@ -439,6 +443,13 @@ export class AmplitudeReactNative
       this.setDeviceId(eventOptions.device_id);
     }
     return super.identify(identify, eventOptions);
+  }
+
+  override setOptOut(optOut: boolean) {
+    if (this.config && this.isReady) {
+      this.config.optOut = Boolean(optOut);
+    }
+    super.setOptOut(optOut);
   }
 
   reset() {

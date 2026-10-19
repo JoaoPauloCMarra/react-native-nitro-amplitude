@@ -118,33 +118,6 @@ function testStaleRecovery() {
   }
 }
 
-function testOverlappingTargets() {
-  const state = fixture([
-    { source: "README.md", target: "README.md" },
-    { source: "CHANGELOG.md", target: "CHANGELOG.md" },
-    { source: "LICENSE", target: "LICENSE" },
-    { source: "SECURITY.md", target: "SECURITY.md" },
-    { source: "docs", target: "docs", persistent: false },
-    {
-      source: "docs/guide.md",
-      target: "docs/guide.md",
-      persistent: false,
-      copy: false,
-    },
-  ]);
-  try {
-    state.lifecycle.prepare();
-    assert.equal(
-      fs.readFileSync(path.join(state.packageRoot, "docs", "guide.md"), "utf8"),
-      "canonical-guide",
-    );
-    state.lifecycle.cleanup();
-    assert.equal(fs.existsSync(path.join(state.packageRoot, "docs")), false);
-  } finally {
-    removeFixture(state);
-  }
-}
-
 function testSymlinkAndTraversalSafety() {
   const state = fixture();
   const outside = path.join(state.root, "outside.txt");
@@ -502,7 +475,6 @@ testExistingRestore();
 testMissingRestore();
 testChangedRefused();
 testStaleRecovery();
-testOverlappingTargets();
 testSymlinkAndTraversalSafety();
 testAnchoredRootsAndStatePaths();
 testStateHardlinkAndConcurrentOwnership();

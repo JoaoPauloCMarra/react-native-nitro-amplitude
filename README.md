@@ -4,8 +4,8 @@
 [![npm downloads](https://img.shields.io/npm/dm/react-native-nitro-amplitude?color=22c55e&label=downloads)](https://www.npmjs.com/package/react-native-nitro-amplitude)
 [![CI](https://github.com/JoaoPauloCMarra/react-native-nitro-amplitude/actions/workflows/ci.yml/badge.svg)](https://github.com/JoaoPauloCMarra/react-native-nitro-amplitude/actions/workflows/ci.yml)
 [![license](https://img.shields.io/npm/l/react-native-nitro-amplitude?color=007ec6)](https://github.com/JoaoPauloCMarra/react-native-nitro-amplitude/blob/main/LICENSE)
-[![React Native](https://img.shields.io/badge/react--native-0.86.3-61dafb)](https://reactnative.dev/docs/0.86/getting-started-without-a-framework)
-[![Expo](https://img.shields.io/badge/expo-SDK%2057%20%28RN%200.86.3%29-000020)](https://docs.expo.dev/versions/v57.0.0/)
+[![React Native](https://img.shields.io/badge/react--native-0.88.0-61dafb)](https://reactnative.dev/docs/0.88/getting-started-without-a-framework)
+[![Expo](https://img.shields.io/badge/expo-SDK%2058%20%28RN%200.88.0%29-000020)](https://docs.expo.dev/versions/v58.0.0/)
 [![Nitro Modules](https://img.shields.io/badge/nitro--modules-%3E%3D0.37.0%20%3C0.38.0-black)](https://nitro.margelo.com/)
 [![TypeScript](https://img.shields.io/badge/typescript-6.0-3178c6)](https://www.typescriptlang.org/)
 
@@ -24,36 +24,36 @@ bun add react-native-nitro-amplitude react-native-nitro-modules
 
 ## Requirements and compatibility
 
-Compatibility for `0.12.0`:
+Compatibility for `0.13.0`:
 
 | Dependency                   | Supported range    | Tested baseline     |
 | ---------------------------- | ------------------ | ------------------- |
-| `react`                      | `>=18.2.0`         | `19.2.3`            |
-| `react-native`               | `>=0.77`           | `0.86.3`            |
+| `react`                      | `>=18.2.0`         | `19.3.0`            |
+| `react-native`               | `>=0.77`           | `0.88.0`            |
 | `react-native-nitro-modules` | `>=0.37.0 <0.38.0` | `0.37.1`            |
-| Expo development builds      | SDK `>=53`         | SDK 57 (`~57.0.27`) |
+| Expo development builds      | SDK `>=53`         | SDK 58 (`~58.0.16`) |
 
 The package supports React Native `>=0.77` and Expo SDK `>=53`, the Nitro
-Modules `0.37` minimum. It is tested on React Native `0.86.3` and Expo SDK 57.
+Modules `0.37` minimum. It is tested on React Native `0.88.0` and Expo SDK 58.
 
 The iOS deployment target follows React Native's `min_ios_version_supported`.
 
-The package gate and example use React Native `0.86.3` with the Strict
+The package gate and example use React Native `0.88.0` with the Strict
 TypeScript API. `check:ci` also compiles the public source against React Native
 `0.87.0`'s Strict TypeScript API; this is a source type check, not the runtime
-baseline. Expo SDK 57 manages React Native `0.86.3`; do not override it in an
+baseline. Expo SDK 58 manages React Native `0.88.0`; do not override it in an
 Expo app.
 
 ### Upgrade from 0.7.x and earlier
 
-The `0.8.x`, `0.9.x`, `0.10.x`, `0.11.x`, and `0.12.x` lines keep the native peer boundary introduced in `0.7.0`:
+The `0.8.x`, `0.9.x`, `0.10.x`, `0.11.x`, `0.12.x`, and `0.13.x` lines keep the native peer boundary introduced in `0.7.0`:
 `react-native-nitro-amplitude` requires `react-native-nitro-modules`
 `>=0.37.0 <0.38.0`. Upgrade the Nitro package together with this package, then
 regenerate and rebuild native projects so the committed Nitro 0.37.1 bindings
 are compiled into the app:
 
 ```sh
-bun add react-native-nitro-amplitude@0.12.0 react-native-nitro-modules@0.37.1
+bun add react-native-nitro-amplitude@0.13.0 react-native-nitro-modules@0.37.1
 bunx expo prebuild
 ```
 
@@ -252,6 +252,30 @@ flag-key fetches for the same user can still retry. Call `setUser({})` and
 `clear()` on logout before fetching assignments for another account. Clearing
 invalidates outstanding fetches, stops retries, and orders the empty storage
 write after earlier writes; it does not cancel HTTP transport already in progress.
+
+### Typed variant helpers
+
+```ts
+import {
+  variantBoolean,
+  variantJson,
+  variantNumber,
+  variantPayload,
+  variantString,
+} from "react-native-nitro-amplitude";
+
+const enabled = variantBoolean(experiment, "enable-onboarding", false);
+const copy = variantString(experiment, "checkout-copy", "Pay now");
+const limit = variantNumber(experiment, "cart-limit", 10);
+const config = variantPayload(experiment, "checkout-config", { retries: 1 });
+```
+
+`variantBoolean` reads the variant `value`: `"on"` and `"true"` return `true`,
+`"off"` and `"false"` return `false`, and any other value returns your
+fallback. `variantNumber` returns your fallback when the value is not a finite
+number. `variantPayload` and `variantJson` return your fallback when the flag
+is missing, even if `fallbackVariant` is set in the Experiment config, and when
+the variant has no payload or its value is not valid JSON.
 
 ## Persistent Storage
 
@@ -579,7 +603,7 @@ Native HybridObject types:
 | iOS      | Native Nitro context, storage, and HTTP worker; pods and rebuild required. |
 | Android  | Native Nitro context, storage, and package-owned context initializer.      |
 | Web      | Browser fetch and storage fallbacks; no native plugin required.            |
-| Expo     | SDK 53+ development builds with the config plugin (tested on SDK 57).      |
+| Expo     | SDK 53+ development builds with the config plugin (tested on SDK 58).      |
 | Expo Go  | Unsupported because Expo Go cannot load custom Nitro modules.              |
 
 Architecture notes:

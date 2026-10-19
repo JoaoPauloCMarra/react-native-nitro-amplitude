@@ -10,16 +10,20 @@ export function variantString(
   return value ?? fallback;
 }
 
+/**
+ * Returns `true` for the variant values `"on"` and `"true"`, `false` for
+ * `"off"` and `"false"`, and the caller `fallback` for any other value.
+ */
 export function variantBoolean(
   client: Pick<Client, "variant">,
   key: string,
   fallback: boolean,
 ): boolean {
   const value = client.variant(key, String(fallback)).value;
-  if (value === "true") {
+  if (value === "on" || value === "true") {
     return true;
   }
-  if (value === "false") {
+  if (value === "off" || value === "false") {
     return false;
   }
   return fallback;
@@ -39,21 +43,28 @@ export function variantNumber(
 }
 
 export function variantPayload<T>(
-  client: Pick<Client, "variant">,
+  client: Pick<Client, "variantWithMetadata">,
   key: string,
   fallback: T,
 ): T {
-  const payload = client.variant(key).payload;
+  const result = client.variantWithMetadata(key);
+  if (result.fallback) {
+    return fallback;
+  }
+  const payload = result.variant.payload;
   return payload === undefined ? fallback : (payload as T);
 }
 
 export function variantJson<T>(
-  client: Pick<Client, "variant">,
+  client: Pick<Client, "variantWithMetadata">,
   key: string,
   fallback: T,
 ): T {
-  const variant = client.variant(key);
-  return parseVariantJson(variant, fallback);
+  const result = client.variantWithMetadata(key);
+  if (result.fallback) {
+    return fallback;
+  }
+  return parseVariantJson(result.variant, fallback);
 }
 
 export function parseVariantJson<T>(variant: Variant, fallback: T): T {

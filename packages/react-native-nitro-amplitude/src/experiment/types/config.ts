@@ -114,8 +114,8 @@ export interface ExperimentConfig {
   retryFetchOnFailure?: boolean;
 
   /**
-   * If true, automatically tracks exposure events though the
-   * `ExperimentAnalyticsProvider`. If no analytics provider is set, this
+   * If true, automatically tracks exposure events through the
+   * `exposureTrackingProvider`. If no exposure tracking provider is set, this
    * option does nothing.
    */
   automaticExposureTracking?: boolean;
@@ -206,7 +206,32 @@ export interface ExperimentConfig {
  *
  * @category Configuration
  */
-export const Defaults: ExperimentConfig = {
+export const Defaults: ExperimentConfig &
+  Required<
+    Pick<
+      ExperimentConfig,
+      | "debug"
+      | "logLevel"
+      | "loggerProvider"
+      | "instanceName"
+      | "fallbackVariant"
+      | "initialVariants"
+      | "source"
+      | "serverUrl"
+      | "flagsServerUrl"
+      | "serverZone"
+      | "fetchTimeoutMillis"
+      | "retryFetchOnFailure"
+      | "automaticExposureTracking"
+      | "pollOnStart"
+      | "fetchOnStart"
+      | "automaticFetchOnAmplitudeIdentityChange"
+      | "userProvider"
+      | "exposureTrackingProvider"
+      | "httpClient"
+      | "storage"
+    >
+  > = {
   debug: false,
   logLevel: LogLevel.Error,
   loggerProvider: null,

@@ -42,7 +42,7 @@ public:
 private:
   std::mutex diskStoreMutex_;
   std::shared_ptr<JsonlSegmentStore> diskStore_;
-  LegacyDiskMigrator migrator_;
+  MigratingStorage storage_;
 
   std::shared_ptr<JsonlSegmentStore> EnsureDiskStore();
 };

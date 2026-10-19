@@ -1,4 +1,3 @@
-import type { AmplitudeHealthCheckResult } from "./analytics/react-native-client";
 import type { AmplitudeDiagnosticFailure } from "./diagnostic-failures";
 import type { AmplitudeNetworkTiming } from "./network";
 
@@ -12,11 +11,6 @@ export type DiagnosticEvent =
       type: "network_timing";
       recordedAt: number;
       timing: AmplitudeNetworkTiming;
-    }
-  | {
-      type: "health";
-      recordedAt: number;
-      health: AmplitudeHealthCheckResult;
     };
 
 const MAX_EVENTS = 200;
@@ -30,10 +24,6 @@ export function recordDiagnosticEvent(event: DiagnosticEvent): void {
   }
 }
 
-export function getDiagnosticEvents(): DiagnosticEvent[] {
-  return events.map((event) => ({ ...event }));
-}
-
 export function getDiagnosticEventsByType<T extends DiagnosticEvent["type"]>(
   type: T,
 ): Extract<DiagnosticEvent, { type: T }>[] {
@@ -43,6 +33,14 @@ export function getDiagnosticEventsByType<T extends DiagnosticEvent["type"]>(
   );
 }
 
-export function clearDiagnosticEvents(): void {
-  events.length = 0;
+export function clearDiagnosticEvents(type?: DiagnosticEvent["type"]): void {
+  if (type === undefined) {
+    events.length = 0;
+    return;
+  }
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    if (events[index]?.type === type) {
+      events.splice(index, 1);
+    }
+  }
 }

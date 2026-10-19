@@ -14,6 +14,7 @@ import {
   GetVariantsOptions,
 } from "@amplitude/experiment-core";
 
+import { createAmplitudeError } from "../errors";
 import { version as PACKAGE_VERSION } from "./gen/version";
 import { ConnectorUserProvider } from "./integration/connector";
 import { DefaultUserProvider } from "./integration/default";
@@ -80,6 +81,8 @@ function serializeUser(user: ExperimentUser): string {
  *
  * @category Core Usage
  */
+type FetchOutcome = { variants: Variants; stored: boolean };
+
 export class ExperimentClient implements Client {
   private readonly apiKey: string;
   private readonly config: ResolvedExperimentConfig;
@@ -104,10 +107,12 @@ export class ExperimentClient implements Client {
   private readonly initialFlags: EvaluationFlag[] | undefined;
   private fetchSequenceNumber = 0;
   private storedFetchSequenceNumber = 0;
+  private storedFullFetchSequenceNumber = 0;
+  private readonly storedKeySequenceNumbers = new Map<string, number>();
   private fetchGeneration = 0;
   private readonly fetchVariantsOptions: SingleValueStoreCache<GetVariantsOptions>;
   private readonly stopCallbacks = new Set<() => void>();
-  private readonly inFlightFetches = new Map<string, Promise<Variants>>();
+  private readonly inFlightFetches = new Map<string, Promise<FetchOutcome>>();
   private lastFetchTime: number | undefined;
   private lastFetchFailure: string | undefined;
   private lastFetchMetadataSequenceNumber = 0;
@@ -186,7 +191,9 @@ export class ExperimentClient implements Client {
     const lifecycleGeneration = ++this.lifecycleGeneration;
     try {
       this.defaultUserProvider.start();
-      this.setUser(user ?? {});
+      if (user !== undefined) {
+        this.setUser(user);
+      }
       const flagsReadyPromise = this.doFlags();
       const fetchOnStart = this.config.fetchOnStart ?? true;
       if (fetchOnStart) {
@@ -277,7 +284,20 @@ export class ExperimentClient implements Client {
     const fetchUser = user ?? this.user;
     this.setUser(fetchUser);
     try {
-      const variants = await this.fetchWithRetries(fetchUser, options);
+      const { variants, stored } = await this.fetchWithRetries(
+        fetchUser,
+        options,
+      );
+      if (!stored) {
+        return {
+          fetched: false,
+          flagKeys: options?.flagKeys ?? Object.keys(this.variants.getAll()),
+          cacheHit: Object.keys(this.variants.getAll()).length > 0,
+          durationMillis: Date.now() - startedAt,
+          source: "cache",
+          failureReason: "superseded",
+        };
+      }
       const flagKeys = Object.keys(variants);
       return {
         fetched: true,
@@ -305,7 +325,13 @@ export class ExperimentClient implements Client {
   ): Promise<ExperimentClient> {
     const fetchUser = user ?? this.user;
     this.setUser(fetchUser);
-    await this.fetchWithRetries(fetchUser, options);
+    const { stored } = await this.fetchWithRetries(fetchUser, options);
+    if (!stored) {
+      throw createAmplitudeError(
+        "experiment_fetch_superseded",
+        "Experiment fetch was superseded by a newer user, fetch or clear and its response was not stored",
+      );
+    }
     return this;
   }
 
@@ -328,14 +354,7 @@ export class ExperimentClient implements Client {
     if (!this.apiKey) {
       return { value: undefined };
     }
-    const sourceVariant = this.variantAndSource(key, fallback);
-    if (this.config.automaticExposureTracking) {
-      this.exposureInternal(key, sourceVariant);
-    }
-    this.logger.debug(
-      `[Experiment] variant for ${key} is ${sourceVariant.variant?.value}`,
-    );
-    return sourceVariant.variant || {};
+    return this.resolveVariant(key, fallback).variant || {};
   }
 
   public variantWithMetadata(
@@ -351,13 +370,7 @@ export class ExperimentClient implements Client {
         reason: "missing_flag",
       };
     }
-    const sourceVariant = this.variantAndSource(key, fallback);
-    if (this.config.automaticExposureTracking) {
-      this.exposureInternal(key, sourceVariant);
-    }
-    this.logger.debug(
-      `[Experiment] variant for ${key} is ${sourceVariant.variant?.value}`,
-    );
+    const sourceVariant = this.resolveVariant(key, fallback);
     const variant = sourceVariant.variant || {};
     const fallbackVariant = isFallback(sourceVariant.source);
     const missingVariant = variant.value === undefined;
@@ -571,6 +584,20 @@ export class ExperimentClient implements Client {
     return variants;
   }
 
+  private resolveVariant(
+    key: string,
+    fallback?: string | Variant,
+  ): SourceVariant {
+    const sourceVariant = this.variantAndSource(key, fallback);
+    if (this.config.automaticExposureTracking) {
+      this.exposureInternal(key, sourceVariant);
+    }
+    this.logger.debug(
+      `[Experiment] variant for ${key} is ${sourceVariant.variant?.value}`,
+    );
+    return sourceVariant;
+  }
+
   private variantAndSource(
     key: string,
     fallback?: string | Variant,
@@ -605,7 +632,6 @@ export class ExperimentClient implements Client {
     fallback?: string | Variant,
   ): SourceVariant {
     let defaultSourceVariant: SourceVariant = {};
-    // Local evaluation
     const variant = this.evaluate([flag.key])[key];
     const source = VariantSource.LocalEvaluation;
     const isLocalEvaluationDefault = variant?.metadata?.default as boolean;
@@ -622,34 +648,7 @@ export class ExperimentClient implements Client {
         hasDefaultVariant: true,
       };
     }
-    // Inline fallback
-    if (!isNullOrUndefined(fallback)) {
-      return {
-        variant: convertVariant(fallback),
-        source: VariantSource.FallbackInline,
-        hasDefaultVariant: defaultSourceVariant.hasDefaultVariant,
-      };
-    }
-    // Initial variants
-    const initialVariant = this.config.initialVariants[key];
-    if (!isNullOrUndefined(initialVariant)) {
-      return {
-        variant: convertVariant(initialVariant),
-        source: VariantSource.SecondaryInitialVariants,
-        hasDefaultVariant: defaultSourceVariant.hasDefaultVariant,
-      };
-    }
-    // Configured fallback, or default variant
-    const fallbackVariant = convertVariant(this.config.fallbackVariant);
-    const fallbackSourceVariant = {
-      variant: fallbackVariant,
-      source: VariantSource.FallbackConfig,
-      hasDefaultVariant: defaultSourceVariant.hasDefaultVariant,
-    };
-    if (!isNullUndefinedOrEmpty(fallbackVariant)) {
-      return fallbackSourceVariant;
-    }
-    return defaultSourceVariant;
+    return this.fallbackChain(key, fallback, defaultSourceVariant, true);
   }
 
   /**
@@ -657,7 +656,7 @@ export class ExperimentClient implements Client {
    *
    *  1. Local Storage
    *  2. Inline function fallback
-   *  3. InitialFlags
+   *  3. Initial variants
    *  4. Config fallback
    *
    * If there is a default variant and no fallback, return the default variant.
@@ -666,52 +665,11 @@ export class ExperimentClient implements Client {
     key: string,
     fallback?: string | Variant,
   ): SourceVariant {
-    let defaultSourceVariant: SourceVariant = {};
-    // Local storage
-    const localStorageVariant = this.variants.get(key);
-    const isLocalStorageDefault = localStorageVariant?.metadata
-      ?.default as boolean;
-    if (!isNullOrUndefined(localStorageVariant) && !isLocalStorageDefault) {
-      return {
-        variant: convertVariant(localStorageVariant),
-        source: VariantSource.LocalStorage,
-        hasDefaultVariant: false,
-      };
-    } else if (isLocalStorageDefault) {
-      defaultSourceVariant = {
-        variant: convertVariant(localStorageVariant),
-        source: VariantSource.LocalStorage,
-        hasDefaultVariant: true,
-      };
+    const stored = this.storedVariant(key);
+    if (stored.variant && !stored.hasDefaultVariant) {
+      return stored;
     }
-    // Inline fallback
-    if (!isNullOrUndefined(fallback)) {
-      return {
-        variant: convertVariant(fallback),
-        source: VariantSource.FallbackInline,
-        hasDefaultVariant: defaultSourceVariant.hasDefaultVariant,
-      };
-    }
-    // Initial variants
-    const initialVariant = this.config.initialVariants[key];
-    if (!isNullOrUndefined(initialVariant)) {
-      return {
-        variant: convertVariant(initialVariant),
-        source: VariantSource.SecondaryInitialVariants,
-        hasDefaultVariant: defaultSourceVariant.hasDefaultVariant,
-      };
-    }
-    // Configured fallback, or default variant
-    const fallbackVariant = convertVariant(this.config.fallbackVariant);
-    const fallbackSourceVariant = {
-      variant: fallbackVariant,
-      source: VariantSource.FallbackConfig,
-      hasDefaultVariant: defaultSourceVariant.hasDefaultVariant,
-    };
-    if (!isNullUndefinedOrEmpty(fallbackVariant)) {
-      return fallbackSourceVariant;
-    }
-    return defaultSourceVariant;
+    return this.fallbackChain(key, fallback, stored, true);
   }
 
   /**
@@ -728,8 +686,6 @@ export class ExperimentClient implements Client {
     key: string,
     fallback?: string | Variant,
   ): SourceVariant {
-    let defaultSourceVariant: SourceVariant = {};
-    // Initial variants
     const initialVariantsVariant = this.config.initialVariants[key];
     if (!isNullOrUndefined(initialVariantsVariant)) {
       return {
@@ -738,24 +694,31 @@ export class ExperimentClient implements Client {
         hasDefaultVariant: false,
       };
     }
-    // Local storage
-    const localStorageVariant = this.variants.get(key);
-    const isLocalStorageDefault = localStorageVariant?.metadata
-      ?.default as boolean;
-    if (!isNullOrUndefined(localStorageVariant) && !isLocalStorageDefault) {
-      return {
-        variant: convertVariant(localStorageVariant),
-        source: VariantSource.LocalStorage,
-        hasDefaultVariant: false,
-      };
-    } else if (isLocalStorageDefault) {
-      defaultSourceVariant = {
-        variant: convertVariant(localStorageVariant),
-        source: VariantSource.LocalStorage,
-        hasDefaultVariant: true,
-      };
+    const stored = this.storedVariant(key);
+    if (stored.variant && !stored.hasDefaultVariant) {
+      return stored;
     }
-    // Inline fallback
+    return this.fallbackChain(key, fallback, stored, false);
+  }
+
+  private storedVariant(key: string): SourceVariant {
+    const localStorageVariant = this.variants.get(key);
+    if (!localStorageVariant) {
+      return {};
+    }
+    return {
+      variant: convertVariant(localStorageVariant),
+      source: VariantSource.LocalStorage,
+      hasDefaultVariant: Boolean(localStorageVariant.metadata?.default),
+    };
+  }
+
+  private fallbackChain(
+    key: string,
+    fallback: string | Variant | undefined,
+    defaultSourceVariant: SourceVariant,
+    includeInitialVariants: boolean,
+  ): SourceVariant {
     if (!isNullOrUndefined(fallback)) {
       return {
         variant: convertVariant(fallback),
@@ -763,15 +726,23 @@ export class ExperimentClient implements Client {
         hasDefaultVariant: defaultSourceVariant.hasDefaultVariant,
       };
     }
-    // Configured fallback, or default variant
+    if (includeInitialVariants) {
+      const initialVariant = this.config.initialVariants[key];
+      if (!isNullOrUndefined(initialVariant)) {
+        return {
+          variant: convertVariant(initialVariant),
+          source: VariantSource.SecondaryInitialVariants,
+          hasDefaultVariant: defaultSourceVariant.hasDefaultVariant,
+        };
+      }
+    }
     const fallbackVariant = convertVariant(this.config.fallbackVariant);
-    const fallbackSourceVariant = {
-      variant: fallbackVariant,
-      source: VariantSource.FallbackConfig,
-      hasDefaultVariant: defaultSourceVariant.hasDefaultVariant,
-    };
     if (!isNullUndefinedOrEmpty(fallbackVariant)) {
-      return fallbackSourceVariant;
+      return {
+        variant: fallbackVariant,
+        source: VariantSource.FallbackConfig,
+        hasDefaultVariant: defaultSourceVariant.hasDefaultVariant,
+      };
     }
     return defaultSourceVariant;
   }
@@ -779,6 +750,8 @@ export class ExperimentClient implements Client {
   private invalidateFetches(): void {
     this.fetchGeneration += 1;
     this.storedFetchSequenceNumber = ++this.fetchSequenceNumber;
+    this.storedFullFetchSequenceNumber = this.storedFetchSequenceNumber;
+    this.storedKeySequenceNumbers.clear();
     this.inFlightFetches.clear();
     this.stopRetries();
   }
@@ -788,7 +761,7 @@ export class ExperimentClient implements Client {
     timeoutMillis: number,
     retry: boolean,
     options?: FetchOptions,
-  ): Promise<Variants> {
+  ): Promise<FetchOutcome> {
     // Don't even try to fetch variants if API key is not set
     if (!this.apiKey) {
       throw Error("Experiment API key is empty");
@@ -821,7 +794,7 @@ export class ExperimentClient implements Client {
         this.lastFetchTime = Date.now();
         this.lastFetchFailure = undefined;
       }
-      return variants;
+      return { variants, stored };
     } catch (e: unknown) {
       if (
         sequenceNumber >= this.storedFetchSequenceNumber &&
@@ -844,7 +817,7 @@ export class ExperimentClient implements Client {
   private async fetchWithRetries(
     user: ExperimentUser,
     options?: FetchOptions,
-  ): Promise<Variants> {
+  ): Promise<FetchOutcome> {
     const key = JSON.stringify({
       user,
       flagKeys: options?.flagKeys ?? null,
@@ -918,31 +891,81 @@ export class ExperimentClient implements Client {
     sequenceNumber: number,
     options?: FetchOptions,
   ): Promise<boolean> {
-    if (sequenceNumber <= this.storedFetchSequenceNumber) {
-      this.logger.debug(
-        `[Experiment] Ignoring stale fetch response (sequence ${sequenceNumber} <= ${this.storedFetchSequenceNumber})`,
-      );
-      return false;
-    }
-
-    let failedFlagKeys = options?.flagKeys ? options.flagKeys : [];
-    if (failedFlagKeys.length === 0) {
+    const requestedKeys = options?.flagKeys ?? [];
+    if (requestedKeys.length === 0) {
+      if (sequenceNumber <= this.storedFullFetchSequenceNumber) {
+        this.logStaleResponse(
+          sequenceNumber,
+          this.storedFullFetchSequenceNumber,
+        );
+        return false;
+      }
+      const retained: Variants = {};
+      for (const [key, storedSequence] of this.storedKeySequenceNumbers) {
+        const variant = this.variants.get(key);
+        if (storedSequence > sequenceNumber && variant !== undefined) {
+          retained[key] = variant;
+        } else if (storedSequence <= sequenceNumber) {
+          this.storedKeySequenceNumbers.delete(key);
+        }
+      }
       this.variants.clear();
+      for (const key in variants) {
+        const variant = variants[key];
+        if (variant === undefined) continue;
+        this.variants.put(key, variant);
+      }
+      for (const key in retained) {
+        const variant = retained[key];
+        if (variant === undefined) continue;
+        this.variants.put(key, variant);
+      }
+      this.storedFullFetchSequenceNumber = sequenceNumber;
+    } else {
+      const candidateKeys = new Set([
+        ...requestedKeys,
+        ...Object.keys(variants),
+      ]);
+      let storedAny = false;
+      for (const key of candidateKeys) {
+        const coveredBy = Math.max(
+          this.storedFullFetchSequenceNumber,
+          this.storedKeySequenceNumbers.get(key) ?? 0,
+        );
+        if (sequenceNumber <= coveredBy) {
+          this.logStaleResponse(sequenceNumber, coveredBy, key);
+          continue;
+        }
+        const variant = variants[key];
+        if (variant === undefined) {
+          this.variants.remove(key);
+        } else {
+          this.variants.put(key, variant);
+        }
+        this.storedKeySequenceNumbers.set(key, sequenceNumber);
+        storedAny = true;
+      }
+      if (!storedAny) {
+        return false;
+      }
     }
-    for (const key in variants) {
-      const variant = variants[key];
-      if (variant === undefined) continue;
-      failedFlagKeys = failedFlagKeys.filter((flagKey) => flagKey !== key);
-      this.variants.put(key, variant);
-    }
-
-    for (const key of failedFlagKeys) {
-      this.variants.remove(key);
-    }
-    this.storedFetchSequenceNumber = sequenceNumber;
+    this.storedFetchSequenceNumber = Math.max(
+      this.storedFetchSequenceNumber,
+      sequenceNumber,
+    );
     await this.variants.store();
     this.logger.debug("[Experiment] Stored variants: ", variants);
     return true;
+  }
+
+  private logStaleResponse(
+    sequenceNumber: number,
+    coveredBy: number,
+    key?: string,
+  ): void {
+    this.logger.debug(
+      `[Experiment] Ignoring stale fetch response${key === undefined ? "" : ` for ${key}`} (sequence ${sequenceNumber} <= ${coveredBy})`,
+    );
   }
 
   private startRetries(user: ExperimentUser, options?: FetchOptions): void {

@@ -92,3 +92,24 @@ describe("publish --skip-quality", () => {
     expect(result.stdout).toContain("--skip-quality is only allowed");
   });
 });
+
+describe("publish dist-tag validation", () => {
+  const rejected = ["1beta", "v1.2", "v1", "2024", "a".repeat(70)];
+
+  for (const tag of rejected) {
+    test(`rejects dist-tags the workflow rejects: ${tag.slice(0, 12)}`, () => {
+      const result = spawnSync(
+        process.execPath,
+        [
+          path.join(root, "scripts", "publish.js"),
+          "--dry-run",
+          "--yes",
+          `--tag=${tag}`,
+        ],
+        { encoding: "utf8", timeout: 15000 },
+      );
+      expect(result.status).toBe(1);
+      expect(`${result.stdout}${result.stderr}`).toContain("DIST_TAG");
+    });
+  }
+});

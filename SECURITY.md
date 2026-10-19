@@ -4,10 +4,10 @@
 
 | Version | Supported |
 | ------- | --------- |
-| 0.12.x  | Yes       |
-| < 0.12  | No        |
+| 0.13.x  | Yes       |
+| < 0.13  | No        |
 
-The latest `0.12.x` release is the only supported line. Older lines are
+The latest `0.13.x` release is the only supported line. Older lines are
 unsupported and receive no security fixes; upgrade to the current release to
 receive security updates.
 

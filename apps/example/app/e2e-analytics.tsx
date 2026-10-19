@@ -19,6 +19,7 @@ import {
 import {
   ANALYTICS_API_KEY,
   EXPERIMENT_API_KEY,
+  createFixtureHttpClient,
   delay,
   fixtureHttpClient,
 } from "../components/fixture";
@@ -185,29 +186,16 @@ async function runShutdownCase(): Promise<string> {
   return `fail:shutdown=initialized=${analytics.getDiagnostics().initialized}`;
 }
 
-const helperVariantsHttpClient = {
-  async request(requestUrl: string) {
-    if (
-      requestUrl.includes("/sdk/v2/flags") &&
-      !requestUrl.includes("vardata")
-    ) {
-      return { status: 200, body: "[]" };
-    }
-    return {
-      status: 200,
-      body: JSON.stringify({
-        "demo-flag": { key: "on", value: "on" },
-        "e2e-number": { key: "42", value: "42" },
-        "e2e-text": { key: "text", value: "not-a-number" },
-        "e2e-json": {
-          key: "json",
-          value: '{"answer":42}',
-          payload: { answer: 42 },
-        },
-      }),
-    };
+const helperVariantsHttpClient = createFixtureHttpClient({
+  "demo-flag": { key: "on", value: "on" },
+  "e2e-number": { key: "42", value: "42" },
+  "e2e-text": { key: "text", value: "not-a-number" },
+  "e2e-json": {
+    key: "json",
+    value: '{"answer":42}',
+    payload: { answer: 42 },
   },
-};
+});
 
 async function runHelpersCase(): Promise<string> {
   const failures: string[] = [];

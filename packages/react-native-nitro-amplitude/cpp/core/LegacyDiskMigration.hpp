@@ -1,10 +1,14 @@
 #pragma once
 
 #include "JsonlSegmentStore.hpp"
+#include "StorageAdapter.hpp"
 
 #include <exception>
 #include <functional>
+#include <memory>
 #include <mutex>
+#include <optional>
+#include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
@@ -88,6 +92,58 @@ private:
   std::mutex mutex_;
   bool migrated_ = false;
   bool armed_ = true;
+};
+
+class MigratingStorage : public StorageAdapter {
+public:
+  using StoreProvider = std::function<std::shared_ptr<JsonlSegmentStore>()>;
+
+  MigratingStorage(StoreProvider provider, LegacyDiskSource source)
+      : provider_(std::move(provider)), migrator_(std::move(source)) {}
+
+  void setDisk(const std::string& key, const std::string& value) override {
+    const auto store = migratedStore();
+    if (store == nullptr) {
+      throw std::runtime_error("NitroAmplitude: disk_adapter_unavailable");
+    }
+    store->setDisk(key, value);
+    migrator_.rearmAfterWrite();
+  }
+
+  std::optional<std::string> getDisk(const std::string& key) override {
+    const auto store = migratedStore();
+    return store == nullptr ? std::nullopt : store->getDisk(key);
+  }
+
+  void deleteDisk(const std::string& key) override {
+    const auto store = migratedStore();
+    if (store != nullptr) {
+      store->deleteDisk(key);
+      migrator_.forget(key);
+    }
+  }
+
+  bool hasDisk(const std::string& key) override {
+    const auto store = migratedStore();
+    return store != nullptr && store->hasDisk(key);
+  }
+
+  std::vector<std::string> getAllDiskKeys() override {
+    const auto store = migratedStore();
+    return store == nullptr ? std::vector<std::string>{} : store->getAllDiskKeys();
+  }
+
+private:
+  std::shared_ptr<JsonlSegmentStore> migratedStore() {
+    auto store = provider_();
+    if (store != nullptr) {
+      migrator_.ensureMigrated(*store);
+    }
+    return store;
+  }
+
+  StoreProvider provider_;
+  LegacyDiskMigrator migrator_;
 };
 
 } // namespace NitroAmplitude

@@ -21,6 +21,11 @@ import {
 } from "react-native-nitro-amplitude/network";
 import { E2eGate } from "../components/e2e-gate";
 import {
+  ANALYTICS_API_KEY as DRY_RUN_ANALYTICS_API_KEY,
+  EXPERIMENT_API_KEY as DRY_RUN_EXPERIMENT_API_KEY,
+  fixtureHttpClient,
+} from "../components/fixture";
+import {
   Button,
   Card,
   CodeBlock,
@@ -36,23 +41,11 @@ import type { AmplitudeNetworkTiming } from "react-native-nitro-amplitude/networ
 
 const DRY_RUN = process.env.EXPO_PUBLIC_AMPLITUDE_DRY_RUN === "1";
 const ANALYTICS_API_KEY = DRY_RUN
-  ? "nitro-amplitude-dry-run-analytics-key"
+  ? DRY_RUN_ANALYTICS_API_KEY
   : (process.env.EXPO_PUBLIC_AMPLITUDE_API_KEY ?? "");
 const EXPERIMENT_API_KEY = DRY_RUN
-  ? "nitro-amplitude-dry-run-experiment-key"
+  ? DRY_RUN_EXPERIMENT_API_KEY
   : process.env.EXPO_PUBLIC_AMPLITUDE_EXPERIMENT_KEY || ANALYTICS_API_KEY;
-
-const fixtureHttpClient = {
-  async request(requestUrl: string) {
-    if (requestUrl.includes("/sdk/v2/flags")) {
-      return { status: 200, body: "[]" };
-    }
-    return {
-      status: 200,
-      body: JSON.stringify({ "demo-flag": { key: "on", value: "on" } }),
-    };
-  },
-};
 
 type TimingSample = {
   durationMillis: number;

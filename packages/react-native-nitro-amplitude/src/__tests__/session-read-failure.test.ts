@@ -11,7 +11,11 @@ jest.mock("../native/context", () => ({
   prefetchNativeContext: () => undefined,
 }));
 
-import { MemoryStorage, getCookieName } from "@amplitude/analytics-core";
+import {
+  MemoryStorage,
+  getAnalyticsConnector,
+  getCookieName,
+} from "@amplitude/analytics-core";
 import type { UserSession } from "@amplitude/analytics-core";
 import { AmplitudeReactNative } from "../analytics/react-native-client";
 import {
@@ -66,6 +70,10 @@ async function settle(): Promise<void> {
   for (let index = 0; index < 10; index += 1) {
     await Promise.resolve();
   }
+}
+
+function nextTask(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
 async function initClient(
@@ -209,6 +217,58 @@ describe("session storage read failures", () => {
         ),
       ),
     ).toBe(false);
+    client.shutdown();
+  });
+
+  it("keeps an explicit opt-out made while the session read fails", async () => {
+    const store = new FlakyReadStorage();
+    await store.set(COOKIE, { userId: "stored-user", optOut: false });
+    store.failingReads = 100;
+    const { client } = await initClient(store);
+
+    client.setOptOut(true);
+    client.reset();
+    await nextTask();
+    store.failingReads = 0;
+    client.setSessionId(Date.now());
+    await nextTask();
+
+    expect(client.config.optOut).toBe(true);
+    expect(client.config.userId).toBeUndefined();
+    await client.track("after_opt_out").promise;
+    await client.flush().promise;
+    await settle();
+    expect(
+      getDryRunAnalyticsEvents().some((record) =>
+        record.payload.events.some(
+          (event) => event.event_type === "after_opt_out",
+        ),
+      ),
+    ).toBe(false);
+    const stored = await store.get(COOKIE);
+    expect(stored?.optOut).toBe(true);
+    client.shutdown();
+  });
+
+  it("pushes recovered identity to the experiment connector", async () => {
+    const store = new FlakyReadStorage();
+    await store.set(COOKIE, {
+      deviceId: "stored-device",
+      userId: "stored-user",
+      optOut: false,
+    });
+    store.failingReads = 100;
+    const { client } = await initClient(store, { instanceName: "recovery" });
+
+    await nextTask();
+    store.failingReads = 0;
+    client.setSessionId(Date.now());
+    await nextTask();
+
+    const identity =
+      getAnalyticsConnector("recovery").identityStore.getIdentity();
+    expect(identity.deviceId).toBe("stored-device");
+    expect(identity.userId).toBe("stored-user");
     client.shutdown();
   });
 });

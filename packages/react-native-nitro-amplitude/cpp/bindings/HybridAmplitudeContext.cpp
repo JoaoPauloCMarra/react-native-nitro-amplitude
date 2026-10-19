@@ -1,6 +1,6 @@
 #include "HybridAmplitudeContext.hpp"
 
-#include "../core/PlatformAdapterFactory.hpp"
+#include "PlatformAdapterFactory.hpp"
 
 #include <cmath>
 #include <stdexcept>

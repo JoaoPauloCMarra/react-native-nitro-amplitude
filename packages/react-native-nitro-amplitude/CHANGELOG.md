@@ -4,6 +4,61 @@ All notable changes to this project are documented in this file.
 
 The format follows Keep a Changelog and the project adheres to SemVer.
 
+## [0.13.0] - 2026-10-15
+
+### Breaking changes
+
+- `fetchWithMetadata` reports a response that was not stored as
+  `{ fetched: false, source: "cache", failureReason: "superseded" }`, and
+  `fetchOrThrow` rejects with an `AmplitudeError` whose code is
+  `experiment_fetch_superseded`. This happens when `setUser`, `clear`, `stop`
+  or a newer fetch replaces the request before its response is stored. Before,
+  both reported success although the variants were discarded. Catch the new
+  code if you treated `fetchOrThrow` as always resolving.
+- `start()` without a user keeps the user set by `setUser` or `init(user)`. It
+  previously replaced it with an empty user, so the first fetch was anonymous.
+  Pass the user to `start(user)` if you relied on the reset.
+- `variantPayload` and `variantJson` take a client with `variantWithMetadata`
+  (`Pick<Client, "variantWithMetadata">`). The package clients and
+  `createMockAmplitudeClient()` satisfy it; a custom stub that only implements
+  `variant()` must add `variantWithMetadata`.
+
+### Fixed
+
+- Opt-out and logout made while the stored session cannot be read are kept
+  when the read recovers. Before, the stored opt-in and user ID came back and
+  events were sent.
+- After a failed session read recovers, the Experiment client uses the
+  restored user and device ID. Before, it kept fetching variants for a random
+  device ID.
+- Two fetches for different `flagKeys` no longer drop the older response's
+  assignments when the newer one finishes first.
+- Local evaluation and exposure tracking use a custom `userProvider` before
+  `start()` resolves.
+- `clearDiagnosticFailures()` keeps network timings. `healthCheck()` no longer
+  records diagnostic events, so polling it cannot push failures out of the
+  buffer.
+- A diagnostic failure without a `surface` is attributed to its own operation's
+  surface (for example `session_storage` for `session_storage_read`) instead of
+  `experiment_variant_fetch`.
+
+### Changed
+
+- `variantBoolean` returns `true` for `"on"` and `"true"`, `false` for `"off"`
+  and `"false"`, and your fallback for any other value. It previously ignored
+  the `"on"`/`"off"` values that Amplitude feature flags serve.
+- `variantPayload` and `variantJson` return your fallback when the flag is
+  missing, even if `fallbackVariant` is set in the Experiment config.
+- iOS: when no Application Support directory is available, Disk storage
+  reports `disk_adapter_unavailable` as Android does, instead of writing to a
+  `NSUserDefaults` suite.
+- Update the pinned `@amplitude/analytics-core` dependency from `2.60.2` to
+  `2.60.3`, and `@amplitude/analytics-connector` from `^1.6.8` to `^1.7.0`.
+
+### Compatibility
+
+- Tested with Expo SDK 58 (React Native 0.88.0, React 19.3.0).
+
 ## [0.12.0] - 2026-10-13
 
 ### Added

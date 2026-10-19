@@ -15,7 +15,7 @@ using NitroAmplitude::IOSAmplitudeAdapterCpp;
 namespace NitroAmplitude {
 void setIdentifierForVendorProviderForTesting(NSString* (^provider)(void));
 void setUrlProtocolClassesForTesting(NSArray<Class>* classes);
-void setDiskStoreDisabledForTesting(bool disabled);
+void setDiskStoreUnavailableForTesting(bool disabled);
 }
 
 static NSString* const kSuiteName = @"com.nitroamplitude.disk";
@@ -121,15 +121,6 @@ static const NSUInteger kResponseCap = 4 * 1024 * 1024;
 
 namespace {
 
-bool throwsStorageError(const std::function<void()>& action) {
-  try {
-    action();
-  } catch (const std::runtime_error& error) {
-    return std::string(error.what()) == "NitroAmplitude: storage_error";
-  }
-  return false;
-}
-
 bool contains(const std::vector<std::string>& values, const std::string& needle) {
   return std::find(values.begin(), values.end(), needle) != values.end();
 }
@@ -223,10 +214,8 @@ void testLegacyMigration() {
   assert(afterMigration.getDisk("existing-key").value_or("") == "already-stored");
 }
 
-void testUserDefaultsFallback() {
-  NitroAmplitude::setDiskStoreDisabledForTesting(true);
-  NSUserDefaults* defaults = suiteDefaults();
-  [defaults removePersistentDomainForName:kSuiteName];
+void testNullDiskStoreThrowsDiskAdapterUnavailable() {
+  NitroAmplitude::setDiskStoreUnavailableForTesting(true);
   {
     IOSAmplitudeAdapterCpp adapter;
     assert(adapter.getAllDiskKeys().empty());
@@ -234,52 +223,17 @@ void testUserDefaultsFallback() {
     assert(!adapter.hasDisk("missing"));
     adapter.deleteDisk("missing");
 
-    adapter.setDisk("fallback-key", "fallback-value");
-    assert(adapter.getDisk("fallback-key").value_or("") == "fallback-value");
-    assert(adapter.hasDisk("fallback-key"));
-
-    const std::string nulKey("a\0b", 3);
-    const std::string nulValue("x\0y", 3);
-    adapter.setDisk(nulKey, nulValue);
-    assert(adapter.getDisk(nulKey).value_or("") == nulValue);
-    assert(adapter.hasDisk(nulKey));
-    assert(!adapter.hasDisk("a"));
-    adapter.setDisk("empty", "");
-    assert(adapter.getDisk("empty").value_or("x").empty());
-
-    const auto keys = adapter.getAllDiskKeys();
-    assert(keys.size() == 3);
-    assert(contains(keys, "fallback-key"));
-    assert(contains(keys, nulKey));
-
-    const std::string invalid = "\xff\xfe";
-    assert(throwsStorageError([&]() { adapter.setDisk(invalid, "value"); }));
-    assert(throwsStorageError([&]() { adapter.setDisk("valid", invalid); }));
-    assert(!adapter.getDisk(invalid).has_value());
-    assert(!adapter.hasDisk(invalid));
-    adapter.deleteDisk(invalid);
-    assert(!adapter.hasDisk("valid"));
-    assert(adapter.getAllDiskKeys().size() == 3);
-
-    unichar loneSurrogate[] = {'k', 0xDC00};
-    NSString* unrepresentable = [NSString stringWithCharacters:loneSurrogate length:2];
-    [defaults setObject:unrepresentable forKey:@"surrogate-value"];
-    [defaults setObject:@"value" forKey:unrepresentable];
-    [defaults setObject:@7 forKey:@"number-value"];
-    assert(!adapter.getDisk("surrogate-value").has_value());
-    assert(adapter.hasDisk("surrogate-value"));
-    assert(adapter.getDisk("number-value").value_or("") == "7");
-    const auto withUnrepresentable = adapter.getAllDiskKeys();
-    assert(withUnrepresentable.size() == 5);
-    assert(contains(withUnrepresentable, "surrogate-value"));
-
-    adapter.deleteDisk("fallback-key");
-    adapter.deleteDisk(nulKey);
-    assert(!adapter.hasDisk("fallback-key"));
-    assert(!adapter.hasDisk(nulKey));
+    bool threw = false;
+    try {
+      adapter.setDisk("key", "value");
+    } catch (const std::runtime_error& error) {
+      threw = std::string(error.what()).find("disk_adapter_unavailable") != std::string::npos;
+    }
+    assert(threw);
+    assert(!adapter.hasDisk("key"));
+    assert(adapter.getAllDiskKeys().empty());
   }
-  [defaults removePersistentDomainForName:kSuiteName];
-  NitroAmplitude::setDiskStoreDisabledForTesting(false);
+  NitroAmplitude::setDiskStoreUnavailableForTesting(false);
 }
 
 void testContextAndIdentifierForVendor() {
@@ -462,7 +416,7 @@ int main() {
     assert([NSHomeDirectory() containsString:@"nitro-amplitude-ios-adapter-"]);
     testStorageDirectoryIsCreated();
     testLegacyMigration();
-    testUserDefaultsFallback();
+    testNullDiskStoreThrowsDiskAdapterUnavailable();
     testContextAndIdentifierForVendor();
     testHttpRequests();
     std::cout << "IOSAmplitudeAdapter tests passed" << std::endl;

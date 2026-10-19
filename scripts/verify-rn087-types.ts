@@ -97,6 +97,18 @@ async function main(): Promise<void> {
     types: ["node", "react", "react-native"],
   };
 
+  const rootManifest = JSON.parse(
+    await Bun.file(join(projectRoot, "package.json")).text(),
+  ) as JsonRecord;
+  const overrides = asDependencies(rootManifest.overrides);
+  const react = overrides.react;
+  const nitroModules = overrides["react-native-nitro-modules"];
+  if (react === undefined || nitroModules === undefined) {
+    throw new Error(
+      "Root package.json overrides must pin react and react-native-nitro-modules.",
+    );
+  }
+
   try {
     const dependencies: DependencyMap = {
       ...asDependencies(packageManifest.dependencies),
@@ -104,9 +116,9 @@ async function main(): Promise<void> {
       ...asDependencies(packageManifest.devDependencies),
       "@types/node": "^24.0.0",
       "@types/react": "~19.2.18",
-      react: "19.2.3",
+      react,
       "react-native": "0.87.0",
-      "react-native-nitro-modules": "0.37.1",
+      "react-native-nitro-modules": nitroModules,
       typescript: "6.0.3",
     };
 

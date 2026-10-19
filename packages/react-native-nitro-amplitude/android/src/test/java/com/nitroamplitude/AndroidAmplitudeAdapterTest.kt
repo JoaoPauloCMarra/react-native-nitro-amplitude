@@ -469,7 +469,7 @@ class AndroidAmplitudeAdapterTest {
 
   @Test
   fun applicationContextJsonHasEveryFieldAndIsCachedOnce() {
-    val json = JSONObject(AndroidAmplitudeAdapter.getApplicationContextJson("{}"))
+    val json = JSONObject(AndroidAmplitudeAdapter.getApplicationContextJson())
     assertEquals("Android", json.getString("platform"))
     assertEquals("android", json.getString("osName"))
     for (field in arrayOf(
@@ -478,17 +478,8 @@ class AndroidAmplitudeAdapterTest {
       assertTrue(field, json.has(field))
       assertTrue(field, json.get(field) is String)
     }
-    val first = AndroidAmplitudeAdapter.getApplicationContextJson("{\"b\":1,\"a\":true}")
-    val second = AndroidAmplitudeAdapter.getApplicationContextJson("{\"a\":true,\"b\":1}")
-    assertTrue(first === second)
-    assertEquals(
-      AndroidAmplitudeAdapter.getApplicationContextJson("{}"),
-      AndroidAmplitudeAdapter.getApplicationContextJson("not json"),
-    )
-    for (index in 0 until 40) {
-      AndroidAmplitudeAdapter.getApplicationContextJson("{\"option$index\":true}")
-    }
-    assertTrue(getStaticField("cachedContext") === first)
+    val first = AndroidAmplitudeAdapter.getApplicationContextJson()
+    assertTrue(first === AndroidAmplitudeAdapter.getApplicationContextJson())
   }
 
   @Test
@@ -500,7 +491,7 @@ class AndroidAmplitudeAdapterTest {
     @Suppress("DEPRECATION")
     resources.updateConfiguration(configuration, resources.displayMetrics)
     try {
-      val json = JSONObject(AndroidAmplitudeAdapter.getApplicationContextJson("{\"empty-locales\":true}"))
+      val json = JSONObject(AndroidAmplitudeAdapter.getApplicationContextJson())
       if (resources.configuration.locales.isEmpty) {
         assertEquals(Locale.getDefault().language, json.getString("language"))
         assertEquals(Locale.getDefault().country, json.getString("country"))
@@ -526,7 +517,7 @@ class AndroidAmplitudeAdapterTest {
       assertNull(uncaught.get())
 
       for (call in listOf<() -> Unit>(
-        { AndroidAmplitudeAdapter.getApplicationContextJson("{}") },
+        { AndroidAmplitudeAdapter.getApplicationContextJson() },
         { AndroidAmplitudeAdapter.getStorageDirectory() },
         { AndroidAmplitudeAdapter.getLegacyDiskEntries() },
         { AndroidAmplitudeAdapter.removeLegacyDiskEntries(arrayOf("a")) },
@@ -546,7 +537,7 @@ class AndroidAmplitudeAdapterTest {
     AndroidAmplitudeAdapter.setContext(context())
     AndroidAmplitudeAdapter.prefetchContext()
     drainPrefetchExecutor()
-    assertEquals("Android", JSONObject(AndroidAmplitudeAdapter.getApplicationContextJson("{}")).getString("platform"))
+    assertEquals("Android", JSONObject(AndroidAmplitudeAdapter.getApplicationContextJson()).getString("platform"))
   }
 
   @Test

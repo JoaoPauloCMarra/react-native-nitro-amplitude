@@ -62,8 +62,9 @@ const reinitialize = (
  * integrates with the installed and initialized instance of the amplitude
  * analytics SDK.
  *
- * You must be using amplitude-js SDK version 8.17.0+ for this integration to
- * work.
+ * The client shares identity and exposure events with the analytics client
+ * that uses the same `instanceName`, initialized through this package's `init`
+ * or `createInstance`.
  *
  * @param apiKey The deployment API Key
  * @param config See {@link ExperimentConfig} for config options
@@ -74,10 +75,9 @@ const initializeWithAmplitudeAnalytics = (
 ): ExperimentClient => {
   // Store instances by appending the instance name and api key. Allows for
   // initializing multiple default instances for different api keys.
-  const instanceKey = getInstanceKey(apiKey, config?.instanceName);
-  const connector = AnalyticsConnector.getInstance(
-    config?.instanceName ?? Defaults.instanceName ?? "$default_instance",
-  );
+  const instanceName = config?.instanceName ?? Defaults.instanceName;
+  const instanceKey = getInstanceKey(apiKey, instanceName);
+  const connector = AnalyticsConnector.getInstance(instanceName);
   if (!instances[instanceKey]) {
     config = {
       userProvider: new ConnectorUserProvider(connector.identityStore),
@@ -102,9 +102,7 @@ const initializeWithAmplitudeAnalytics = (
 };
 
 function getInstanceKey(apiKey: string, instanceName?: string): string {
-  const resolvedInstanceName =
-    instanceName ?? Defaults.instanceName ?? "$default_instance";
-  return `${resolvedInstanceName}.${apiKey}`;
+  return `${instanceName ?? Defaults.instanceName}.${apiKey}`;
 }
 
 /**

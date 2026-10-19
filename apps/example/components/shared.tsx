@@ -89,7 +89,6 @@ type CardProps = {
   title?: string;
   subtitle?: string;
   indicatorColor?: string;
-  style?: ViewStyle;
 };
 
 export const Card = ({
@@ -97,9 +96,8 @@ export const Card = ({
   title,
   subtitle,
   indicatorColor = Colors.primary,
-  style,
 }: CardProps) => (
-  <View style={[styles.card, style]}>
+  <View style={styles.card}>
     {title ? (
       <View style={styles.cardHeader}>
         <View
@@ -125,24 +123,15 @@ type InputProps = Omit<TextInputProps, "value" | "onChangeText" | "style"> & {
   label?: string;
   value: string;
   onChangeText: (text: string) => void;
-  style?: ViewStyle;
 };
 
-export const Input = ({
-  label,
-  value,
-  onChangeText,
-  placeholder,
-  style,
-  ...props
-}: InputProps) => (
-  <View style={[styles.inputGroup, style]}>
+export const Input = ({ label, value, onChangeText, ...props }: InputProps) => (
+  <View style={styles.inputGroup}>
     {label ? <Text style={styles.label}>{label}</Text> : null}
     <TextInput
       style={styles.textInput}
       value={value}
       onChangeText={onChangeText}
-      placeholder={placeholder}
       placeholderTextColor={Colors.muted}
       selectionColor={Colors.primary}
       {...props}
@@ -153,23 +142,33 @@ export const Input = ({
 export const StatusRow = ({
   label,
   value,
-  color,
   testID,
 }: {
   label: string;
   value: string;
-  color?: string;
   testID?: string;
 }) => (
   <View style={styles.statusRow}>
     <Text style={styles.statusLabel}>{label}</Text>
-    <Text
-      testID={testID}
-      style={[styles.statusValue, color ? { color } : null]}
-    >
+    <Text testID={testID} style={styles.statusValue}>
       {value}
     </Text>
   </View>
+);
+
+export const ResultsProbe = ({
+  testID,
+  label,
+}: {
+  testID: string;
+  label: string;
+}) => (
+  <View
+    testID={testID}
+    accessible
+    accessibilityLabel={label}
+    style={styles.resultsProbe}
+  />
 );
 
 export const CodeBlock = ({
@@ -208,7 +207,6 @@ type PageProps = {
   children: React.ReactNode;
   title?: string;
   subtitle?: string;
-  scroll?: boolean;
 };
 
 function Header({ title, subtitle }: { title?: string; subtitle?: string }) {
@@ -222,46 +220,24 @@ function Header({ title, subtitle }: { title?: string; subtitle?: string }) {
   );
 }
 
-export const Page = ({
-  children,
-  title,
-  subtitle,
-  scroll = true,
-}: PageProps) => {
+export const Page = ({ children, title, subtitle }: PageProps) => {
   const insets = useSafeAreaInsets();
   const contentPaddingTop = insets.top + (isWeb ? 18 : 10);
 
-  if (scroll) {
-    return (
-      <View style={styles.container}>
-        <ScrollView
-          contentContainerStyle={[
-            styles.scrollContent,
-            { paddingTop: contentPaddingTop },
-          ]}
-          bounces={false}
-          keyboardShouldPersistTaps="handled"
-          style={styles.pageBody}
-        >
-          <Header title={title} subtitle={subtitle} />
-          {children}
-        </ScrollView>
-      </View>
-    );
-  }
-
   return (
     <View style={styles.container}>
-      <View
-        style={[
+      <ScrollView
+        contentContainerStyle={[
           styles.scrollContent,
-          styles.pageBody,
           { paddingTop: contentPaddingTop },
         ]}
+        bounces={false}
+        keyboardShouldPersistTaps="handled"
+        style={styles.pageBody}
       >
         <Header title={title} subtitle={subtitle} />
         {children}
-      </View>
+      </ScrollView>
     </View>
   );
 };
@@ -279,6 +255,9 @@ const consumerStyles = {
 
 export const styles = StyleSheet.create({
   ...consumerStyles,
+  resultsProbe: {
+    height: 1,
+  },
   container: {
     flex: 1,
     backgroundColor: Colors.background,

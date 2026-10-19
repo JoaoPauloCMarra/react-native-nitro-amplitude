@@ -3,9 +3,9 @@
  * Lightweight sanity benchmark for Amplitude Nitro package exports.
  * Mocks native runtimes so Node can validate build artifacts without RN.
  */
+const fs = require("fs");
 const Module = require("module");
 const path = require("path");
-const fs = require("fs");
 
 const packageRoot = path.join(__dirname, "..");
 const entrypointPath = path.join(packageRoot, "lib", "commonjs", "index.js");
@@ -27,9 +27,15 @@ const originalLoad = Module._load;
 Module._load = function load(request, parent, isMain) {
   if (request === "react-native") {
     return {
-      Platform: { OS: "ios", select: (options) => options.ios ?? options.default },
+      Platform: {
+        OS: "ios",
+        select: (options) => options.ios ?? options.default,
+      },
       NativeModules: {},
-      AppState: { currentState: "active", addEventListener: () => ({ remove: () => {} }) },
+      AppState: {
+        currentState: "active",
+        addEventListener: () => ({ remove: () => {} }),
+      },
     };
   }
 

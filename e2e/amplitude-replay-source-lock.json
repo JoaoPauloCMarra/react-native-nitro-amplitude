@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "runtimeSourceSha256": "04e8a112c056513268193877dbf9bb8cd6d976451730c8cf1f1e8fb1bb053d4b",
+  "runtimeSourceSha256": "297820fd8dfd516d93572c5ed55fe88f47d9d483b1050089cf487645aceffc5c",
   "runtimeSourceFiles": [
     "apps/example/app.config.js",
     "apps/example/app/_layout.tsx",
@@ -45,6 +45,7 @@
     "packages/react-native-nitro-amplitude/cpp/bindings/HybridAmplitudeStorage.hpp",
     "packages/react-native-nitro-amplitude/cpp/bindings/HybridAmplitudeWorker.cpp",
     "packages/react-native-nitro-amplitude/cpp/bindings/HybridAmplitudeWorker.hpp",
+    "packages/react-native-nitro-amplitude/cpp/bindings/PlatformAdapterFactory.hpp",
     "packages/react-native-nitro-amplitude/cpp/core/ContextAdapter.hpp",
     "packages/react-native-nitro-amplitude/cpp/core/FileAdapter.hpp",
     "packages/react-native-nitro-amplitude/cpp/core/Gzip.cpp",
@@ -53,7 +54,6 @@
     "packages/react-native-nitro-amplitude/cpp/core/JsonlSegmentStore.cpp",
     "packages/react-native-nitro-amplitude/cpp/core/JsonlSegmentStore.hpp",
     "packages/react-native-nitro-amplitude/cpp/core/LegacyDiskMigration.hpp",
-    "packages/react-native-nitro-amplitude/cpp/core/PlatformAdapterFactory.hpp",
     "packages/react-native-nitro-amplitude/cpp/core/PosixFileAdapter.hpp",
     "packages/react-native-nitro-amplitude/cpp/core/StorageAdapter.hpp",
     "packages/react-native-nitro-amplitude/ios/IOSAmplitudeAdapterCpp.hpp",

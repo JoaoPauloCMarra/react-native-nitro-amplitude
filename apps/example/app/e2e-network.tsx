@@ -17,17 +17,17 @@ import {
   clearDryRunTransportRecords,
   getDryRunAnalyticsEvents,
 } from "react-native-nitro-amplitude/network";
-import { ANALYTICS_API_KEY, EXPERIMENT_API_KEY } from "../components/fixture";
+import {
+  ANALYTICS_API_KEY,
+  EXPERIMENT_API_KEY,
+  fixtureEndpoint,
+} from "../components/fixture";
 import {
   LabBlockedPage,
   LabCasesScreen,
   countFailedCases,
   useLabCases,
 } from "../components/lab-runner";
-
-function fixtureEndpoint(baseUrl: string, endpoint: string): string {
-  return `${baseUrl.replace(/\/+$/, "")}${endpoint}`;
-}
 
 function closedPortUrl(baseUrl: string): string {
   return `${baseUrl.replace(/\/+$/, "").replace(/:\d+$/, "")}:1/health`;

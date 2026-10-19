@@ -1,8 +1,8 @@
 #pragma once
 
-#include "ContextAdapter.hpp"
-#include "HttpAdapter.hpp"
-#include "StorageAdapter.hpp"
+#include "../core/ContextAdapter.hpp"
+#include "../core/HttpAdapter.hpp"
+#include "../core/StorageAdapter.hpp"
 #include <memory>
 
 #ifndef NITRO_AMPLITUDE_DISABLE_PLATFORM_ADAPTER
@@ -10,7 +10,6 @@
 #include "../../ios/IOSAmplitudeAdapterCpp.hpp"
 #elif __ANDROID__
 #include "../../android/src/main/cpp/AndroidAmplitudeAdapterCpp.hpp"
-#include <fbjni/fbjni.h>
 #endif
 #endif
 

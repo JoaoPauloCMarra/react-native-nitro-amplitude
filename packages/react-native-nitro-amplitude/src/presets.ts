@@ -2,7 +2,7 @@ import type { ReactNativeOptions } from "@amplitude/analytics-core";
 import { getAnalyticsConnector } from "@amplitude/analytics-core";
 import { createInstance } from "./analytics/react-native-client";
 import type { AmplitudeReactNativeClient } from "./analytics/react-native-client";
-import { NetworkGuardedFetchTransport } from "./analytics/network-guarded-fetch-transport";
+import { getDefaultTransport } from "./analytics/config";
 import { isNative } from "./platform";
 import { Experiment } from "./experiment/factory";
 import type { ExperimentClient } from "./experiment/experimentClient";
@@ -15,15 +15,6 @@ function getStorageModule(): typeof import("./native/storage") {
     return require("./native/storage") as typeof import("./native/storage");
   }
   return require("./native/storage.web") as typeof import("./native/storage");
-}
-
-function getAnalyticsTransport() {
-  if (isNative()) {
-    const { nitroTransport } =
-      require("./analytics/nitro-transport") as typeof import("./analytics/nitro-transport");
-    return nitroTransport;
-  }
-  return new NetworkGuardedFetchTransport();
 }
 
 export type DurableAmplitudeStoragePreset = {
@@ -89,7 +80,7 @@ export function createDurableAmplitudeStoragePreset(
       cookieStorage: analyticsSession,
       transportProvider: options.dryRun
         ? dryRunTransport
-        : getAnalyticsTransport(),
+        : getDefaultTransport(),
     },
     experiment: {
       storage: experimentVariants,

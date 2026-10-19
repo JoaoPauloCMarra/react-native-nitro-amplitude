@@ -175,6 +175,8 @@ import {
   prefetchNativeContext,
   nitroHttpClient,
   variantBoolean,
+  variantJson,
+  variantPayload,
   variantString,
 } from "../index";
 import * as AnalyticsCompat from "../analytics";
@@ -203,8 +205,11 @@ import {
 } from "../native/context.web";
 import { nitroHttpClient as webNitroHttpClient } from "../native/http.web";
 import * as WebEntry from "../index.web";
-import { getDiagnosticEvents } from "../diagnostics-pipeline";
-import { recordDiagnosticFailure } from "../diagnostic-failures";
+import { getDiagnosticEventsByType } from "../diagnostics-pipeline";
+import {
+  getDiagnosticFailures,
+  recordDiagnosticFailure,
+} from "../diagnostic-failures";
 import {
   LocalStorage,
   MemoryStorage,
@@ -1109,6 +1114,41 @@ describe("react-native-nitro-amplitude", () => {
 
     expect(variantBoolean(experiment, "bool", false)).toBe(true);
     expect(variantString(experiment, "string", "fallback")).toBe("enabled");
+  });
+
+  it("variantBoolean maps on/off and true/false and rejects other values", () => {
+    const experiment = createMockExperimentClient({
+      on: { value: "on" },
+      off: { value: "off" },
+      yes: { value: "true" },
+      no: { value: "false" },
+      other: { value: "maybe" },
+    });
+
+    expect(variantBoolean(experiment, "on", false)).toBe(true);
+    expect(variantBoolean(experiment, "off", true)).toBe(false);
+    expect(variantBoolean(experiment, "yes", false)).toBe(true);
+    expect(variantBoolean(experiment, "no", true)).toBe(false);
+    expect(variantBoolean(experiment, "other", true)).toBe(true);
+    expect(variantBoolean(experiment, "other", false)).toBe(false);
+    expect(variantBoolean(experiment, "missing", true)).toBe(true);
+  });
+
+  it("variantPayload and variantJson prefer the caller fallback over config.fallbackVariant", () => {
+    const experiment = Experiment.initialize("typed-fallback-key", {
+      fallbackVariant: {
+        value: "off",
+        payload: { from: "config" },
+      },
+    });
+
+    expect(variantString(experiment, "missing", "dflt")).toBe("dflt");
+    expect(variantPayload(experiment, "missing", { from: "caller" })).toEqual({
+      from: "caller",
+    });
+    expect(variantJson(experiment, "missing", { from: "caller" })).toEqual({
+      from: "caller",
+    });
   });
 
   it("mock analytics client exposes screen tracking methods", async () => {
@@ -2459,7 +2499,7 @@ describe("react-native-nitro-amplitude", () => {
     ).toHaveBeenCalled();
   });
 
-  it("records network timing and health events in the bounded pipeline", async () => {
+  it("records network timing events in the bounded pipeline", async () => {
     clearDiagnosticFailures();
     const analytics = createInstance();
     try {
@@ -2473,14 +2513,25 @@ describe("react-native-nitro-amplitude", () => {
       "https://example.com/events",
       { api_key: "api-key", events: [{ event_type: "demo" }] },
     );
-    const events = getDiagnosticEvents();
-    expect(events.some((event) => event.type === "health")).toBe(true);
     expect(
-      events.some(
-        (event) =>
-          event.type === "network_timing" && event.timing.kind === "analytics",
+      getDiagnosticEventsByType("network_timing").some(
+        (event) => event.timing.kind === "analytics",
       ),
     ).toBe(true);
+  });
+
+  it("health checks do not evict failures", async () => {
+    clearDiagnosticFailures();
+    recordDiagnosticFailure({ operation: "experiment_fetch", kind: "timeout" });
+    const analytics = createInstance();
+    try {
+      for (let index = 0; index < 200; index += 1) {
+        await analytics.healthCheck();
+      }
+    } finally {
+      analytics.shutdown();
+    }
+    expect(getDiagnosticFailures()).toHaveLength(1);
   });
 
   describe("mobile flush defaults", () => {

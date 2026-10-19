@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Platform, StyleSheet, View } from "react-native";
+import { useCallback, useEffect, useState } from "react";
+import { Platform, View } from "react-native";
 import {
   AmplitudeError,
   Experiment,
@@ -35,32 +35,33 @@ import {
   getDryRunAnalyticsEvents,
   getNetworkEnabled,
 } from "react-native-nitro-amplitude/network";
-import { ANALYTICS_API_KEY, EXPERIMENT_API_KEY } from "./fixture";
-import { Button, Card, Colors, StatusRow, styles } from "./shared";
+import {
+  ANALYTICS_API_KEY,
+  EXPERIMENT_API_KEY,
+  createFixtureHttpClient,
+  delay,
+  fixtureEndpoint,
+} from "./fixture";
+import {
+  Button,
+  Card,
+  Colors,
+  ResultsProbe,
+  StatusRow,
+  styles,
+} from "./shared";
 
 const DRY_RUN = process.env.EXPO_PUBLIC_AMPLITUDE_DRY_RUN === "1";
 
-const DEMO_FLAG_BODY = JSON.stringify({
-  "demo-flag": { key: "on", value: "on" },
-});
-
 let failNextExperimentVariantRequest = false;
 
-const fixtureHttpClient = {
-  async request(requestUrl: string) {
-    if (
-      requestUrl.includes("/sdk/v2/flags") &&
-      !requestUrl.includes("vardata")
-    ) {
-      return { status: 200, body: "[]" };
-    }
-    if (requestUrl.includes("vardata") && failNextExperimentVariantRequest) {
-      failNextExperimentVariantRequest = false;
-      return { status: 503, body: '{"error":"expected replay failure"}' };
-    }
-    return { status: 200, body: DEMO_FLAG_BODY };
-  },
-};
+const fixtureHttpClient = createFixtureHttpClient(undefined, (requestUrl) => {
+  if (requestUrl.includes("vardata") && failNextExperimentVariantRequest) {
+    failNextExperimentVariantRequest = false;
+    return { status: 503, body: '{"error":"expected replay failure"}' };
+  }
+  return undefined;
+});
 
 type AmplitudeE2eLabProps = {
   fixtureUrl?: string;
@@ -77,28 +78,51 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function fixtureEndpoint(baseUrl: string, endpoint: string): string {
-  return `${baseUrl.replace(/\/+$/, "")}${endpoint}`;
-}
+const STATUS_ROWS = [
+  { key: "context", testID: "e2e-context-status", label: "native context" },
+  { key: "storage", testID: "e2e-storage-status", label: "durable storage" },
+  { key: "identity", testID: "e2e-identity-status", label: "identity" },
+  { key: "revenue", testID: "e2e-revenue-status", label: "revenue" },
+  {
+    key: "nativeHttp",
+    testID: "e2e-native-http-status",
+    label: "native HTTP echo",
+  },
+  {
+    key: "nativeHttpError",
+    testID: "e2e-native-http-error-status",
+    label: "native HTTP status",
+  },
+  { key: "network", testID: "e2e-network-status", label: "network policy" },
+  { key: "group", testID: "e2e-group-status", label: "group" },
+  { key: "screen", testID: "e2e-screen-status", label: "screen" },
+  { key: "health", testID: "e2e-health-status", label: "health" },
+  { key: "records", testID: "e2e-records-status", label: "records" },
+  { key: "client", testID: "e2e-client-status", label: "client" },
+  { key: "analytics", testID: "e2e-analytics-status", label: "analytics" },
+  { key: "variant", testID: "e2e-variant-status", label: "variant" },
+  {
+    key: "lifecycle",
+    testID: "e2e-lifecycle-status",
+    label: "Experiment lifecycle",
+  },
+  { key: "stress", testID: "e2e-stress-result", label: "stress" },
+] as const;
+
+type StatusKey = (typeof STATUS_ROWS)[number]["key"];
+
+const INITIAL_STATUSES = Object.fromEntries(
+  STATUS_ROWS.map((row) => [row.key, "(idle)"]),
+) as Record<StatusKey, string>;
 
 export function AmplitudeE2eLab({ fixtureUrl, runId }: AmplitudeE2eLabProps) {
-  const [contextStatus, setContextStatus] = useState("(idle)");
-  const [storageStatus, setStorageStatus] = useState("(idle)");
-  const [identityStatus, setIdentityStatus] = useState("(idle)");
-  const [nativeHttpStatus, setNativeHttpStatus] = useState("(idle)");
-  const [nativeHttpErrorStatus, setNativeHttpErrorStatus] = useState("(idle)");
-  const [networkStatus, setNetworkStatus] = useState("(idle)");
-  const [revenueStatus, setRevenueStatus] = useState("(idle)");
-  const [groupStatus, setGroupStatus] = useState("(idle)");
-  const [screenStatus, setScreenStatus] = useState("(idle)");
-  const [healthStatus, setHealthStatus] = useState("(idle)");
-  const [recordsStatus, setRecordsStatus] = useState("(idle)");
-  const [clientStatus, setClientStatus] = useState("(idle)");
-  const [stressStatus, setStressStatus] = useState("(idle)");
-  const [analyticsStatus, setAnalyticsStatus] = useState("(idle)");
-  const [variantStatus, setVariantStatus] = useState("(idle)");
-  const [lifecycleStatus, setLifecycleStatus] = useState("(idle)");
+  const [statuses, setStatuses] =
+    useState<Record<StatusKey, string>>(INITIAL_STATUSES);
+  const setStatus = useCallback((key: StatusKey, value: string) => {
+    setStatuses((current) => ({ ...current, [key]: value }));
+  }, []);
   const [ready, setReady] = useState(false);
+  const readyStatus = ready ? "ok:ready" : "warming";
   const [experimentClient] = useState(() =>
     Experiment.initializeWithAmplitudeAnalytics(EXPERIMENT_API_KEY, {
       instanceName: "e2e-lab",
@@ -129,7 +153,8 @@ export function AmplitudeE2eLab({ fixtureUrl, runId }: AmplitudeE2eLabProps) {
       })
       .catch((error: unknown) => {
         if (!cancelled) {
-          setAnalyticsStatus(
+          setStatus(
+            "analytics",
             `fail:init=${error instanceof Error ? error.message.slice(0, 40) : "error"}`,
           );
         }
@@ -138,7 +163,7 @@ export function AmplitudeE2eLab({ fixtureUrl, runId }: AmplitudeE2eLabProps) {
       cancelled = true;
       experimentClient.stop();
     };
-  }, [experimentClient]);
+  }, [experimentClient, setStatus]);
 
   return (
     <Card
@@ -147,90 +172,18 @@ export function AmplitudeE2eLab({ fixtureUrl, runId }: AmplitudeE2eLabProps) {
       indicatorColor={Colors.accent}
     >
       <View testID="e2e-lab" accessibilityLabel="E2E Lab">
-        <StatusRow
-          testID="e2e-context-status"
-          label="native context"
-          value={contextStatus}
-        />
-        <StatusRow
-          testID="e2e-storage-status"
-          label="durable storage"
-          value={storageStatus}
-        />
-        <StatusRow
-          testID="e2e-identity-status"
-          label="identity"
-          value={identityStatus}
-        />
-        <StatusRow
-          testID="e2e-revenue-status"
-          label="revenue"
-          value={revenueStatus}
-        />
-        <StatusRow
-          testID="e2e-native-http-status"
-          label="native HTTP echo"
-          value={nativeHttpStatus}
-        />
-        <StatusRow
-          testID="e2e-native-http-error-status"
-          label="native HTTP status"
-          value={nativeHttpErrorStatus}
-        />
-        <StatusRow
-          testID="e2e-network-status"
-          label="network policy"
-          value={networkStatus}
-        />
-        <StatusRow
-          testID="e2e-group-status"
-          label="group"
-          value={groupStatus}
-        />
-        <StatusRow
-          testID="e2e-screen-status"
-          label="screen"
-          value={screenStatus}
-        />
-        <StatusRow
-          testID="e2e-health-status"
-          label="health"
-          value={healthStatus}
-        />
-        <StatusRow
-          testID="e2e-records-status"
-          label="records"
-          value={recordsStatus}
-        />
-        <StatusRow
-          testID="e2e-client-status"
-          label="client"
-          value={clientStatus}
-        />
-        <StatusRow
-          testID="e2e-analytics-status"
-          label="analytics"
-          value={analyticsStatus}
-        />
-        <StatusRow
-          testID="e2e-variant-status"
-          label="variant"
-          value={variantStatus}
-        />
-        <StatusRow
-          testID="e2e-lifecycle-status"
-          label="Experiment lifecycle"
-          value={lifecycleStatus}
-        />
-        <StatusRow
-          testID="e2e-stress-result"
-          label="stress"
-          value={stressStatus}
-        />
+        {STATUS_ROWS.map((row) => (
+          <StatusRow
+            key={row.key}
+            testID={row.testID}
+            label={row.label}
+            value={statuses[row.key]}
+          />
+        ))}
         <StatusRow
           testID="e2e-runtime-ready"
           label="ready"
-          value={ready ? "ok:ready" : "warming"}
+          value={readyStatus}
         />
 
         <View style={styles.row}>
@@ -242,7 +195,8 @@ export function AmplitudeE2eLab({ fixtureUrl, runId }: AmplitudeE2eLabProps) {
                 prefetchNativeContext();
                 const deviceId = getDeviceId();
                 const sessionId = getSessionId();
-                setContextStatus(
+                setStatus(
+                  "context",
                   typeof deviceId === "string" &&
                     deviceId.length > 0 &&
                     typeof sessionId === "number"
@@ -250,7 +204,7 @@ export function AmplitudeE2eLab({ fixtureUrl, runId }: AmplitudeE2eLabProps) {
                     : "fail:context",
                 );
               } catch {
-                setContextStatus("fail:context");
+                setStatus("context", "fail:context");
               }
             }}
             style={styles.flex1}
@@ -260,7 +214,7 @@ export function AmplitudeE2eLab({ fixtureUrl, runId }: AmplitudeE2eLabProps) {
             title="Write relaunch marker"
             onPress={() => {
               if (!runId) {
-                setStorageStatus("blocked:replay-run-id-required");
+                setStatus("storage", "blocked:replay-run-id-required");
                 return;
               }
               void (async () => {
@@ -270,12 +224,10 @@ export function AmplitudeE2eLab({ fixtureUrl, runId }: AmplitudeE2eLabProps) {
                   );
                   await storage.set("native-relaunch-marker", { runId });
                   // Outlasts the 200 ms PERSIST_FLUSH_DEBOUNCE_MILLIS storage flush.
-                  await new Promise<void>((resolve) =>
-                    setTimeout(resolve, 300),
-                  );
-                  setStorageStatus("ok:storage=written");
+                  await delay(300);
+                  setStatus("storage", "ok:storage=written");
                 } catch {
-                  setStorageStatus("fail:storage=write");
+                  setStatus("storage", "fail:storage=write");
                 }
               })();
             }}
@@ -289,7 +241,7 @@ export function AmplitudeE2eLab({ fixtureUrl, runId }: AmplitudeE2eLabProps) {
             title="Read relaunch marker"
             onPress={() => {
               if (!runId) {
-                setStorageStatus("blocked:replay-run-id-required");
+                setStatus("storage", "blocked:replay-run-id-required");
                 return;
               }
               void (async () => {
@@ -298,13 +250,14 @@ export function AmplitudeE2eLab({ fixtureUrl, runId }: AmplitudeE2eLabProps) {
                     "e2e-replay-durable",
                   );
                   const marker = await storage.get("native-relaunch-marker");
-                  setStorageStatus(
+                  setStatus(
+                    "storage",
                     marker?.runId === runId
                       ? "ok:storage=restored"
                       : "fail:storage=missing-or-stale",
                   );
                 } catch {
-                  setStorageStatus("fail:storage=read");
+                  setStatus("storage", "fail:storage=read");
                 }
               })();
             }}
@@ -315,7 +268,7 @@ export function AmplitudeE2eLab({ fixtureUrl, runId }: AmplitudeE2eLabProps) {
             title="Native HTTP echo"
             onPress={() => {
               if (!fixtureUrl) {
-                setNativeHttpStatus("blocked:local-fixture-url-required");
+                setStatus("nativeHttp", "blocked:local-fixture-url-required");
                 return;
               }
               void nitroHttpClient
@@ -331,7 +284,7 @@ export function AmplitudeE2eLab({ fixtureUrl, runId }: AmplitudeE2eLabProps) {
                   try {
                     body = JSON.parse(response.body);
                   } catch {
-                    setNativeHttpStatus("fail:native-http=invalid-json");
+                    setStatus("nativeHttp", "fail:native-http=invalid-json");
                     return;
                   }
                   const valid =
@@ -341,12 +294,13 @@ export function AmplitudeE2eLab({ fixtureUrl, runId }: AmplitudeE2eLabProps) {
                     body.method === "POST" &&
                     body.path === "/echo" &&
                     body.body === '{"probe":"e2e-native-http-probe"}';
-                  setNativeHttpStatus(
+                  setStatus(
+                    "nativeHttp",
                     valid ? "ok:native-http=echo" : "fail:native-http=echo",
                   );
                 })
                 .catch(() => {
-                  setNativeHttpStatus("fail:native-http=request");
+                  setStatus("nativeHttp", "fail:native-http=request");
                 });
             }}
             style={styles.flex1}
@@ -359,7 +313,10 @@ export function AmplitudeE2eLab({ fixtureUrl, runId }: AmplitudeE2eLabProps) {
             title="Native HTTP 503"
             onPress={() => {
               if (!fixtureUrl) {
-                setNativeHttpErrorStatus("blocked:local-fixture-url-required");
+                setStatus(
+                  "nativeHttpError",
+                  "blocked:local-fixture-url-required",
+                );
                 return;
               }
               void nitroHttpClient
@@ -374,14 +331,18 @@ export function AmplitudeE2eLab({ fixtureUrl, runId }: AmplitudeE2eLabProps) {
                   const expected =
                     response.status === 503 &&
                     response.body.includes('"status":503');
-                  setNativeHttpErrorStatus(
+                  setStatus(
+                    "nativeHttpError",
                     expected
                       ? "ok:native-http=status=503"
                       : "fail:native-http=status",
                   );
                 })
                 .catch(() => {
-                  setNativeHttpErrorStatus("fail:native-http=status-request");
+                  setStatus(
+                    "nativeHttpError",
+                    "fail:native-http=status-request",
+                  );
                 });
             }}
             style={styles.flex1}
@@ -391,7 +352,7 @@ export function AmplitudeE2eLab({ fixtureUrl, runId }: AmplitudeE2eLabProps) {
             title="Network disabled"
             onPress={() => {
               if (!fixtureUrl) {
-                setNetworkStatus("blocked:local-fixture-url-required");
+                setStatus("network", "blocked:local-fixture-url-required");
                 return;
               }
               const previous = getNetworkEnabled();
@@ -405,14 +366,15 @@ export function AmplitudeE2eLab({ fixtureUrl, runId }: AmplitudeE2eLabProps) {
                   5000,
                 )
                 .then(() => {
-                  setNetworkStatus("fail:network=allowed");
+                  setStatus("network", "fail:network=allowed");
                 })
                 .catch((error: unknown) => {
                   const blocked =
                     error instanceof AmplitudeError &&
                     error.code === "network_error" &&
                     error.message === "Amplitude network traffic is disabled";
-                  setNetworkStatus(
+                  setStatus(
+                    "network",
                     blocked
                       ? "ok:network=blocked"
                       : "fail:network=unexpected-error",
@@ -441,7 +403,8 @@ export function AmplitudeE2eLab({ fixtureUrl, runId }: AmplitudeE2eLabProps) {
                   const eventEscaped = hasRecordedEvent("e2e_opted_out");
                   reset();
                   setUserId("e2e-user");
-                  setIdentityStatus(
+                  setStatus(
+                    "identity",
                     result.ok && !eventEscaped && getUserId() === "e2e-user"
                       ? "ok:optout=suppressed:reset=restored"
                       : "fail:optout",
@@ -449,7 +412,7 @@ export function AmplitudeE2eLab({ fixtureUrl, runId }: AmplitudeE2eLabProps) {
                 } catch {
                   reset();
                   setUserId("e2e-user");
-                  setIdentityStatus("fail:optout=flush");
+                  setStatus("identity", "fail:optout=flush");
                 }
               })();
             }}
@@ -475,14 +438,15 @@ export function AmplitudeE2eLab({ fixtureUrl, runId }: AmplitudeE2eLabProps) {
                         item.event_properties?.["$quantity"] === 2,
                     ),
                   );
-                  setRevenueStatus(
+                  setStatus(
+                    "revenue",
                     result.ok && recorded
                       ? "ok:revenue=sku:e2e-sku:qty=2"
                       : "fail:revenue",
                   );
                 })
                 .catch(() => {
-                  setRevenueStatus("fail:revenue=flush");
+                  setStatus("revenue", "fail:revenue=flush");
                 });
             }}
             style={styles.flex1}
@@ -514,14 +478,15 @@ export function AmplitudeE2eLab({ fixtureUrl, runId }: AmplitudeE2eLabProps) {
                         event.groups?.plan === "e2e" &&
                         event.group_properties?.$set?.seat === "qa",
                     );
-                  setGroupStatus(
+                  setStatus(
+                    "group",
                     result.ok && recorded
                       ? "ok:group=plan:e2e:event=recorded"
                       : "fail:group",
                   );
                 })
                 .catch(() => {
-                  setGroupStatus("fail:group=flush");
+                  setStatus("group", "fail:group=flush");
                 });
             }}
             style={styles.flex1}
@@ -565,7 +530,8 @@ export function AmplitudeE2eLab({ fixtureUrl, runId }: AmplitudeE2eLabProps) {
                           ([key]) => key === "[Amplitude] Screen Name",
                         )?.[1],
                     );
-                  setScreenStatus(
+                  setStatus(
+                    "screen",
                     result.ok &&
                       duplicate === undefined &&
                       screens.length === 2 &&
@@ -575,7 +541,7 @@ export function AmplitudeE2eLab({ fixtureUrl, runId }: AmplitudeE2eLabProps) {
                       : `fail:screen=count=${screens.length}`,
                   );
                 } catch {
-                  setScreenStatus("fail:screen=flush");
+                  setStatus("screen", "fail:screen=flush");
                 } finally {
                   instance.shutdown();
                 }
@@ -601,21 +567,23 @@ export function AmplitudeE2eLab({ fixtureUrl, runId }: AmplitudeE2eLabProps) {
                       !result.nativeAvailable &&
                       !result.diskStorageWritable &&
                       !result.workerReady;
-                    setHealthStatus(
+                    setStatus(
+                      "health",
                       diagnosticsReady && nativeUnsupported
                         ? "ok:health=unsupported:safe=true:full=true"
                         : "fail:health",
                     );
                     return;
                   }
-                  setHealthStatus(
+                  setStatus(
+                    "health",
                     result.ok && diagnosticsReady
                       ? "ok:health=true:safe=true:full=true"
                       : "fail:health",
                   );
                 })
                 .catch(() => {
-                  setHealthStatus("fail:health");
+                  setStatus("health", "fail:health");
                 });
             }}
             style={styles.flex1}
@@ -629,14 +597,15 @@ export function AmplitudeE2eLab({ fixtureUrl, runId }: AmplitudeE2eLabProps) {
               void flushWithResult()
                 .then((result) => {
                   const found = hasRecordedEvent("e2e_record_probe");
-                  setRecordsStatus(
+                  setStatus(
+                    "records",
                     result.ok && found
                       ? "ok:events=record-probe"
                       : "fail:events",
                   );
                 })
                 .catch(() => {
-                  setRecordsStatus("fail:events");
+                  setStatus("records", "fail:events");
                 });
             }}
             style={styles.flex1}
@@ -660,14 +629,15 @@ export function AmplitudeE2eLab({ fixtureUrl, runId }: AmplitudeE2eLabProps) {
                         event.user_id === "e2e-user",
                     ),
                   );
-                  setAnalyticsStatus(
+                  setStatus(
+                    "analytics",
                     result.ok && recorded
                       ? "ok:identity=user=e2e-user:event=recorded"
                       : "fail:identity",
                   );
                 })
                 .catch(() => {
-                  setAnalyticsStatus("fail:identity=flush");
+                  setStatus("analytics", "fail:identity=flush");
                 });
             }}
             style={styles.flex1}
@@ -681,14 +651,15 @@ export function AmplitudeE2eLab({ fixtureUrl, runId }: AmplitudeE2eLabProps) {
               void flushWithResult()
                 .then((result) => {
                   const recorded = hasRecordedEvent("e2e_flush_probe");
-                  setAnalyticsStatus(
+                  setStatus(
+                    "analytics",
                     result.ok && recorded
                       ? `ok:flush=ok:event=flush-probe:sent=${result.sent}`
                       : "fail:flush",
                   );
                 })
                 .catch(() => {
-                  setAnalyticsStatus("fail:flush");
+                  setStatus("analytics", "fail:flush");
                 });
             }}
             style={styles.flex1}
@@ -699,7 +670,7 @@ export function AmplitudeE2eLab({ fixtureUrl, runId }: AmplitudeE2eLabProps) {
             testID="e2e-variant-run"
             title="Variant"
             onPress={() => {
-              setVariantStatus("fetching");
+              setStatus("variant", "fetching");
               void experimentClient
                 .fetchWithMetadata(
                   { user_id: "e2e-user" },
@@ -714,15 +685,17 @@ export function AmplitudeE2eLab({ fixtureUrl, runId }: AmplitudeE2eLabProps) {
                     result.flagKeys.includes("demo-flag") &&
                     value === "on"
                   ) {
-                    setVariantStatus("ok:flag=on");
+                    setStatus("variant", "ok:flag=on");
                     return;
                   }
-                  setVariantStatus(
+                  setStatus(
+                    "variant",
                     `fail:flag:fetched=${result.fetched}:keys=${result.flagKeys.join(",") || "none"}:value=${String(value ?? "undef")}:reason=${result.failureReason?.slice(0, 40) ?? "none"}`,
                   );
                 })
                 .catch((error: unknown) => {
-                  setVariantStatus(
+                  setStatus(
+                    "variant",
                     `fail:flag=${error instanceof Error ? error.message.slice(0, 40) : "error"}`,
                   );
                 });
@@ -740,7 +713,7 @@ export function AmplitudeE2eLab({ fixtureUrl, runId }: AmplitudeE2eLabProps) {
                     { flagKeys: ["demo-flag"] },
                   );
                   if (!baseline.fetched) {
-                    setLifecycleStatus("fail:lifecycle=baseline");
+                    setStatus("lifecycle", "fail:lifecycle=baseline");
                     return;
                   }
                   failNextExperimentVariantRequest = true;
@@ -763,7 +736,8 @@ export function AmplitudeE2eLab({ fixtureUrl, runId }: AmplitudeE2eLabProps) {
                   );
                   const fresh =
                     experimentClient.variantWithMetadata("demo-flag");
-                  setLifecycleStatus(
+                  setStatus(
+                    "lifecycle",
                     staleObserved &&
                       restarted.fetched &&
                       fresh.variant.value === "on" &&
@@ -773,7 +747,7 @@ export function AmplitudeE2eLab({ fixtureUrl, runId }: AmplitudeE2eLabProps) {
                   );
                 } catch {
                   experimentClient.stop();
-                  setLifecycleStatus("fail:lifecycle=restart");
+                  setStatus("lifecycle", "fail:lifecycle=restart");
                 }
               })();
             }}
@@ -795,14 +769,15 @@ export function AmplitudeE2eLab({ fixtureUrl, runId }: AmplitudeE2eLabProps) {
                   .filter(
                     (event) => event.event_type === "e2e_stress_track",
                   ).length;
-                setStressStatus(
+                setStatus(
+                  "stress",
                   result.ok && delivered === 50
                     ? "ok:stress=50:delivered=50"
                     : `fail:stress=50:delivered=${delivered}`,
                 );
               })
               .catch(() => {
-                setStressStatus("fail:stress=flush");
+                setStatus("stress", "fail:stress=flush");
               });
           }}
         />
@@ -838,7 +813,8 @@ export function AmplitudeE2eLab({ fixtureUrl, runId }: AmplitudeE2eLabProps) {
                 const connectorCleared =
                   client.getUserId() === undefined &&
                   getConnectorIdentity("e2e-combined").userId === undefined;
-                setClientStatus(
+                setStatus(
+                  "client",
                   DRY_RUN &&
                     userReady &&
                     result.ok &&
@@ -848,44 +824,21 @@ export function AmplitudeE2eLab({ fixtureUrl, runId }: AmplitudeE2eLabProps) {
                     : `fail:combined=user=${userReady}:event=${recorded}:reset=${connectorCleared}`,
                 );
               } catch {
-                setClientStatus("fail:combined");
+                setStatus("client", "fail:combined");
               } finally {
                 client.analytics.shutdown();
               }
             })();
           }}
         />
-        <View
+        <ResultsProbe
           testID="e2e-results"
-          accessible
-          accessibilityLabel={[
-            contextStatus,
-            storageStatus,
-            identityStatus,
-            revenueStatus,
-            nativeHttpStatus,
-            nativeHttpErrorStatus,
-            networkStatus,
-            groupStatus,
-            screenStatus,
-            healthStatus,
-            recordsStatus,
-            clientStatus,
-            analyticsStatus,
-            variantStatus,
-            lifecycleStatus,
-            stressStatus,
-            ready ? "ok:ready" : "warming",
+          label={[
+            ...STATUS_ROWS.map((row) => statuses[row.key]),
+            readyStatus,
           ].join(" ")}
-          style={localStyles.resultsProbe}
         />
       </View>
     </Card>
   );
 }
-
-const localStyles = StyleSheet.create({
-  resultsProbe: {
-    height: 1,
-  },
-});

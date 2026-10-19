@@ -19,7 +19,6 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 object AndroidAmplitudeAdapter {
-  private const val DEFAULT_OPTIONS_JSON = "{}"
   private const val MAX_HTTP_TIMEOUT_MILLIS = 300000
   private const val MAX_RESPONSE_BODY_BYTES = 4 * 1024 * 1024
   private const val LEGACY_DISK_PREFS = "NitroAmplitude"
@@ -82,14 +81,14 @@ object AndroidAmplitudeAdapter {
   fun prefetchContext() {
     executor.execute {
       try {
-        getApplicationContextJson(DEFAULT_OPTIONS_JSON)
+        getApplicationContextJson()
       } catch (_: Exception) {
       }
     }
   }
 
   @JvmStatic
-  fun getApplicationContextJson(optionsJson: String): String {
+  fun getApplicationContextJson(): String {
     cachedContext?.let { return it }
     val json = buildApplicationContextJson()
     cachedContext = json

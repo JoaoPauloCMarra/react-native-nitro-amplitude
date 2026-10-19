@@ -2154,6 +2154,84 @@ void testLegacyDiskMigratorRetriesOnlyAfterASuccessfulWrite() {
   assert(legacy.size() == 1 && !store.hasDisk("late"));
 }
 
+void testMigratingStorageRearmsAfterWrite() {
+  auto files = std::make_shared<FakeFileAdapter>();
+  auto store = std::make_shared<JsonlSegmentStore>(files, "migrating-rearm", 4096);
+  std::map<std::string, std::string> legacy = {{"legacy-a", "1"}};
+  int entriesCalls = 0;
+  bool sourceThrows = true;
+  NitroAmplitude::LegacyDiskSource source;
+  source.entries = [&]() {
+    ++entriesCalls;
+    if (sourceThrows) {
+      throw std::runtime_error("source unavailable");
+    }
+    return std::vector<std::pair<std::string, std::string>>(legacy.begin(), legacy.end());
+  };
+  source.remove = [&](const std::vector<std::string>& keys) {
+    for (const auto& key : keys) {
+      legacy.erase(key);
+    }
+  };
+  source.clear = [&]() { legacy.clear(); };
+  NitroAmplitude::MigratingStorage storage([store]() { return store; }, source);
+
+  assert(!storage.getDisk("legacy-a").has_value());
+  assert(entriesCalls == 1);
+  sourceThrows = false;
+  assert(!storage.hasDisk("legacy-a"));
+  assert(entriesCalls == 1);
+
+  storage.setDisk("fresh", "value");
+  assert(entriesCalls == 1);
+  assert(storage.getDisk("legacy-a").value_or("") == "1");
+  assert(entriesCalls == 2);
+  assert(storage.getDisk("fresh").value_or("") == "value");
+  assert(legacy.empty());
+}
+
+void testMigratingStorageForgetsOnDelete() {
+  auto files = std::make_shared<FakeFileAdapter>();
+  auto store = std::make_shared<JsonlSegmentStore>(files, "migrating-forget", 4096);
+  std::map<std::string, std::string> legacy = {{"legacy-a", "1"}, {"legacy-b", "2"}};
+  NitroAmplitude::LegacyDiskSource source;
+  source.entries = []() -> std::vector<std::pair<std::string, std::string>> {
+    throw std::runtime_error("source unavailable");
+  };
+  source.remove = [&](const std::vector<std::string>& keys) {
+    for (const auto& key : keys) {
+      legacy.erase(key);
+    }
+  };
+  source.clear = [&]() { legacy.clear(); };
+  NitroAmplitude::MigratingStorage storage([store]() { return store; }, source);
+
+  storage.deleteDisk("legacy-a");
+  assert(legacy.size() == 1 && legacy.count("legacy-b") == 1);
+  assert(!storage.hasDisk("legacy-a"));
+}
+
+void testMigratingStorageWithoutStore() {
+  NitroAmplitude::LegacyDiskSource source;
+  source.entries = []() { return std::vector<std::pair<std::string, std::string>>{}; };
+  source.remove = [](const std::vector<std::string>&) {};
+  source.clear = []() {};
+  NitroAmplitude::MigratingStorage storage(
+      []() { return std::shared_ptr<JsonlSegmentStore>(); }, source);
+
+  bool threw = false;
+  try {
+    storage.setDisk("key", "value");
+  } catch (const std::runtime_error& error) {
+    threw = std::string(error.what()).find("disk_adapter_unavailable") != std::string::npos;
+  }
+  assert(threw);
+  assert(!storage.getDisk("key").has_value());
+  assert(!storage.hasDisk("key"));
+  assert(storage.getAllDiskKeys().empty());
+  storage.deleteDisk("key");
+}
+
 void testSegmentStoreMigrationInterruptedMidway() {
   auto files = std::make_shared<FakeFileAdapter>();
   const std::vector<std::pair<std::string, std::string>> legacy = {
@@ -4339,6 +4417,9 @@ int main() {
   testPosixMigrationUnderDiskFullRetriesWithoutDuplicates();
   testLegacyDiskMigrationResumesWithoutResurrectingKeys();
   testLegacyDiskMigratorRetriesOnlyAfterASuccessfulWrite();
+  testMigratingStorageRearmsAfterWrite();
+  testMigratingStorageForgetsOnDelete();
+  testMigratingStorageWithoutStore();
   testSegmentStoreMigrationInterruptedMidway();
   testPosixPermissionDenied();
   testPosixDirectoryRemovedWhileRunning();

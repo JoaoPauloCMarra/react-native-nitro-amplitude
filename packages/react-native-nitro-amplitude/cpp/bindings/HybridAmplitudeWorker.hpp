@@ -60,6 +60,7 @@ private:
   void startWorkers(const ThreadFactory& threadFactory);
   void stopWorkers();
   void workerLoop();
+  void retireGeneration(const WorkerRequest& request);
   void notifyComplete(
       const std::string& requestId,
       double statusCode,

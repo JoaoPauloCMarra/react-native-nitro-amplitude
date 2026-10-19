@@ -1,4 +1,13 @@
-import { classifyDiagnosticFailure } from "../diagnostic-failures";
+import {
+  classifyDiagnosticFailure,
+  clearDiagnosticFailures,
+  getDiagnosticFailures,
+  recordDiagnosticFailure,
+} from "../diagnostic-failures";
+import {
+  getDiagnosticEventsByType,
+  recordDiagnosticEvent,
+} from "../diagnostics-pipeline";
 import { createAmplitudeError, parseNativeError } from "../errors";
 
 function nativeError(raw: string): Error {
@@ -71,5 +80,57 @@ describe("classifyDiagnosticFailure with native detail", () => {
     );
     expect(classifyDiagnosticFailure(new Error("boom"))).toBe("unknown");
     expect(classifyDiagnosticFailure(undefined, 500)).toBe("http_status");
+  });
+});
+
+describe("diagnostic failure buffer", () => {
+  beforeEach(() => {
+    clearDiagnosticFailures();
+  });
+
+  it("clearDiagnosticFailures keeps network timings", () => {
+    const timingsBefore = getDiagnosticEventsByType("network_timing").length;
+    recordDiagnosticEvent({
+      type: "network_timing",
+      recordedAt: 1,
+      timing: {
+        kind: "analytics",
+        url: "https://example.com/events",
+        method: "POST",
+        startedAt: 1,
+        finishedAt: 2,
+        durationMillis: 1,
+        status: 200,
+      },
+    });
+    recordDiagnosticFailure({ operation: "experiment_fetch", kind: "timeout" });
+    expect(getDiagnosticFailures()).toHaveLength(1);
+
+    clearDiagnosticFailures();
+
+    expect(getDiagnosticFailures()).toHaveLength(0);
+    expect(getDiagnosticEventsByType("network_timing")).toHaveLength(
+      timingsBefore + 1,
+    );
+  });
+
+  it("every operation maps to its surface", () => {
+    recordDiagnosticFailure({
+      operation: "session_storage_read",
+      kind: "storage_error",
+    });
+    recordDiagnosticFailure({ operation: "analytics_upload", kind: "unknown" });
+    recordDiagnosticFailure({ operation: "experiment_fetch", kind: "unknown" });
+
+    expect(
+      getDiagnosticFailures().map(({ operation, surface }) => [
+        operation,
+        surface,
+      ]),
+    ).toEqual([
+      ["session_storage_read", "session_storage"],
+      ["analytics_upload", "analytics_upload"],
+      ["experiment_fetch", "experiment_variant_fetch"],
+    ]);
   });
 });

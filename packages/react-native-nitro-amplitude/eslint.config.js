@@ -31,4 +31,8 @@ module.exports = [
       "react-hooks/rules-of-hooks": "off",
     },
   },
+  {
+    files: ["scripts/**/*.js", "app.plugin.js"],
+    rules: { "no-console": "off" },
+  },
 ];

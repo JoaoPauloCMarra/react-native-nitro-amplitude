@@ -64,7 +64,6 @@ module.exports = {
       ],
       "./plugins/with-fast-gradle",
       "react-native-nitro-amplitude",
-      "expo-font",
       "expo-asset",
       "expo-status-bar",
     ],

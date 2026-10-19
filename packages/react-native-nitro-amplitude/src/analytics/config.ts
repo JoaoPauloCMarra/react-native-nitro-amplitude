@@ -20,7 +20,7 @@ import { isNative } from "../platform";
 import { NetworkGuardedFetchTransport } from "./network-guarded-fetch-transport";
 import {
   createDiagnosticAnalyticsTransport,
-  recordDiagnosticFailure,
+  reportSessionReadFailure,
 } from "../diagnostic-failures";
 
 type SessionField =
@@ -47,7 +47,7 @@ function createDefaultStorage() {
   return new NitroAnalyticsStorage<Event[]>("analytics-events");
 }
 
-function getDefaultTransport(): Transport {
+export function getDefaultTransport(): Transport {
   if (isNative()) {
     const { nitroTransport } =
       require("./nitro-transport") as typeof import("./nitro-transport");
@@ -126,6 +126,7 @@ export class ReactNativeConfig extends Config implements IReactNativeConfig {
   private sessionReadFailed = false;
   private readonly constructing: boolean = true;
   private sessionRetry: Promise<void> | undefined;
+  onSessionRestored?: () => void;
   private readonly changedSinceReadFailure = new Set<SessionField>();
 
   constructor(
@@ -190,9 +191,9 @@ export class ReactNativeConfig extends Config implements IReactNativeConfig {
   }
 
   set deviceId(deviceId: string | undefined) {
+    this.noteChange("deviceId");
     if (this._deviceId !== deviceId) {
       this._deviceId = deviceId;
-      this.noteChange("deviceId");
       this.updateStorage();
     }
   }
@@ -202,9 +203,9 @@ export class ReactNativeConfig extends Config implements IReactNativeConfig {
   }
 
   set userId(userId: string | undefined) {
+    this.noteChange("userId");
     if (this._userId !== userId) {
       this._userId = userId;
-      this.noteChange("userId");
       this.updateStorage();
     }
   }
@@ -214,9 +215,9 @@ export class ReactNativeConfig extends Config implements IReactNativeConfig {
   }
 
   set sessionId(sessionId: number | undefined) {
+    this.noteChange("sessionId");
     if (this._sessionId !== sessionId) {
       this._sessionId = sessionId;
-      this.noteChange("sessionId");
       this.updateStorage();
     }
   }
@@ -226,9 +227,9 @@ export class ReactNativeConfig extends Config implements IReactNativeConfig {
   }
 
   override set optOut(optOut: boolean) {
+    this.noteChange("optOut");
     if (this._optOut !== optOut) {
       this._optOut = optOut;
-      this.noteChange("optOut");
       this.updateStorage();
     }
   }
@@ -238,9 +239,9 @@ export class ReactNativeConfig extends Config implements IReactNativeConfig {
   }
 
   set lastEventTime(lastEventTime: number | undefined) {
+    this.noteChange("lastEventTime");
     if (this._lastEventTime !== lastEventTime) {
       this._lastEventTime = lastEventTime;
-      this.noteChange("lastEventTime");
       this.updateStorage();
     }
   }
@@ -250,9 +251,9 @@ export class ReactNativeConfig extends Config implements IReactNativeConfig {
   }
 
   set lastEventId(lastEventId: number | undefined) {
+    this.noteChange("lastEventId");
     if (this._lastEventId !== lastEventId) {
       this._lastEventId = lastEventId;
-      this.noteChange("lastEventId");
       this.updateStorage();
     }
   }
@@ -292,8 +293,9 @@ export class ReactNativeConfig extends Config implements IReactNativeConfig {
         this.sessionReadFailed = false;
         changed.clear();
         this.updateStorage();
+        this.onSessionRestored?.();
       } catch (error) {
-        reportSessionReadFailure(this.loggerProvider, error);
+        reportStoredSessionReadFailure(this.loggerProvider, error);
       } finally {
         this.sessionRetry = undefined;
       }
@@ -355,7 +357,7 @@ export const useReactNativeConfig = async (
     previousCookies = await cookieStorage.get(getCookieName(apiKey));
   } catch (error) {
     sessionReadFailed = true;
-    reportSessionReadFailure(options?.loggerProvider, error);
+    reportStoredSessionReadFailure(options?.loggerProvider, error);
   }
   const queryParams = getQueryParams();
 
@@ -410,7 +412,9 @@ export const useReactNativeConfig = async (
     { readFailed: sessionReadFailed, explicit },
   );
 
-  config.lastEventId = lastEventId;
+  if (lastEventId !== undefined) {
+    config.lastEventId = lastEventId;
+  }
 
   config.loggerProvider?.log(
     `Init: storage=${cookieStorage.constructor.name} restoredSessionId = ${
@@ -423,13 +427,11 @@ export const useReactNativeConfig = async (
 
 type CookieLogger = { error: (message: string) => void } | undefined;
 
-function reportSessionReadFailure(logger: CookieLogger, error: unknown) {
-  logger?.error(`Failed to read stored user session: ${String(error)}`);
-  recordDiagnosticFailure({
-    operation: "session_storage_read",
-    surface: "session_storage",
-    kind: "storage_error",
-  });
+function reportStoredSessionReadFailure(logger: CookieLogger, error: unknown) {
+  reportSessionReadFailure(
+    logger,
+    `Failed to read stored user session: ${String(error)}`,
+  );
 }
 
 export const ignoreCookieStorageFailure = async <T>(

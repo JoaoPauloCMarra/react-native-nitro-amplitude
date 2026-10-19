@@ -18,6 +18,7 @@ jest.mock("../native/context", () => ({
 
 import { AnalyticsConnector } from "@amplitude/analytics-connector";
 import { Platform } from "react-native";
+import { ExperimentClient } from "../experiment/experimentClient";
 import { DefaultUserProvider } from "../experiment/integration/default";
 
 const mockPlatform = Platform as { OS: string };
@@ -68,4 +69,77 @@ test("maps web connector context to ExperimentUser keys", async () => {
   expect(user.platform).toBe("Web");
   expect(user).not.toHaveProperty("versionName");
   expect(user).not.toHaveProperty("deviceModel");
+});
+
+test("start() without a user keeps the user set by setUser", async () => {
+  mockPlatform.OS = "web";
+  let sentUser: { user_id?: string } | undefined;
+  const client = new ExperimentClient("test-deployment-key", {
+    automaticExposureTracking: false,
+    fetchOnStart: true,
+    pollOnStart: false,
+    httpClient: {
+      request: async (url, _method, headers) => {
+        if (headers["X-Amp-Exp-User"]) {
+          sentUser = JSON.parse(
+            Buffer.from(headers["X-Amp-Exp-User"], "base64url").toString(),
+          );
+        }
+        return { status: 200, body: url.includes("flags") ? "[]" : "{}" };
+      },
+    },
+  });
+  try {
+    await client.cacheReady();
+    client.setUser({ user_id: "user-123" });
+    await client.start();
+
+    expect(client.getUser().user_id).toBe("user-123");
+    expect(sentUser?.user_id).toBe("user-123");
+  } finally {
+    client.stop();
+  }
+});
+
+test("local evaluation sees a custom userProvider before start()", async () => {
+  mockPlatform.OS = "web";
+  const flag = {
+    key: "provider-flag",
+    metadata: { evaluationMode: "local" },
+    variants: {
+      on: { key: "on", value: "on" },
+      off: { key: "off", value: "off" },
+    },
+    segments: [
+      {
+        conditions: [
+          [
+            {
+              selector: ["context", "user", "user_id"],
+              op: "is",
+              values: ["p"],
+            },
+          ],
+        ],
+        variant: "on",
+      },
+      { variant: "off" },
+    ],
+  };
+  const client = new ExperimentClient("test-deployment-key", {
+    automaticExposureTracking: false,
+    fetchOnStart: false,
+    pollOnStart: false,
+    initialFlags: JSON.stringify([flag]),
+    userProvider: { getUser: async () => ({ user_id: "p" }) },
+    httpClient: { request: async () => ({ status: 200, body: "{}" }) },
+  });
+  try {
+    await client.cacheReady();
+    await client.fetch();
+
+    expect(client.variant("provider-flag").value).toBe("on");
+  } finally {
+    client.stop();
+  }
 });

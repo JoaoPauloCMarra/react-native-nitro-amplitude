@@ -1,7 +1,7 @@
 #include "HybridAmplitudeWorker.hpp"
 
 #include "../core/Gzip.hpp"
-#include "../core/PlatformAdapterFactory.hpp"
+#include "PlatformAdapterFactory.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -198,6 +198,21 @@ size_t HybridAmplitudeWorker::getExternalMemorySize() noexcept {
   return pendingBodyBytes_.load();
 }
 
+void HybridAmplitudeWorker::retireGeneration(const WorkerRequest& request) {
+  cancelledGenerations_.erase(request.generation);
+  const auto active = activeGenerations_.find(request.requestId);
+  if (active == activeGenerations_.end()) {
+    return;
+  }
+  auto& generations = active->second;
+  generations.erase(
+      std::remove(generations.begin(), generations.end(), request.generation),
+      generations.end());
+  if (generations.empty()) {
+    activeGenerations_.erase(active);
+  }
+}
+
 void HybridAmplitudeWorker::workerLoop() {
   while (true) {
     WorkerRequest request;
@@ -226,17 +241,7 @@ void HybridAmplitudeWorker::workerLoop() {
     if (notifyCancelled) {
       {
         std::lock_guard<std::mutex> lock(queueMutex_);
-        cancelledGenerations_.erase(request.generation);
-        const auto active = activeGenerations_.find(request.requestId);
-        if (active != activeGenerations_.end()) {
-          auto& generations = active->second;
-          generations.erase(
-              std::remove(generations.begin(), generations.end(), request.generation),
-              generations.end());
-          if (generations.empty()) {
-            activeGenerations_.erase(active);
-          }
-        }
+        retireGeneration(request);
       }
       notifyComplete(request.requestId, 0, "", "cancelled");
       continue;
@@ -263,36 +268,13 @@ void HybridAmplitudeWorker::workerLoop() {
             headers["Content-Encoding"] = "gzip";
           }
         }
-#ifndef NITRO_AMPLITUDE_DISABLE_PLATFORM_ADAPTER
-#if __ANDROID__
-        facebook::jni::ThreadScope::WithClassLoader([&request, &method, &headers, &body, this, &result]() {
-              result = adapter_->performHttpRequest(
-                  request.url,
-                  method,
-                  headers,
-                  body,
-                  request.timeoutMillis);
-        });
-#else
         result = adapter_->performHttpRequest(
             request.url,
             method,
             headers,
             body,
             request.timeoutMillis);
-#endif
-#else
-        result = adapter_->performHttpRequest(
-            request.url,
-            method,
-            headers,
-            body,
-            request.timeoutMillis);
-#endif
       }
-    } catch (const std::exception&) {
-      result = ::NitroAmplitude::HttpResult{};
-      result.error = "native_http_exception";
     } catch (...) {
       result = ::NitroAmplitude::HttpResult{};
       result.error = "native_http_exception";
@@ -301,17 +283,7 @@ void HybridAmplitudeWorker::workerLoop() {
     --inFlightCount_;
     {
       std::lock_guard<std::mutex> lock(queueMutex_);
-      cancelledGenerations_.erase(request.generation);
-      const auto active = activeGenerations_.find(request.requestId);
-      if (active != activeGenerations_.end()) {
-        auto& generations = active->second;
-        generations.erase(
-            std::remove(generations.begin(), generations.end(), request.generation),
-            generations.end());
-        if (generations.empty()) {
-          activeGenerations_.erase(active);
-        }
-      }
+      retireGeneration(request);
     }
     notifyComplete(
         request.requestId,

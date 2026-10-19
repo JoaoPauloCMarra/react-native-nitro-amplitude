@@ -42,6 +42,11 @@ jobs:
       already_published: ${{ steps.registry.outputs.already_published }}
 
     steps:
+      - name: Checkout workflow source
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
       - name: Validate release inputs
         id: validate_inputs
         env:
@@ -53,17 +58,7 @@ jobs:
           release_tag="${RAW_RELEASE_TAG}"
           dist_tag="${RAW_DIST_TAG}"
 
-          if (( ${#release_tag} == 0 || ${#release_tag} > 128 )) ||
-            [[ "${release_tag}" =~ [[:space:][:cntrl:]] || ! "${release_tag}" =~ ^v[A-Za-z0-9][A-Za-z0-9.+-]{0,126}$ ]]; then
-            echo "::error::Release tag contains unsafe characters or length."
-            exit 1
-          fi
-
-          if (( ${#dist_tag} == 0 || ${#dist_tag} > 63 )) ||
-            [[ "${dist_tag}" =~ [[:space:][:cntrl:]] || ! "${dist_tag}" =~ ^[A-Za-z][A-Za-z0-9._-]{0,62}$ || "${dist_tag}" =~ ^[vV]([0-9]|[xX*]) ]]; then
-            echo "::error::npm dist-tag contains unsafe characters or length."
-            exit 1
-          fi
+          node scripts/validate-release-tags.js "${release_tag}" "${dist_tag}" "${release_tag}"
 
           {
             printf 'release_tag=%s\n' "${release_tag}"
@@ -178,34 +173,6 @@ jobs:
       id-token: write
 
     steps:
-      - name: Validate release inputs
-        id: validate_inputs
-        env:
-          RELEASE_TAG: ${{ needs.validate.outputs.release_tag }}
-          DIST_TAG: ${{ needs.validate.outputs.dist_tag }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          release_tag="${RELEASE_TAG}"
-          dist_tag="${DIST_TAG}"
-
-          if (( ${#release_tag} == 0 || ${#release_tag} > 128 )) ||
-            [[ "${release_tag}" =~ [[:space:][:cntrl:]] || ! "${release_tag}" =~ ^v[A-Za-z0-9][A-Za-z0-9.+-]{0,126}$ ]]; then
-            echo "::error::Release tag contains unsafe characters or length."
-            exit 1
-          fi
-
-          if (( ${#dist_tag} == 0 || ${#dist_tag} > 63 )) ||
-            [[ "${dist_tag}" =~ [[:space:][:cntrl:]] || ! "${dist_tag}" =~ ^[A-Za-z][A-Za-z0-9._-]{0,62}$ || "${dist_tag}" =~ ^[vV]([0-9]|[xX*]) ]]; then
-            echo "::error::npm dist-tag contains unsafe characters or length."
-            exit 1
-          fi
-
-          {
-            printf 'release_tag=%s\n' "${release_tag}"
-            printf 'dist_tag=%s\n' "${dist_tag}"
-          } >> "${GITHUB_OUTPUT}"
-
       - name: Checkout validated release commit
         uses: actions/checkout@v7
         with:
@@ -227,6 +194,24 @@ jobs:
             echo "::error::Checked-out commit does not match the validated release commit."
             exit 1
           fi
+
+      - name: Validate release inputs
+        id: validate_inputs
+        env:
+          RELEASE_TAG: ${{ needs.validate.outputs.release_tag }}
+          DIST_TAG: ${{ needs.validate.outputs.dist_tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          release_tag="${RELEASE_TAG}"
+          dist_tag="${DIST_TAG}"
+
+          node scripts/validate-release-tags.js "${release_tag}" "${dist_tag}" "${release_tag}"
+
+          {
+            printf 'release_tag=%s\n' "${release_tag}"
+            printf 'dist_tag=%s\n' "${dist_tag}"
+          } >> "${GITHUB_OUTPUT}"
 
       - name: Setup Node
         uses: actions/setup-node@v7
@@ -273,6 +258,13 @@ jobs:
       RELEASE_COMMIT: ${{ needs.validate.outputs.release_commit }}
 
     steps:
+      - name: Checkout release tag
+        uses: actions/checkout@v7
+        with:
+          clean: true
+          ref: refs/tags/${{ needs.validate.outputs.release_tag }}
+          persist-credentials: false
+
       - name: Validate release inputs
         id: validate_inputs
         env:
@@ -284,29 +276,12 @@ jobs:
           release_tag="${RELEASE_TAG}"
           dist_tag="${DIST_TAG}"
 
-          if (( ${#release_tag} == 0 || ${#release_tag} > 128 )) ||
-            [[ "${release_tag}" =~ [[:space:][:cntrl:]] || ! "${release_tag}" =~ ^v[A-Za-z0-9][A-Za-z0-9.+-]{0,126}$ ]]; then
-            echo "::error::Release tag contains unsafe characters or length."
-            exit 1
-          fi
-
-          if (( ${#dist_tag} == 0 || ${#dist_tag} > 63 )) ||
-            [[ "${dist_tag}" =~ [[:space:][:cntrl:]] || ! "${dist_tag}" =~ ^[A-Za-z][A-Za-z0-9._-]{0,62}$ || "${dist_tag}" =~ ^[vV]([0-9]|[xX*]) ]]; then
-            echo "::error::npm dist-tag contains unsafe characters or length."
-            exit 1
-          fi
+          node scripts/validate-release-tags.js "${release_tag}" "${dist_tag}" "${release_tag}"
 
           {
             printf 'release_tag=%s\n' "${release_tag}"
             printf 'dist_tag=%s\n' "${dist_tag}"
           } >> "${GITHUB_OUTPUT}"
-
-      - name: Checkout release tag
-        uses: actions/checkout@v7
-        with:
-          clean: true
-          ref: refs/tags/${{ steps.validate_inputs.outputs.release_tag }}
-          persist-credentials: false
 
       - name: Setup Node
         uses: actions/setup-node@v7

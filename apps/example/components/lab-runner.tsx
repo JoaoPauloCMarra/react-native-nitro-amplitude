@@ -1,6 +1,6 @@
 import { useEffect, useEffectEvent, useState } from "react";
-import { StyleSheet, View } from "react-native";
-import { Card, Page, StatusRow } from "./shared";
+import { View } from "react-native";
+import { Card, Page, ResultsProbe, StatusRow } from "./shared";
 
 export type LabCaseResult = {
   name: string;
@@ -106,14 +106,9 @@ export function LabCasesScreen({
           label="mode"
           value="dry-run fixture"
         />
-        <View
+        <ResultsProbe
           testID={`e2e-${prefix}-results`}
-          accessible
-          accessibilityLabel={[
-            ...cases.map((item) => item.status),
-            summary,
-          ].join(" ")}
-          style={localStyles.resultsProbe}
+          label={[...cases.map((item) => item.status), summary].join(" ")}
         />
         <StatusRow
           testID={`e2e-${prefix}-summary`}
@@ -134,9 +129,3 @@ export function LabCasesScreen({
     </View>
   );
 }
-
-const localStyles = StyleSheet.create({
-  resultsProbe: {
-    height: 1,
-  },
-});

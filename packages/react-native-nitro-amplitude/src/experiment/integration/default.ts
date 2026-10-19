@@ -55,6 +55,7 @@ export class DefaultUserProvider implements ExperimentUserProvider {
       AnalyticsConnector.getInstance(
         "context",
       ).applicationContextProvider.getApplicationContext();
+    void this.load();
   }
 
   public start(): void {
@@ -115,10 +116,11 @@ export class DefaultUserProvider implements ExperimentUserProvider {
   async getUser(): Promise<ExperimentUser> {
     const context = await this.getApplicationContext();
     const baseUser = await this.baseProvider?.getUser();
-    return {
+    this.cachedUser = {
       ...context,
       ...(baseUser ?? {}),
     };
+    return this.cachedUser;
   }
 
   private shouldPollUserCache(): boolean {

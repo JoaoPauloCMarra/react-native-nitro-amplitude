@@ -4,6 +4,20 @@ All notable changes to this project are documented in this file.
 
 The format follows Keep a Changelog and the project adheres to SemVer.
 
+## [0.13.2] - 2026-11-10
+
+### Breaking changes
+
+- None.
+
+### Changed
+
+- Updates `@amplitude/analytics-core` to `2.62.1` and `tslib` to `2.9.1`.
+- The committed Nitro bindings are generated with Nitrogen `0.37.2`, and the
+  package gate and example are tested on `react-native-nitro-modules` `0.37.2`.
+  The generated native code is unchanged apart from its header comments. The
+  peer range is unchanged.
+
 ## [0.13.1] - 2026-11-10
 
 ### Breaking changes

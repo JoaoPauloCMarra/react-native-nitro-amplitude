@@ -7,13 +7,13 @@ does not require an artificial version bump.
 
 | Package | Recorded manifest spec | Role |
 | --- | --- | --- |
-| `@amplitude/analytics-core` | `2.60.3` | Analytics client core; exact-pinned because its contract is wrapped by this package. |
+| `@amplitude/analytics-core` | `2.62.1` | Analytics client core; exact-pinned because its contract is wrapped by this package. |
 | `@amplitude/analytics-connector` | `^1.7.0` | Shared Analytics/Experiment identity bridge. |
 | `@amplitude/experiment-core` | `^0.13.6` | Experiment evaluation, transport, and storage contracts. |
 | `@amplitude/ua-parser-js` | `^0.7.33` | Web user-agent parsing. |
 
 `react-native-nitro-modules` (peer range `>=0.37.0 <0.38.0`) is the native
-ABI dependency. Its development pin and `nitrogen` are both `0.37.1`;
+ABI dependency. Its development pin and `nitrogen` are both `0.37.2`;
 regenerate and verify bindings whenever those pins change.
 
 ## Enforcement

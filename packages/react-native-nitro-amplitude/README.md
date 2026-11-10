@@ -24,13 +24,13 @@ bun add react-native-nitro-amplitude react-native-nitro-modules
 
 ## Requirements and compatibility
 
-Compatibility for `0.13.1`:
+Compatibility for `0.13.2`:
 
 | Dependency                   | Supported range    | Tested baseline     |
 | ---------------------------- | ------------------ | ------------------- |
 | `react`                      | `>=18.2.0`         | `19.3.0`            |
 | `react-native`               | `>=0.77`           | `0.88.1`            |
-| `react-native-nitro-modules` | `>=0.37.0 <0.38.0` | `0.37.1`            |
+| `react-native-nitro-modules` | `>=0.37.0 <0.38.0` | `0.37.2`            |
 | Expo development builds      | SDK `>=53`         | SDK 58 (`~58.0.23`) |
 
 The package supports React Native `>=0.77` and Expo SDK `>=53`, the Nitro
@@ -49,11 +49,11 @@ Expo app.
 The `0.8.x`, `0.9.x`, `0.10.x`, `0.11.x`, `0.12.x`, and `0.13.x` lines keep the native peer boundary introduced in `0.7.0`:
 `react-native-nitro-amplitude` requires `react-native-nitro-modules`
 `>=0.37.0 <0.38.0`. Upgrade the Nitro package together with this package, then
-regenerate and rebuild native projects so the committed Nitro 0.37.1 bindings
+regenerate and rebuild native projects so the committed Nitro 0.37.2 bindings
 are compiled into the app:
 
 ```sh
-bun add react-native-nitro-amplitude@0.13.1 react-native-nitro-modules@0.37.1
+bun add react-native-nitro-amplitude@0.13.2 react-native-nitro-modules@0.37.2
 bunx expo prebuild
 ```
 

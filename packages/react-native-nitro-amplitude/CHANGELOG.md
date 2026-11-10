@@ -4,6 +4,36 @@ All notable changes to this project are documented in this file.
 
 The format follows Keep a Changelog and the project adheres to SemVer.
 
+## [0.13.1] - 2026-11-10
+
+### Breaking changes
+
+- None.
+
+### Fixed
+
+- A variant fetched before the stored variants finish loading is kept. Before,
+  the late load replaced it with the stored value, and a fetch for some
+  `flagKeys` could erase the stored variants of the other flags.
+- `clear()` called before the stored variants finish loading stays cleared.
+  Before, the late load restored the cleared variants.
+- `createAmplitudeClient().init()` initializes Analytics once. Repeated and
+  concurrent calls share the first initialization, and a call after a failed
+  initialization tries again. `init(user)` still sets the Experiment user on
+  every call. Calling `init()` again no longer re-runs Analytics
+  initialization.
+- A variant cache write waits for the stored variants to finish loading, so
+  a write cannot be overwritten by the late load. A storage adapter whose
+  `get` never settles now also holds the writes on that cache.
+
+### Changed
+
+- `exposure()` writes a debug log when it does not track an exposure, because
+  the user has no assigned variant or no exposure tracking provider is
+  configured. Before, it returned without a signal.
+- The package gate and example are tested on React Native `0.88.1` and Expo SDK
+  `58.0.23`. Peer ranges are unchanged.
+
 ## [0.13.0] - 2026-10-15
 
 ### Breaking changes

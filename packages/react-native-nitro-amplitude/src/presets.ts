@@ -153,11 +153,10 @@ export function createAmplitudeClient(config: AmplitudeCombinedClientConfig) {
           },
         )
       : undefined;
-  const combined = {
-    analytics,
-    experiment,
-    init: async (user?: ExperimentUser) => {
-      await analytics.init(config.analyticsApiKey, config.userId, {
+  let analyticsInit: Promise<void> | undefined;
+  const initAnalytics = (): Promise<void> => {
+    analyticsInit ??= analytics
+      .init(config.analyticsApiKey, config.userId, {
         ...storagePreset?.analytics,
         ...config.analytics,
         instanceName,
@@ -165,7 +164,18 @@ export function createAmplitudeClient(config: AmplitudeCombinedClientConfig) {
           ? (config.analytics?.transportProvider ?? dryRunTransport)
           : (config.analytics?.transportProvider ??
             storagePreset?.analytics.transportProvider),
-      }).promise;
+      })
+      .promise.catch((error: unknown) => {
+        analyticsInit = undefined;
+        throw error;
+      });
+    return analyticsInit;
+  };
+  const combined = {
+    analytics,
+    experiment,
+    init: async (user?: ExperimentUser) => {
+      await initAnalytics();
       if (experiment && user) {
         experiment.setUser(user);
       }

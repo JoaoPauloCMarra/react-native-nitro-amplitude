@@ -1055,6 +1055,15 @@ export class ExperimentClient implements Client {
     // a default variant.
     const fallback = isFallback(sourceVariant.source);
     if (fallback && !sourceVariant.hasDefaultVariant) {
+      this.logger.debug(
+        `[Experiment] No exposure tracked for ${key}: the user has no assigned variant`,
+      );
+      return;
+    }
+    if (!this.userSessionExposureTracker) {
+      this.logger.debug(
+        `[Experiment] No exposure tracked for ${key}: no exposure tracking provider is configured`,
+      );
       return;
     }
     if (sourceVariant.variant?.expKey) {
@@ -1070,7 +1079,7 @@ export class ExperimentClient implements Client {
     }
     if (metadata) exposure.metadata = metadata;
     const user = this.addContextSync(this.getUser());
-    this.userSessionExposureTracker?.track(exposure, user);
+    this.userSessionExposureTracker.track(exposure, user);
   }
 
   private shouldRetryFetch(e: unknown): boolean {

@@ -1073,6 +1073,45 @@ describe("react-native-nitro-amplitude", () => {
     ]);
   });
 
+  it("initializes analytics once across repeated combined init calls", async () => {
+    const amplitude = createAmplitudeClient({
+      analyticsApiKey: "analytics-idempotent-key",
+      experimentDeploymentKey: "deployment-idempotent-key",
+      instanceName: "idempotent-init",
+      durableStorage: false,
+      dryRun: true,
+    });
+    const init = jest.spyOn(amplitude.analytics, "init");
+    const setUser = jest.spyOn(amplitude.experiment, "setUser");
+
+    await Promise.all([amplitude.init(), amplitude.init()]);
+    await amplitude.init({ user_id: "later-user" });
+
+    expect(init).toHaveBeenCalledTimes(1);
+    expect(setUser).toHaveBeenLastCalledWith({ user_id: "later-user" });
+  });
+
+  it("retries combined init after a failed analytics init", async () => {
+    const amplitude = createAmplitudeClient({
+      analyticsApiKey: "analytics-retry-key",
+      instanceName: "retry-init",
+      durableStorage: false,
+      dryRun: true,
+    });
+    const realInit = amplitude.analytics.init.bind(amplitude.analytics);
+    const init = jest
+      .spyOn(amplitude.analytics, "init")
+      .mockImplementationOnce(() => ({
+        promise: Promise.reject(new Error("init failed")),
+      }))
+      .mockImplementation(realInit);
+
+    await expect(amplitude.init()).rejects.toThrow("init failed");
+    await amplitude.init();
+
+    expect(init).toHaveBeenCalledTimes(2);
+  });
+
   it("classifies deployment-key errors distinctly", () => {
     expect(getAmplitudeErrorCode(new Error("Missing deployment key"))).toBe(
       "invalid_deployment_key",

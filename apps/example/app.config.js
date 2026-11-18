@@ -50,7 +50,6 @@ module.exports = {
         "expo-build-properties",
         {
           ios: {
-            enableSceneSupport: true,
             ccacheEnabled: true,
           },
           android: {

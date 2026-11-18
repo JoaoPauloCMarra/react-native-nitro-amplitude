@@ -148,4 +148,40 @@ test("runs the selected E2E flow with the explicit device in fixture mode", () =
   assert.deepEqual(calls[0][1], ["test", ...e2eArgs]);
 });
 
+test("resolves --device-env from the environment", () => {
+  const calls = [];
+  const status = runExampleSmoke({
+    env: { ...fixtureEnv("1"), EXAMPLE_E2E_IOS_DEVICE: "Some Simulator" },
+    e2eArgs: ["e2e/qa-deeplink.ad", "--device-env", "EXAMPLE_E2E_IOS_DEVICE"],
+    spawn: (...args) => {
+      calls.push(args);
+      return { status: 0 };
+    },
+  });
+  assert.equal(status, 0);
+  assert.deepEqual(calls[0][1], [
+    "test",
+    "e2e/qa-deeplink.ad",
+    "--device",
+    "Some Simulator",
+  ]);
+});
+
+test("refuses --device-env when the variable is unset before launching", () => {
+  let spawnCalls = 0;
+  assert.throws(
+    () =>
+      runExampleSmoke({
+        env: fixtureEnv("1"),
+        e2eArgs: ["e2e/qa-deeplink.ad", "--device-env", "EXAMPLE_E2E_IOS_DEVICE"],
+        spawn: () => {
+          spawnCalls += 1;
+          return { status: 0 };
+        },
+      }),
+    /EXAMPLE_E2E_IOS_DEVICE/,
+  );
+  assert.equal(spawnCalls, 0);
+});
+
 console.log("Example smoke runner guard tests passed.");

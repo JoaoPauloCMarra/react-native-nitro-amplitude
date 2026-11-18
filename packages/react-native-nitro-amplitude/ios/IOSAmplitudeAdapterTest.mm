@@ -254,6 +254,11 @@ void testContextAndIdentifierForVendor() {
   for (NSString* field in @[@"version", @"language", @"country", @"osVersion", @"deviceModel"]) {
     assert([base[field] isKindOfClass:[NSString class]]);
   }
+  NSString* deviceModel = base[@"deviceModel"];
+  assert([deviceModel length] > 0);
+  for (NSString* family in @[@"iPhone", @"iPad", @"iPod touch"]) {
+    assert(![deviceModel isEqualToString:family]);
+  }
   assert(base[@"idfv"] == nil);
   assert(base[@"carrier"] == nil);
   assert(lookups == 0);

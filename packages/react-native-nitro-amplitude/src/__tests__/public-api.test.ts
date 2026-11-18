@@ -340,6 +340,14 @@ describe("react-native-nitro-amplitude", () => {
     expect(typeof ExperimentCompat.ExperimentClient).toBe("function");
   });
 
+  it("returns the same diagnostics shape from the analytics subpath as from the root", () => {
+    expect(Object.keys(AnalyticsCompat.getDiagnostics()).sort()).toEqual(
+      Object.keys(getDiagnostics()).sort(),
+    );
+    expect(AnalyticsCompat.getDiagnostics()).toHaveProperty("networkEnabled");
+    expect(typeof AnalyticsCompat.getSafeDiagnostics).toBe("function");
+  });
+
   it("prefetches native context without reading an option-specific entry", () => {
     prefetchNativeContext();
 
@@ -1089,6 +1097,271 @@ describe("react-native-nitro-amplitude", () => {
 
     expect(init).toHaveBeenCalledTimes(1);
     expect(setUser).toHaveBeenLastCalledWith({ user_id: "later-user" });
+  });
+
+  it("initializes analytics again when combined init follows shutdown", async () => {
+    const amplitude = createAmplitudeClient({
+      analyticsApiKey: "analytics-reinit-key",
+      instanceName: "reinit-after-shutdown",
+      durableStorage: false,
+      dryRun: true,
+    });
+    const init = jest.spyOn(amplitude.analytics, "init");
+
+    await amplitude.init();
+    amplitude.analytics.shutdown();
+    for (let step = 0; step < 20; step += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+    await amplitude.init();
+
+    expect(init).toHaveBeenCalledTimes(2);
+    expect(amplitude.analytics.getDiagnostics().initialized).toBe(true);
+    amplitude.analytics.shutdown();
+  });
+
+  it("initializes analytics again when combined init follows an un-awaited shutdown", async () => {
+    const amplitude = createAmplitudeClient({
+      analyticsApiKey: "analytics-immediate-reinit-key",
+      instanceName: "immediate-reinit-after-shutdown",
+      durableStorage: false,
+      dryRun: true,
+    });
+    const init = jest.spyOn(amplitude.analytics, "init");
+
+    await amplitude.init();
+    amplitude.analytics.shutdown();
+    await amplitude.init();
+
+    expect(init).toHaveBeenCalledTimes(2);
+    expect(amplitude.analytics.getDiagnostics().initialized).toBe(true);
+    amplitude.analytics.shutdown();
+  });
+
+  it("reports the client as not initialized while a shutdown is pending", async () => {
+    const amplitude = createAmplitudeClient({
+      analyticsApiKey: "analytics-pending-shutdown-key",
+      instanceName: "pending-shutdown-diagnostics",
+      durableStorage: false,
+      dryRun: true,
+    });
+
+    await amplitude.init();
+    amplitude.analytics.shutdown();
+
+    expect(amplitude.analytics.getDiagnostics().initialized).toBe(false);
+    await amplitude.init();
+    expect(amplitude.analytics.getDiagnostics().initialized).toBe(true);
+    amplitude.analytics.shutdown();
+  });
+
+  it("notifies plugins when opt-out changes on a ready client", async () => {
+    const analytics = new AmplitudeReactNative();
+    const onOptOutChanged = jest.fn();
+    try {
+      await analytics.init("opt-out-plugin-key", "opt-out-user", {
+        instanceName: "opt-out-plugin",
+        trackingSessionEvents: false,
+        transportProvider: dryRunTransport,
+      }).promise;
+      await analytics.add({
+        name: "opt-out-observer",
+        type: "enrichment",
+        setup: async () => undefined,
+        execute: async (event) => event,
+        onOptOutChanged,
+      }).promise;
+
+      analytics.setOptOut(true);
+
+      expect(onOptOutChanged).toHaveBeenCalledTimes(1);
+      expect(onOptOutChanged).toHaveBeenCalledWith(true);
+      expect(analytics.config.optOut).toBe(true);
+    } finally {
+      analytics.shutdown();
+    }
+  });
+
+  it("lets a shutdown called during init win", async () => {
+    clearDryRunTransportRecords();
+    const analytics = new AmplitudeReactNative();
+    const { AppState } = jest.requireMock("react-native") as {
+      AppState: { addEventListener: jest.Mock };
+    };
+    const callsBefore = AppState.addEventListener.mock.calls.length;
+    const init = analytics.init("shutdown-during-init-key", "user", {
+      instanceName: "shutdown-during-init",
+      trackingSessionEvents: false,
+      migrateLegacyData: false,
+      transportProvider: dryRunTransport,
+    }).promise;
+    await Promise.resolve();
+    analytics.shutdown();
+    await init;
+    for (let step = 0; step < 20; step += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+
+    expect(analytics.getDiagnostics().initialized).toBe(false);
+    const listeners = AppState.addEventListener.mock.results.slice(callsBefore);
+    for (const result of listeners) {
+      expect((result.value as { remove: jest.Mock }).remove).toHaveBeenCalled();
+    }
+    analytics.track("after_shutdown_event");
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(
+      getDryRunAnalyticsEvents().some((entry) =>
+        entry.payload.events.some(
+          (event) => event.event_type === "after_shutdown_event",
+        ),
+      ),
+    ).toBe(false);
+  });
+
+  it("lets a combined shutdown during init win and re-initializes later", async () => {
+    const amplitude = createAmplitudeClient({
+      analyticsApiKey: "analytics-shutdown-during-init-key",
+      instanceName: "combined-shutdown-during-init",
+      durableStorage: false,
+      dryRun: true,
+    });
+    const init = jest.spyOn(amplitude.analytics, "init");
+
+    const first = amplitude.init();
+    await Promise.resolve();
+    amplitude.analytics.shutdown();
+    await first;
+    for (let step = 0; step < 20; step += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+    expect(amplitude.analytics.getDiagnostics().initialized).toBe(false);
+
+    await amplitude.init();
+    expect(init).toHaveBeenCalledTimes(2);
+    expect(amplitude.analytics.getDiagnostics().initialized).toBe(true);
+    amplitude.analytics.shutdown();
+  });
+
+  it("ends shut down after init, shutdown, init, shutdown without awaiting", async () => {
+    const unhandled = jest.fn();
+    process.on("unhandledRejection", unhandled);
+    const analytics = new AmplitudeReactNative();
+    const options = {
+      instanceName: "init-shutdown-chain",
+      trackingSessionEvents: false,
+      migrateLegacyData: false,
+      transportProvider: dryRunTransport,
+    };
+    try {
+      const first = analytics.init("chain-key", "user", options).promise;
+      analytics.shutdown();
+      const second = analytics.init("chain-key", "user", options).promise;
+      analytics.shutdown();
+      await Promise.allSettled([first, second]);
+      for (let step = 0; step < 30; step += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }
+
+      expect(analytics.getDiagnostics().initialized).toBe(false);
+      expect(unhandled).not.toHaveBeenCalled();
+    } finally {
+      process.off("unhandledRejection", unhandled);
+    }
+  });
+
+  it("ends initialized after init, shutdown, init without awaiting", async () => {
+    clearDryRunTransportRecords();
+    const analytics = new AmplitudeReactNative();
+    const { AppState } = jest.requireMock("react-native") as {
+      AppState: { addEventListener: jest.Mock };
+    };
+    const callsBefore = AppState.addEventListener.mock.calls.length;
+    const options = {
+      instanceName: "strict-mode-order",
+      trackingSessionEvents: false,
+      migrateLegacyData: false,
+      transportProvider: dryRunTransport,
+    };
+    try {
+      const first = analytics.init("strict-key", "user", options).promise;
+      analytics.shutdown();
+      const second = analytics.init("strict-key", "user", options).promise;
+      await Promise.all([first, second]);
+
+      expect(analytics.getDiagnostics().initialized).toBe(true);
+      const live = AppState.addEventListener.mock.results
+        .slice(callsBefore)
+        .filter(
+          (result) =>
+            !(result.value as { remove: jest.Mock }).remove.mock.calls.length,
+        );
+      expect(live).toHaveLength(1);
+      const { timeline } = analytics as unknown as {
+        timeline: { plugins: unknown[] };
+      };
+      expect(
+        timeline.plugins.filter((plugin) => plugin instanceof Destination),
+      ).toHaveLength(1);
+      analytics.track("strict_mode_event");
+      analytics.shutdown();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(
+        getDryRunAnalyticsEvents().filter((entry) =>
+          entry.payload.events.some(
+            (event) => event.event_type === "strict_mode_event",
+          ),
+        ),
+      ).toHaveLength(1);
+    } finally {
+      analytics.shutdown();
+    }
+  });
+
+  it("ends initialized after combined init, shutdown, init without awaiting", async () => {
+    const amplitude = createAmplitudeClient({
+      analyticsApiKey: "analytics-strict-mode-key",
+      instanceName: "combined-strict-mode-order",
+      durableStorage: false,
+      dryRun: true,
+    });
+
+    const first = amplitude.init();
+    amplitude.analytics.shutdown();
+    const second = amplitude.init();
+    await Promise.all([first, second]);
+
+    expect(amplitude.analytics.getDiagnostics().initialized).toBe(true);
+    amplitude.analytics.shutdown();
+  });
+
+  it("ends initialized after init, shutdown, init, shutdown, init without awaiting", async () => {
+    const unhandled = jest.fn();
+    process.on("unhandledRejection", unhandled);
+    const analytics = new AmplitudeReactNative();
+    const options = {
+      instanceName: "init-shutdown-chain-three",
+      trackingSessionEvents: false,
+      migrateLegacyData: false,
+      transportProvider: dryRunTransport,
+    };
+    try {
+      const calls = [analytics.init("chain3-key", "user", options).promise];
+      analytics.shutdown();
+      calls.push(analytics.init("chain3-key", "user", options).promise);
+      analytics.shutdown();
+      calls.push(analytics.init("chain3-key", "user", options).promise);
+      await Promise.all(calls);
+      for (let step = 0; step < 30; step += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }
+
+      expect(analytics.getDiagnostics().initialized).toBe(true);
+      expect(unhandled).not.toHaveBeenCalled();
+    } finally {
+      process.off("unhandledRejection", unhandled);
+      analytics.shutdown();
+    }
   });
 
   it("retries combined init after a failed analytics init", async () => {

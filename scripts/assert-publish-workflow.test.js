@@ -71,6 +71,16 @@ test("rejects publishing from a tag instead of the validated commit", () => {
   assert.equal(result.status, 1, result.stdout);
 });
 
+test("rejects a dependency cache in the OIDC publish job", () => {
+  const fixture = Bun.YAML.parse(workflow);
+  fixture.jobs.publish.steps.splice(1, 0, {
+    uses: "actions/cache@v6",
+    with: { path: "~/.bun/install/cache", key: "bun" },
+  });
+  const result = checkFixture(Bun.YAML.stringify(fixture));
+  assert.equal(result.status, 1, result.stdout);
+});
+
 test("rejects a missing pre-publish commit check", () => {
   const fixture = Bun.YAML.parse(workflow);
   fixture.jobs.publish.steps = fixture.jobs.publish.steps.filter(

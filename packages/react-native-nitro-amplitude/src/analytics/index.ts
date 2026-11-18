@@ -1,4 +1,12 @@
 import client from "./react-native-client";
+import type {
+  AmplitudeDiagnostics,
+  AmplitudeSafeDiagnostics,
+} from "../diagnostics";
+import {
+  getAmplitudeDiagnostics,
+  getSafeAmplitudeDiagnostics,
+} from "../diagnostics";
 
 // Export types to maintain backward compatibility with `analytics-types`.
 // In the next major version, only export customer-facing types to reduce the public API surface.
@@ -26,9 +34,16 @@ export const {
   track,
   extendSession,
   flushWithResult,
-  getDiagnostics,
   healthCheck,
 } = client;
+
+export function getDiagnostics(): AmplitudeDiagnostics {
+  return getAmplitudeDiagnostics(client);
+}
+
+export function getSafeDiagnostics(): AmplitudeSafeDiagnostics {
+  return getSafeAmplitudeDiagnostics(client);
+}
 
 export { Revenue, Identify } from "@amplitude/analytics-core";
 export {

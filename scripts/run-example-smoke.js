@@ -14,11 +14,33 @@ function assertDryRunEnvironment(env = process.env) {
   }
 }
 
+function resolveDeviceEnv(e2eArgs, env) {
+  const resolved = [];
+  for (let index = 0; index < e2eArgs.length; index += 1) {
+    if (e2eArgs[index] !== "--device-env") {
+      resolved.push(e2eArgs[index]);
+      continue;
+    }
+    const name = e2eArgs[index + 1];
+    const device = name ? env[name] : undefined;
+    if (!device) {
+      throw new Error(
+        `Set ${name ?? "the device variable"} to the simulator or device name before running this script.`,
+      );
+    }
+    resolved.push("--device", device);
+    index += 1;
+  }
+  return resolved;
+}
+
 function runExampleSmoke({ env = process.env, spawn = spawnSync, e2eArgs } = {}) {
   assertDryRunEnvironment(env);
 
   const command = e2eArgs ? "agent-device" : "maestro";
-  const args = e2eArgs ? ["test", ...e2eArgs] : maestroArgs;
+  const args = e2eArgs
+    ? ["test", ...resolveDeviceEnv(e2eArgs, env)]
+    : maestroArgs;
   const result = spawn(command, args, {
     cwd: projectRoot,
     env,

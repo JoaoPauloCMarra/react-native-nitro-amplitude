@@ -159,11 +159,18 @@ export class AmplitudeReactNative
   override userProperties: Record<string, unknown> | undefined;
 
   init(apiKey = "", userId?: string, options?: ReactNativeOptions) {
-    this.initPromise =
-      this.initPromise ??
-      this._init({ ...options, userId, apiKey }).finally(() => {
-        this.initPromise = undefined;
+    if (this.initPromise === undefined) {
+      const run: Promise<void> = this._init({
+        ...options,
+        userId,
+        apiKey,
+      }).finally(() => {
+        if (this.initPromise === run) {
+          this.initPromise = undefined;
+        }
       });
+      this.initPromise = run;
+    }
     return returnWrapper(this.initPromise);
   }
 
@@ -210,6 +217,7 @@ export class AmplitudeReactNative
   protected override async _init(
     options: ReactNativeOptions & { apiKey: string },
   ) {
+    await this.shutdownPromise?.catch(() => undefined);
     // Step 0: Block concurrent initialization
     if (this.initializing) {
       return;
@@ -218,7 +226,6 @@ export class AmplitudeReactNative
     let appStateHandlerInstalled = false;
 
     try {
-      await this.shutdownPromise?.catch(() => undefined);
       this.lastScreenName = undefined;
       this.explicitSessionId = options.sessionId;
 
@@ -305,10 +312,12 @@ export class AmplitudeReactNative
       }
     });
     this.shutdownPromise = pending;
+    this.initPromise = undefined;
     void pending;
   }
 
   private async shutdownAndFlush(): Promise<void> {
+    await this.initPromise?.catch(() => undefined);
     if (this.config && this.isReady) {
       try {
         await this.flush().promise;
@@ -446,10 +455,10 @@ export class AmplitudeReactNative
   }
 
   override setOptOut(optOut: boolean) {
+    super.setOptOut(optOut);
     if (this.config && this.isReady) {
       this.config.optOut = Boolean(optOut);
     }
-    super.setOptOut(optOut);
   }
 
   reset() {
@@ -785,7 +794,12 @@ export class AmplitudeReactNative
 
   getDiagnostics(): AmplitudeAnalyticsDiagnostics {
     return {
-      initialized: Boolean(this.config && this.isReady),
+      initialized: Boolean(
+        this.config &&
+        this.isReady &&
+        this.shutdownPromise === undefined &&
+        this.initPromise === undefined,
+      ),
       instanceName: this.config?.instanceName,
       userId: this.getUserId(),
       deviceId: this.getDeviceId(),

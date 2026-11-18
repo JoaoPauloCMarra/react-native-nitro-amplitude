@@ -42,6 +42,10 @@ for (const [name, job] of Object.entries(workflow.jobs)) {
 }
 
 const publishSteps = workflow.jobs.publish.steps;
+assert.ok(
+  publishSteps.every((step) => !step.uses?.startsWith("actions/cache@")),
+  "publish must not restore a dependency cache while it holds OIDC",
+);
 const checkoutIndex = publishSteps.findIndex((step) =>
   step.uses?.startsWith("actions/checkout@"),
 );

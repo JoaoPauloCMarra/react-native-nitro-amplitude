@@ -4,6 +4,44 @@ All notable changes to this project are documented in this file.
 
 The format follows Keep a Changelog and the project adheres to SemVer.
 
+## [0.14.0] - 2026-11-18
+
+### Breaking changes
+
+- On iOS, `device_model` now carries the hardware identifier (for example
+  `iPhone17,1`) instead of the device family (`iPhone`, `iPad`). On the iOS
+  Simulator it carries the simulated model. Migration: dashboards, cohorts and
+  Experiment targeting that match `device_model` equal to `iPhone` or `iPad`
+  must match the hardware identifiers. `os_name` is unchanged.
+
+### Added
+
+- `react-native-nitro-amplitude/analytics` also exports `getSafeDiagnostics`.
+
+### Fixed
+
+- `setOptOut` on a ready client now calls `onOptOutChanged` on plugins added
+  with `add`. Before, the call was skipped.
+- The combined client from `createAmplitudeClient` initializes analytics again
+  when `init()` runs after `analytics.shutdown()`. Concurrent and repeated
+  `init()` calls on a ready client still share one initialization. This also
+  holds when `init()` runs right after `shutdown()` without waiting for it.
+- `getDiagnostics().initialized` is `false` while an `init()` is still in flight
+  and while a `shutdown()` is pending, and `true` only when the client is fully
+  live. A pending shutdown counts from the moment `shutdown()` is called. Before,
+  it stayed `true` while the final flush ran. A `shutdown()` called while `init()` is still running now waits
+  for that `init()` and then shuts the client down, so the last call wins. An
+  `init()` called while a shutdown is pending runs after that shutdown, so
+  `init()`, `shutdown()`, `init()` without awaits ends initialized.
+- `getDiagnostics` from `react-native-nitro-amplitude/analytics` now returns the
+  same full object as the root export (native state, failures, network timings,
+  worker metrics).
+
+### Changed
+
+- The example app and package gate are tested on Expo SDK 58 patch level
+  `58.0.26` (`expo-router` `~58.0.32`). The peer ranges are unchanged.
+
 ## [0.13.2] - 2026-11-10
 
 ### Breaking changes

@@ -10,7 +10,10 @@
 #include "LegacyDiskMigration.hpp"
 #include "PosixFileAdapter.hpp"
 
+#include <sys/utsname.h>
+
 #include <algorithm>
+#include <cstdlib>
 #include <memory>
 #include <optional>
 #include <stdexcept>
@@ -221,16 +224,30 @@ static NSString* CanonicalOptions(NSDictionary* options) {
   return [parts componentsJoinedByString:@"&"];
 }
 
+static NSString* HardwareModelIdentifier() {
+  const char* simulatorModel = getenv("SIMULATOR_MODEL_IDENTIFIER");
+  if (simulatorModel != nullptr && simulatorModel[0] != '\0') {
+    return [NSString stringWithUTF8String:simulatorModel];
+  }
+  struct utsname systemInfo;
+  if (uname(&systemInfo) == 0 && systemInfo.machine[0] != '\0') {
+    return [NSString stringWithUTF8String:systemInfo.machine];
+  }
+  return nil;
+}
+
 static NSDictionary* BaseContext() {
   static NSDictionary* base = []() {
     NSString* systemName = nil;
     NSString* systemVersion = nil;
-    NSString* deviceModel = nil;
+    NSString* deviceModel = HardwareModelIdentifier();
 #if NITRO_AMPLITUDE_HAS_UIKIT
     UIDevice* device = [UIDevice currentDevice];
     systemName = device.systemName;
     systemVersion = device.systemVersion;
-    deviceModel = device.model;
+    if (deviceModel.length == 0) {
+      deviceModel = device.model;
+    }
 #endif
     NSLocale* locale = [NSLocale currentLocale];
     NSString* version = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleShortVersionString"];

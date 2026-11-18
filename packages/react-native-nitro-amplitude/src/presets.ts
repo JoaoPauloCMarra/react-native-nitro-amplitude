@@ -154,8 +154,19 @@ export function createAmplitudeClient(config: AmplitudeCombinedClientConfig) {
         )
       : undefined;
   let analyticsInit: Promise<void> | undefined;
+  const shutdownAnalytics = analytics.shutdown.bind(analytics);
+  analytics.shutdown = () => {
+    analyticsInit = undefined;
+    shutdownAnalytics();
+  };
   const initAnalytics = (): Promise<void> => {
-    analyticsInit ??= analytics
+    if (analyticsInit !== undefined) {
+      return analyticsInit;
+    }
+    if (analytics.getDiagnostics().initialized) {
+      return Promise.resolve();
+    }
+    const run: Promise<void> = analytics
       .init(config.analyticsApiKey, config.userId, {
         ...storagePreset?.analytics,
         ...config.analytics,
@@ -165,11 +176,13 @@ export function createAmplitudeClient(config: AmplitudeCombinedClientConfig) {
           : (config.analytics?.transportProvider ??
             storagePreset?.analytics.transportProvider),
       })
-      .promise.catch((error: unknown) => {
-        analyticsInit = undefined;
-        throw error;
+      .promise.finally(() => {
+        if (analyticsInit === run) {
+          analyticsInit = undefined;
+        }
       });
-    return analyticsInit;
+    analyticsInit = run;
+    return run;
   };
   const combined = {
     analytics,

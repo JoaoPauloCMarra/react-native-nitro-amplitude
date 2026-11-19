@@ -156,8 +156,11 @@ class AndroidAmplitudeAdapterTest {
 
   private fun legacyPrefs() = context().getSharedPreferences("NitroAmplitude", Context.MODE_PRIVATE)
 
+  private val defaultFallbackContextProvider = AndroidAmplitudeAdapter.fallbackContextProvider
+
   @Before
   fun setUp() {
+    AndroidAmplitudeAdapter.fallbackContextProvider = { null }
     AndroidAmplitudeAdapter.setContext(context())
     clearCachedContexts()
     legacyPrefs().edit().clear().commit()
@@ -165,6 +168,7 @@ class AndroidAmplitudeAdapterTest {
 
   @After
   fun tearDown() {
+    AndroidAmplitudeAdapter.fallbackContextProvider = defaultFallbackContextProvider
     AndroidAmplitudeAdapter.setContext(context())
     clearCachedContexts()
   }
@@ -538,6 +542,24 @@ class AndroidAmplitudeAdapterTest {
     AndroidAmplitudeAdapter.prefetchContext()
     drainPrefetchExecutor()
     assertEquals("Android", JSONObject(AndroidAmplitudeAdapter.getApplicationContextJson()).getString("platform"))
+  }
+
+  @Test
+  fun callsUseTheReactContextWhenTheInitializerDidNotRun() {
+    setStaticField("appContext", null)
+    var fallbackReads = 0
+    AndroidAmplitudeAdapter.fallbackContextProvider = {
+      fallbackReads += 1
+      context()
+    }
+
+    assertEquals(
+      java.io.File(context().filesDir, "nitro-amplitude").absolutePath,
+      AndroidAmplitudeAdapter.getStorageDirectory(),
+    )
+    assertEquals("Android", JSONObject(AndroidAmplitudeAdapter.getApplicationContextJson()).getString("platform"))
+    assertEquals(0, AndroidAmplitudeAdapter.getLegacyDiskEntries().size)
+    assertEquals(1, fallbackReads)
   }
 
   @Test

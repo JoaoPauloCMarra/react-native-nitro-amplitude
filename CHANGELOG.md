@@ -4,6 +4,20 @@ All notable changes to this project are documented in this file.
 
 The format follows Keep a Changelog and the project adheres to SemVer.
 
+## [0.14.1] - 2026-11-19
+
+### Breaking changes
+
+- None.
+
+### Fixed
+
+- On Android, the native storage, device context and legacy migration calls no
+  longer fail with `NitroAmplitude: context not initialized` when Android starts
+  the app process without running the package's content provider. The package
+  now falls back to the application context from Nitro's React context. Before, durable
+  storage writes failed with `disk_adapter_unavailable`.
+
 ## [0.14.0] - 2026-11-18
 
 ### Breaking changes

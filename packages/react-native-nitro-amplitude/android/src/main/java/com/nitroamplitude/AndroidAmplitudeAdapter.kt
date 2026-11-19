@@ -3,6 +3,7 @@ package com.nitroamplitude
 import android.content.Context
 import android.content.SharedPreferences
 import android.os.Build
+import com.margelo.nitro.NitroModules
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -42,7 +43,10 @@ object AndroidAmplitudeAdapter {
       "|::$IPV6_GROUP(?::$IPV6_GROUP){0,6})(?![\\w:])(?:%\\w+)?",
   )
 
+  @Volatile
   private var appContext: Context? = null
+  @Volatile
+  internal var fallbackContextProvider: () -> Context? = { NitroModules.applicationContext }
   private val executor = Executors.newSingleThreadExecutor()
   private val httpTimeoutExecutor: ScheduledExecutorService =
     ScheduledThreadPoolExecutor(
@@ -70,7 +74,9 @@ object AndroidAmplitudeAdapter {
 
   @JvmStatic
   fun getContext(): Context {
-    return appContext ?: throw IllegalStateException("NitroAmplitude: context not initialized")
+    return appContext
+      ?: fallbackContextProvider()?.applicationContext?.also { appContext = it }
+      ?: throw IllegalStateException("NitroAmplitude: context not initialized")
   }
 
   private fun legacyPrefs(): SharedPreferences {

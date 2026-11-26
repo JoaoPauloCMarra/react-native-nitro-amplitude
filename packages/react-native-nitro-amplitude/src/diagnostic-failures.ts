@@ -27,13 +27,18 @@ export type AmplitudeDiagnosticFailureKind =
   | "unknown";
 
 export type AmplitudeDiagnosticOperation =
-  "analytics_upload" | "experiment_fetch" | "session_storage_read";
+  | "analytics_upload"
+  | "experiment_fetch"
+  | "session_storage_read"
+  | "storage_write";
 
 export type AmplitudeDiagnosticSurface =
   | "analytics_upload"
   | "experiment_variant_fetch"
   | "experiment_flag_fetch"
-  | "session_storage";
+  | "session_storage"
+  | "event_storage"
+  | "experiment_storage";
 
 const DEFAULT_SURFACES: Record<
   AmplitudeDiagnosticOperation,
@@ -42,6 +47,7 @@ const DEFAULT_SURFACES: Record<
   analytics_upload: "analytics_upload",
   experiment_fetch: "experiment_variant_fetch",
   session_storage_read: "session_storage",
+  storage_write: "event_storage",
 };
 
 export type AmplitudeDiagnosticFailure = {

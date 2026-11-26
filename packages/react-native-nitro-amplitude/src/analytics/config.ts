@@ -20,6 +20,7 @@ import { isNative } from "../platform";
 import { NetworkGuardedFetchTransport } from "./network-guarded-fetch-transport";
 import {
   createDiagnosticAnalyticsTransport,
+  recordDiagnosticFailure,
   reportSessionReadFailure,
 } from "../diagnostic-failures";
 
@@ -57,9 +58,33 @@ export function getDefaultTransport(): Transport {
 }
 
 function asEventStorage(
-  storage?: ReactNativeOptions["storageProvider"],
+  storage: ReactNativeOptions["storageProvider"],
+  logger: ReactNativeOptions["loggerProvider"],
 ): Storage<Event[]> | undefined {
-  return storage as Storage<Event[]> | undefined;
+  if (!storage) return undefined;
+  const events = storage as Storage<Event[]>;
+  const reportWriteFailure = (error: unknown) => {
+    logger?.error(`Failed to persist analytics events: ${String(error)}`);
+    recordDiagnosticFailure({
+      operation: "storage_write",
+      surface: "event_storage",
+      kind: "storage_error",
+    });
+  };
+  return {
+    isEnabled: () => events.isEnabled(),
+    get: (key) => events.get(key),
+    getRaw: (key) => events.getRaw(key),
+    set: (key, value) =>
+      Promise.resolve()
+        .then(() => events.set(key, value))
+        .catch(reportWriteFailure),
+    remove: (key) =>
+      Promise.resolve()
+        .then(() => events.remove(key))
+        .catch(reportWriteFailure),
+    reset: () => events.reset(),
+  };
 }
 
 export const getDefaultConfig = () => {
@@ -147,7 +172,10 @@ export class ReactNativeConfig extends Config implements IReactNativeConfig {
           : LogLevel.None,
       ...options,
       apiKey,
-      storageProvider: asEventStorage(options?.storageProvider),
+      storageProvider: asEventStorage(
+        options?.storageProvider,
+        options?.loggerProvider,
+      ),
       transportProvider: createDiagnosticAnalyticsTransport(
         options?.transportProvider ?? defaultConfig.transportProvider,
       ),
@@ -499,7 +527,7 @@ export const createEventsStorage = async (
   // Otherwise storageProvider is overriden
   if (!hasStorageProviderProperty || overrides.storageProvider) {
     for (const storage of [
-      asEventStorage(overrides?.storageProvider),
+      overrides?.storageProvider as Storage<Event[]> | undefined,
       hasStorageProviderProperty ? undefined : baseConfig.storageProvider,
       new LocalStorage<Event[]>(),
     ]) {

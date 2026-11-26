@@ -24,7 +24,7 @@ bun add react-native-nitro-amplitude react-native-nitro-modules
 
 ## Requirements and compatibility
 
-Compatibility for `0.14.1`:
+Compatibility for `0.15.0`:
 
 | Dependency                   | Supported range    | Tested baseline     |
 | ---------------------------- | ------------------ | ------------------- |
@@ -53,7 +53,7 @@ regenerate and rebuild native projects so the committed Nitro 0.37.2 bindings
 are compiled into the app:
 
 ```sh
-bun add react-native-nitro-amplitude@0.14.1 react-native-nitro-modules@0.37.2
+bun add react-native-nitro-amplitude@0.15.0 react-native-nitro-modules@0.37.2
 bunx expo prebuild
 ```
 
@@ -313,6 +313,56 @@ data. The Experiment `LocalStorage` export (`ExperimentLocalStorage` from the
 root entry) is memory-only and deprecated; use `NitroExperimentStorage` or the
 durable storage preset for variants that must survive restarts. Persisted session state is plain
 text in the app sandbox; do not rely on it for secrets.
+
+### Use your own key-value store
+
+If your app already has a storage layer (for example
+`react-native-nitro-storage`), give it to `createKeyValueAmplitudeStorage`
+instead of writing Amplitude storage adapters:
+
+```ts
+import {
+  createAmplitudeClient,
+  createKeyValueAmplitudeStorage,
+} from "react-native-nitro-amplitude";
+import { StorageScope, storage } from "react-native-nitro-storage";
+
+const amplitudeStorage = createKeyValueAmplitudeStorage({
+  namespace: "my-app",
+  store: {
+    getItem: (key) => storage.getString(key, StorageScope.Disk),
+    setItem: (key, value) => storage.setString(key, value, StorageScope.Disk),
+    removeItem: (key) => storage.deleteString(key, StorageScope.Disk),
+    removeItemsByPrefix: (prefix) => {
+      for (const key of storage.getKeysByPrefix(prefix, StorageScope.Disk)) {
+        storage.deleteString(key, StorageScope.Disk);
+      }
+    },
+  },
+  onError: ({ store, operation, error }) => {
+    console.warn(`Amplitude ${store} ${operation} failed`, error);
+  },
+});
+
+const client = createAmplitudeClient({
+  analyticsApiKey: "AMPLITUDE_API_KEY",
+  durableStorage: false,
+  analytics: amplitudeStorage.analytics,
+  experiment: amplitudeStorage.experiment,
+});
+```
+
+- Keys are `<namespace>:<store>::<key>`, where `<store>` is `analytics-events`,
+  `analytics-session` or `experiment-variants`.
+- Failed writes and resets never reject. They go to `onError` (or
+  `console.error` when no handler is set) and are recorded as `storage_write`
+  diagnostic failures.
+- Failed reads go to `onError` and then reject, so the session store keeps its
+  fail-closed behavior.
+- A stored value that is not valid JSON is reported as `parse`, removed and
+  read as empty.
+- Pass `experimentStore` to keep experiment variants in a different store, for
+  example a memory-only one.
 
 ## Network Controls
 
@@ -579,7 +629,8 @@ Experiment exports:
 Presets and combined client:
 
 - `createDurableAmplitudeStoragePreset`, `createPersistentAmplitudeConfig`,
-  `createAmplitudeClient`, `createExperimentUser`, `getConnectorIdentity`.
+  `createKeyValueAmplitudeStorage`, `createAmplitudeClient`,
+  `createExperimentUser`, `getConnectorIdentity`.
 
 Native HybridObject types:
 

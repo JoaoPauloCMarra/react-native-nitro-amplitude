@@ -90,6 +90,14 @@ export type {
   AmplitudeDiagnosticOperation,
   AmplitudeDiagnosticSurface,
 } from "./diagnostic-failures";
+export { createKeyValueAmplitudeStorage } from "./key-value-storage";
+export type {
+  AmplitudeKeyValueStorage,
+  AmplitudeKeyValueStorageFailure,
+  AmplitudeKeyValueStorageOptions,
+  AmplitudeKeyValueStore,
+  AmplitudeKeyValueStoreName,
+} from "./key-value-storage";
 export {
   AmplitudeError,
   createAmplitudeError,

@@ -7,6 +7,7 @@ jest.mock("../native/context", () => ({
 import { LogLevel } from "@amplitude/analytics-core";
 import type { Event, Logger, Storage } from "@amplitude/analytics-core";
 import { useReactNativeConfig } from "../analytics/config";
+import { getDiagnosticFailures } from "../diagnostic-failures";
 
 const writeFailure = new Error(
   "Storage.set(...): NitroStorage: Disk SQLite set failed: database or disk is full",
@@ -54,6 +55,14 @@ test("a failing event store write is logged instead of rejecting", async () => {
     config.storageProvider?.remove("events"),
   ).resolves.toBeUndefined();
   expect(loggerProvider.error).toHaveBeenCalledTimes(2);
+  expect(getDiagnosticFailures()).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        operation: "storage_write",
+        surface: "event_storage",
+      }),
+    ]),
+  );
   expect(String(loggerProvider.error.mock.calls[0]?.[0])).toContain(
     "database or disk is full",
   );

@@ -20,6 +20,7 @@ import { isNative } from "../platform";
 import { NetworkGuardedFetchTransport } from "./network-guarded-fetch-transport";
 import {
   createDiagnosticAnalyticsTransport,
+  recordDiagnosticFailure,
   reportSessionReadFailure,
 } from "../diagnostic-failures";
 
@@ -64,6 +65,11 @@ function asEventStorage(
   const events = storage as Storage<Event[]>;
   const reportWriteFailure = (error: unknown) => {
     logger?.error(`Failed to persist analytics events: ${String(error)}`);
+    recordDiagnosticFailure({
+      operation: "storage_write",
+      surface: "event_storage",
+      kind: "storage_error",
+    });
   };
   return {
     isEnabled: () => events.isEnabled(),

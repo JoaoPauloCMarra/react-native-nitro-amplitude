@@ -111,6 +111,27 @@ test("writes that fail are reported and do not reject", async () => {
   );
 });
 
+test("an onError handler that throws does not make writes reject", async () => {
+  const consoleError = jest
+    .spyOn(console, "error")
+    .mockImplementation(() => undefined);
+  const storage = createKeyValueAmplitudeStorage({
+    store: createFailingStore(),
+    onError: () => {
+      throw new Error("logger failed");
+    },
+  });
+
+  await expect(
+    storage.analytics.storageProvider.set("events", []),
+  ).resolves.toBeUndefined();
+  await expect(storage.analytics.storageProvider.getRaw("events")).rejects.toBe(
+    diskFull,
+  );
+  expect(consoleError).toHaveBeenCalled();
+  consoleError.mockRestore();
+});
+
 test("reads that fail are reported and still reject", async () => {
   const failures: AmplitudeKeyValueStorageFailure[] = [];
   const storage = createKeyValueAmplitudeStorage({

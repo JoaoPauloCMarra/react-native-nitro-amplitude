@@ -65,9 +65,15 @@ function createReporter(
         kind: "storage_error",
       });
     }
-    if (onError) {
-      onError({ store, operation, error });
-      return;
+    try {
+      if (onError) {
+        onError({ store, operation, error });
+        return;
+      }
+    } catch (handlerError) {
+      console.error(
+        `NitroAmplitude: onError threw for ${store} ${operation}: ${String(handlerError)}`,
+      );
     }
     console.error(
       `NitroAmplitude: ${store} ${operation} failed: ${String(error)}`,

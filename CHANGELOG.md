@@ -20,14 +20,16 @@ The format follows Keep a Changelog and the project adheres to SemVer.
   store that has `getItem`, `setItem`, `removeItem` and
   `removeItemsByPrefix`. Apps that keep their own storage layer no longer need
   to write Amplitude storage adapters. Failed writes never reject and go to
-  `onError`. Failed reads go to `onError` and then reject. Values that are not
+  `onError`, or to the console when `onError` is missing or throws. Failed
+  reads go to `onError` and then reject. Values that are not
   valid JSON are removed and read as empty. `experimentStore` keeps variants in
   a separate store.
 
 ### Fixed
 
 - A `storageProvider` that fails to save or remove queued events no longer
-  causes an unhandled promise rejection. Amplitude writes the event queue
+  causes an unhandled promise rejection, even when it throws before it returns
+  a promise. Amplitude writes the event queue
   without waiting for the result, so a full disk sent one unhandled rejection
   per flush. The package now reports the failure through `loggerProvider`,
   records a `storage_write` diagnostic failure and keeps tracking, as it

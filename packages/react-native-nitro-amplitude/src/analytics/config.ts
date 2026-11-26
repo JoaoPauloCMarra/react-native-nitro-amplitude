@@ -75,8 +75,14 @@ function asEventStorage(
     isEnabled: () => events.isEnabled(),
     get: (key) => events.get(key),
     getRaw: (key) => events.getRaw(key),
-    set: (key, value) => events.set(key, value).catch(reportWriteFailure),
-    remove: (key) => events.remove(key).catch(reportWriteFailure),
+    set: (key, value) =>
+      Promise.resolve()
+        .then(() => events.set(key, value))
+        .catch(reportWriteFailure),
+    remove: (key) =>
+      Promise.resolve()
+        .then(() => events.remove(key))
+        .catch(reportWriteFailure),
     reset: () => events.reset(),
   };
 }

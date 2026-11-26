@@ -68,6 +68,30 @@ test("a failing event store write is logged instead of rejecting", async () => {
   );
 });
 
+test("a store that throws before returning a promise is logged instead of throwing", async () => {
+  const loggerProvider = createLogger();
+  const storageProvider = {
+    ...createFailingWriteStorage(),
+    set: () => {
+      throw writeFailure;
+    },
+    remove: () => undefined,
+  } as unknown as Storage<Event[]>;
+  const config = await useReactNativeConfig("api-key", {
+    storageProvider,
+    loggerProvider,
+    disableCookies: true,
+  });
+
+  await expect(
+    config.storageProvider?.set("events", []),
+  ).resolves.toBeUndefined();
+  await expect(
+    config.storageProvider?.remove("events"),
+  ).resolves.toBeUndefined();
+  expect(loggerProvider.error).toHaveBeenCalledTimes(1);
+});
+
 test("a working event store keeps its values", async () => {
   const values = new Map<string, Event[]>();
   const storageProvider: Storage<Event[]> = {

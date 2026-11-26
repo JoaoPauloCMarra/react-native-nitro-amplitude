@@ -4,6 +4,20 @@ All notable changes to this project are documented in this file.
 
 The format follows Keep a Changelog and the project adheres to SemVer.
 
+## [0.14.2] - 2026-11-26
+
+### Breaking changes
+
+- None.
+
+### Fixed
+
+- A `storageProvider` that fails to save or remove queued events no longer
+  causes an unhandled promise rejection. Amplitude writes the event queue
+  without waiting for the result, so a full disk sent one unhandled rejection
+  per flush. The package now reports the failure through `loggerProvider` and
+  keeps tracking, as it already did for `cookieStorage`.
+
 ## [0.14.1] - 2026-11-19
 
 ### Breaking changes

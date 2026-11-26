@@ -57,9 +57,22 @@ export function getDefaultTransport(): Transport {
 }
 
 function asEventStorage(
-  storage?: ReactNativeOptions["storageProvider"],
+  storage: ReactNativeOptions["storageProvider"],
+  logger: ReactNativeOptions["loggerProvider"],
 ): Storage<Event[]> | undefined {
-  return storage as Storage<Event[]> | undefined;
+  if (!storage) return undefined;
+  const events = storage as Storage<Event[]>;
+  const reportWriteFailure = (error: unknown) => {
+    logger?.error(`Failed to persist analytics events: ${String(error)}`);
+  };
+  return {
+    isEnabled: () => events.isEnabled(),
+    get: (key) => events.get(key),
+    getRaw: (key) => events.getRaw(key),
+    set: (key, value) => events.set(key, value).catch(reportWriteFailure),
+    remove: (key) => events.remove(key).catch(reportWriteFailure),
+    reset: () => events.reset(),
+  };
 }
 
 export const getDefaultConfig = () => {
@@ -147,7 +160,10 @@ export class ReactNativeConfig extends Config implements IReactNativeConfig {
           : LogLevel.None,
       ...options,
       apiKey,
-      storageProvider: asEventStorage(options?.storageProvider),
+      storageProvider: asEventStorage(
+        options?.storageProvider,
+        options?.loggerProvider,
+      ),
       transportProvider: createDiagnosticAnalyticsTransport(
         options?.transportProvider ?? defaultConfig.transportProvider,
       ),
@@ -499,7 +515,7 @@ export const createEventsStorage = async (
   // Otherwise storageProvider is overriden
   if (!hasStorageProviderProperty || overrides.storageProvider) {
     for (const storage of [
-      asEventStorage(overrides?.storageProvider),
+      overrides?.storageProvider as Storage<Event[]> | undefined,
       hasStorageProviderProperty ? undefined : baseConfig.storageProvider,
       new LocalStorage<Event[]>(),
     ]) {

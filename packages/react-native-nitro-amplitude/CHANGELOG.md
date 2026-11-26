@@ -4,19 +4,34 @@ All notable changes to this project are documented in this file.
 
 The format follows Keep a Changelog and the project adheres to SemVer.
 
-## [0.14.2] - 2026-11-26
+## [0.15.0] - 2026-11-26
 
 ### Breaking changes
 
-- None.
+- `AmplitudeDiagnosticOperation` has a new `storage_write` value, and
+  `AmplitudeDiagnosticSurface` has new `event_storage` and
+  `experiment_storage` values. Migration: an exhaustive `switch` over these
+  types needs a case for each new value.
+
+### Added
+
+- `createKeyValueAmplitudeStorage` builds the analytics event store, the
+  analytics session store and the experiment variant store from any key-value
+  store that has `getItem`, `setItem`, `removeItem` and
+  `removeItemsByPrefix`. Apps that keep their own storage layer no longer need
+  to write Amplitude storage adapters. Failed writes never reject and go to
+  `onError`. Failed reads go to `onError` and then reject. Values that are not
+  valid JSON are removed and read as empty. `experimentStore` keeps variants in
+  a separate store.
 
 ### Fixed
 
 - A `storageProvider` that fails to save or remove queued events no longer
   causes an unhandled promise rejection. Amplitude writes the event queue
   without waiting for the result, so a full disk sent one unhandled rejection
-  per flush. The package now reports the failure through `loggerProvider` and
-  keeps tracking, as it already did for `cookieStorage`.
+  per flush. The package now reports the failure through `loggerProvider`,
+  records a `storage_write` diagnostic failure and keeps tracking, as it
+  already did for `cookieStorage`.
 
 ## [0.14.1] - 2026-11-19
 

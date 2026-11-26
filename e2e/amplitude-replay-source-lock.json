@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "runtimeSourceSha256": "67d40bdf5f78ceda95614994ecaceaf486f2bc559dcb2360a8ca16f626fb030b",
+  "runtimeSourceSha256": "60e0619ac64675291bb04479ce7e3f5c6d63cd912a5b60663fd97349ccf7e6fd",
   "runtimeSourceFiles": [
     "apps/example/app.config.js",
     "apps/example/app/_layout.tsx",
@@ -125,6 +125,7 @@
     "packages/react-native-nitro-amplitude/src/experiment/util/userSessionExposureTracker.ts",
     "packages/react-native-nitro-amplitude/src/index.ts",
     "packages/react-native-nitro-amplitude/src/index.web.ts",
+    "packages/react-native-nitro-amplitude/src/key-value-storage.ts",
     "packages/react-native-nitro-amplitude/src/native/browser-string-storage.ts",
     "packages/react-native-nitro-amplitude/src/native/context.ts",
     "packages/react-native-nitro-amplitude/src/native/context.web.ts",
